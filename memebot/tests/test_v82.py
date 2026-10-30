@@ -191,6 +191,7 @@ D.jup_quote = fake_jup
 D.SOL_USD[:] = [200.0, time.time()]
 QUOTES.update({True: ({"outAmount": "1000000"}, None), False: ({"outAmount": str(int(0.15e9 * 0.96)),
                                                                  "priceImpactPct": "0.019"}, None)})
+D.CFG["GOPLUS_CHECK"] = False   # v8.4: GoPlus ha il suo test offline in test_v84
 hp = asyncio.run(D.honeypot_check(D.State(), FakeHttp(beast), "BEAST", 30.0, {}))
 assert hp["level"] == "ok" and hp["sell_impact_pct"] == 1.9, hp
 QUOTES[False] = (None, "no_route")

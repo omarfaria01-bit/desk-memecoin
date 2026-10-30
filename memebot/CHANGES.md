@@ -678,3 +678,56 @@ DexScreener diventa la fonte trending principale, GeckoTerminal e pump.fun secon
 - `tools/sync_github.sh`: lo scan dei segreti blocca gli URL Helius con la chiave dentro e la chiave stessa letta
   dall'ambiente, senza stamparla.
 - Test: `tests/test_v82.py`, sezione Helius (instradamento, budget, maschera, DAS) con una chiave finta, senza rete.
+
+## v8.4 — 30/10/2026 (sera) – Birdeye, Telegram, budget mensile, cluster PILLSEY/GLITCH, GoPlus, fee, età (PAPER)
+
+Sempre e solo PAPER: live spento, nessun wallet, chiave o `.env` toccato. Le chiavi (Birdeye, Helius, Telegram)
+si leggono SOLO da `os.environ`, non sono mai scritte in file/log/export, e ogni messaggio d'errore passa da `mask()`.
+
+**Birdeye (piano Standard gratuito, `sources/birdeye.py`)** – 30.000 CU/mese, 1 rps (gap 1,2 s), riserva 1.500 CU.
+Endpoint: `/defi/ohlcv` 1m (60 candele = 25 CU, ATR primario per stop/TP dinamici; fallback GeckoTerminal/tick),
+`/defi/token_trending` (30 CU ogni 4 h = 180 CU/giorno, fonte trending), `/defi/token_overview` (18 CU, controllo
+incrociato prima dell'ingresso: liquidità, holder, acquirenti), `/utils/v1/credits` (1 CU/h, consumo ufficiale).
+Budget del giorno = residuo del ciclo / giorni rimanenti (~950 CU/giorno), diviso ATR 50% / overview 30% / trending 20%.
+
+**Telegram (`sources/notify_telegram.py`)** – token da `TELEGRAM_BOT_TOKEN` ripulito con `re.sub(r'\s','',…)`,
+chat id da `.telegram_chat_id` (600, escluso dal sync). Invio in thread non bloccante, max 1 msg/s, 2 tentativi.
+Messaggi: avvio con PID, acquisti, vendite, scarti rigidi raggruppati ogni 10 min, errori gravi, riepilogo alle 23:00 (Roma),
+avvisi budget.
+
+**Budget mensile Helius + Birdeye** – avvisi al 50/80/95% del ciclo; dall'80% niente chiamate non essenziali
+(Helius: bulk/KOL al pubblico; Birdeye: niente trending/overview non prioritari); dal 95% solo fonti gratuite.
+Helius Free: 1M crediti/mese, 10 rps RPC (usati 6), 2 rps DAS (1,5), GPA 5 rps (4).
+
+**Cluster (`sources/cluster_v2.py`)** – nuove regole rigide/soft:
+- somma dei gruppi collegati ≥ 25% = rigido; ≥ 3 gruppi da ≥ 2% con somma ≥ 20% = rigido;
+- *hub burst*: hub non-exchange che finanzia ≥ 10 holder, ≥ 80% nuovi, acquisto mediano ≤ 1 h dopo il
+  finanziamento, quote simili (CV ≤ 0,5) = distributore insider, non infrastruttura;
+- *stima estesa*: holder senza funder noto nella stessa finestra (±300 s) e fascia di quota (0,8–1,25×) aggiunti in
+  proporzione; regole 25% e "≥ 50 wallet" applicate al gruppo stimato;
+- *CEX-fresh*: wallet nuovi finanziati dallo stesso exchange ≤ 6 h prima, acquisto ≤ 3 h dal primo, quote 1–5%,
+  n ≥ 4, somma ≥ 10%, CV ≤ 0,5 = rigido; tutti gli exchange insieme ≥ 6% = soft;
+- *combo*: collegati ≥ 10% + gruppo con infrastruttura ≥ 15% che aggiunge ≥ 5 punti = rigido;
+- *quota ricevuta non comprata* (proxy "phishing"): soft ≥ 15%, rigido ≥ 30%.
+Calibrazione: PILLSEY rigido (hub 9Ja2iw 60 wallet 10,7%, stima ~150 wallet 25,0%), GLITCH rigido (MEXC 5 wallet 11,1%),
+CATE rigido (combo: collegati 10,6%, infra 15,7%), DESSA pulito (gruppo max 0,35%, collegati 1,04%).
+
+**GoPlus (`sources/goplus.py`)** – token_security Solana senza chiave, cache 10 min, gap 2 s, timeout 12 s.
+Rigido: balance mutable, closable, freeze, mint, transfer hook, fee ≥ 10% o modificabile, default state frozen,
+non transferable. Soft: metadata mutable. Errore = sconosciuto (mai "ok"). `goplus_flags` nel log e nelle feature.
+
+**Fee di trasferimento** – "Taxes 1.25%" di GMGN è la fee della pool: non si scarta. Fee Token-2022 < 10%: soft,
+penalità 0,02 di punteggio per 1%, size −7% per 1% (min 0,3×), `rt_cost_pct += 2 × fee`. Rigido a ≥ 10% o se il dev
+può cambiarla (authority attiva). Hook, freeze, balance mutable, closable restano rigidi.
+
+**Penalità età** (CFG `AGE_*`) – < 24 h 0; 1–3 g 0,02; 3–7 g 0,05; 7–30 g 0,10; > 30 g 0,20.
+Sopra 3 giorni servono attività (vol 1h/liq ≥ 0,3 o vol 1h/mcap ≥ 3%) E volatilità (ATR 1m ≥ 0,7% o |var 1h| ≥ 8%),
+altrimenti scarto "token vecchio poco attivo" (shadow "eta"). Con attività molto alta (vol/liq ≥ 2 e ATR ≥ 2% o
+|var 1h| ≥ 25%) la penalità si dimezza. Calibrata su 513 segnali simulati (GeckoTerminal 1m, 50 token): sopra 3 giorni
+taglia 395 segnali su 443 (win 11%, medio −2,8%) e tiene 48 (win 23%, medio −1,7%); vincenti (picco ≥ +20%) tagliati 7 su 23.
+CATE (95 g, vol/liq 0,02) viene scartato. `PF_MAX_AGE_H` del prefiltro resta 90 giorni.
+
+**Lezioni** – `pillsey-2026-10-30` e `glitch-2026-10-30` (etichetta "cluster"; GLITCH "SOSPETTO").
+
+**Sync GitHub** – esclusi `.telegram*`, `telegram_state*`, `birdeye_usage*`, `trending_agg_state*`, `infra_funders*`;
+scansione segreti con pattern token bot Telegram, header/chiave Birdeye e ricerca letterale dei valori in env.

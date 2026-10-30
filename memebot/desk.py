@@ -174,7 +174,26 @@ CFG = {
     # v8.2: controllo honeypot prima di ogni ingresso (solo letture e preventivi, mai uno swap)
     "HONEYPOT_CHECK": True,
     "HONEYPOT_SELL_IMPACT_PCT": 25.0, # preventivo di vendita con impatto > 25% = scarto rigido
-    "HONEYPOT_MAX_FEE_BPS": 500,      # fee di trasferimento Token-2022 > 5% = scarto rigido
+    "HONEYPOT_MAX_FEE_BPS": 999,      # v8.4: fee di trasferimento Token-2022 >= 10% = scarto rigido (sotto: soft)
+    "FEE_PEN_PER_PCT": 0.02,          # v8.4: penalita sul punteggio per ogni 1% di fee di trasferimento
+    "FEE_SIZE_PER_PCT": 0.07,         # v8.4: size -7% per ogni 1% di fee (minimo 0.3x)
+    "GOPLUS_CHECK": True,             # v8.4: GoPlus token_security nel controllo pre-acquisto
+    "GOPLUS_SOFT_PENALTY": 0.03,      # v8.4: metadati modificabili e altri soft GoPlus
+    # v8.4: penalita per eta della pool/token (ore) + requisiti di attivita sopra i 3 giorni
+    "AGE_PEN_1D": 0.0,                # < 24 h: nessuna
+    "AGE_PEN_1_3D": 0.02,             # 1-3 giorni: leggera
+    "AGE_PEN_3_7D": 0.05,             # 3-7 giorni: media
+    "AGE_PEN_7_30D": 0.10,            # 7-30 giorni: forte
+    "AGE_PEN_30D": 0.20,              # > 30 giorni: quasi bloccante
+    "AGE_ACT_MIN_DAYS": 3.0,          # sopra i 3 giorni servono attivita e volatilita piu alte:
+    "AGE_MIN_VOL_LIQ": 0.3,           #   volume 1h / liquidita >= 0.3 oppure volume 1h / mcap >= 3% (calibrato v8.4)
+    "AGE_MIN_VOL_MCAP": 0.03,
+    "AGE_MIN_ATR": 0.7,               #   e ATR 1m >= 0.7% oppure |variazione 1h| >= 8%
+    "AGE_MIN_CHG_H1": 8.0,
+    "AGE_EASE_VOL_LIQ": 2.0,          # attivita davvero alta (vol 1h/liq >= 2 e ATR >= 2% o |chg 1h| >= 25%):
+    "AGE_EASE_ATR": 2.0,              #   penalita dimezzata
+    "AGE_EASE_CHG_H1": 25.0,
+    "AGE_EASE_MULT": 0.5,
     "HONEYPOT_UNKNOWN_ACTION": "soft",# controllo non riuscito: 'soft' (size ridotta) o 'skip'
     # v8.2: etichette 'bad_cluster'/'suspected_rug' diventano 'rug' se il prezzo crolla dal massimo o la LP sparisce
     "RUG_PROMOTE_DROP_PCT": 50.0,
@@ -363,6 +382,21 @@ try:
     SRC["gmgn"] = _gmgn
 except Exception:  # noqa: BLE001
     pass
+try:  # v8.4: Birdeye (piano gratuito; chiave solo da os.environ, mai su file o log)
+    from sources import birdeye as _be  # noqa: E402
+    SRC["be"] = _be
+except Exception as _e4:  # noqa: BLE001
+    print(f"v8.4: birdeye non caricato ({type(_e4).__name__})")
+try:  # v8.4: notifiche Telegram (token solo da os.environ, mai su file o log)
+    from sources import notify_telegram as _tg  # noqa: E402
+    SRC["tg"] = _tg
+except Exception as _e5:  # noqa: BLE001
+    print(f"v8.4: telegram non caricato ({type(_e5).__name__})")
+try:  # v8.4: GoPlus Security (API pubblica senza chiave)
+    from sources import goplus as _gp  # noqa: E402
+    SRC["goplus"] = _gp
+except Exception as _e6:  # noqa: BLE001
+    print(f"v8.4: goplus non caricato ({type(_e6).__name__})")
 try:
     from sources import project_check as _proj  # noqa: E402  (v8)
     SRC["proj"] = _proj
@@ -668,7 +702,31 @@ def lesson(st, msg):
     log(st, "Learner", "lesson", msg)
 
 
+TG_REF = [None]   # v8.4: notifier Telegram (None = spento). Mai bloccante, errori silenziosi e mascherati.
+
+
+def tg_send(text):
+    n = TG_REF[0]
+    if n is not None:
+        try:
+            n.send(text)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def tg_group(key, line, every=600, title=None):
+    n = TG_REF[0]
+    if n is not None:
+        try:
+            n.group(key, line, every=every, title=title)
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def reject(st, mint, sym, reason, agent="Filter", cat=None, quiet=False):
+    if cat in ("cluster", "honeypot"):   # v8.4: rifiuti hard (token gia passati dal prefiltro), max 1 msg / 10 min
+        tg_group("hard", f"{sym} ({str(mint)[:6]}..): {cat}: {str(reason)[:100]}", 600,
+                 "Rifiuti hard cluster/honeypot (token passati dal prefiltro):")
     st.reject_reasons[cat or reason] += 1
     st.stats["rejected"] += 1
     msg = f"{sym} scartato: {reason}"
@@ -1113,11 +1171,31 @@ async def pf_learn(st, http, done):
             log(st, "Learner", "learn_prefilter", msg, key=k, old=old, new=new)
 
 
+BE_REF = [None]   # v8.4: client Birdeye unico (limitatore 1 rps e contatore CU condivisi da tutti gli agenti)
+
+
+def be_client(http):
+    """v8.4: client Birdeye o None (modulo assente, spento, chiave assente, nessuna sessione HTTP)."""
+    if "be" not in SRC or not CFG.get("BIRDEYE_ENABLED", True) or not SRC["be"].Birdeye.has_key():
+        return None
+    if BE_REF[0] is None:
+        sess = getattr(http, "s", None)
+        if sess is None:
+            return None
+
+        def _lg(msg):
+            if ST_REF[0] is not None:
+                log(ST_REF[0], "Birdeye", "info", SRC["be"].mask(msg))
+        BE_REF[0] = SRC["be"].Birdeye(sess, CFG, _lg)
+    return BE_REF[0]
+
+
 async def scout_trending(st, http):
     """v8.3: FONTE PRINCIPALE. Aggregatore gratuito (DexScreener principale; GeckoTerminal 5m/1h/6h e pump.fun
     secondari; GMGN solo con chiave personale). I migliori TREND_WATCH_TOP per trending_score entrano in watchlist
     con priorita alta. Nessun filtro viene saltato."""
-    agg = SRC["tagg"].TrendingAgg(gmgn_fetch=_gmgn_rows)
+    be = be_client(http) if CFG.get("BIRDEYE_TREND", True) else None
+    agg = SRC["tagg"].TrendingAgg(gmgn_fetch=_gmgn_rows, birdeye_fetch=(be.trending if be else None))
     done, last_note, last_pf = set(), 0.0, 0.0
     while True:
         try:
@@ -1145,6 +1223,12 @@ async def scout_trending(st, http):
                 log(st, "Scout", "info", "trending aggregato: " + ", ".join(f"{k} {v}" for k, v in c.items())
                     + f" -> {min(len(toks), int(CFG['TREND_WATCH_TOP']))} in watchlist con priorita",
                     counts=c)
+                if be is not None:   # v8.4: consumo Birdeye
+                    await be.sync_credits()
+                    b = be.status()
+                    log(st, "Birdeye", "info", f"consumo oggi {b['spent_today']:.0f}/{fnum(b['day_budget']):.0f} CU, "
+                        f"residuo ciclo ~{b['remaining_est']} CU, livello {b['level']}, chiamate {b['calls']}, "
+                        f"fallback {b['fallback']}", birdeye=b)
                 last_note = now
             if "pf" in SRC and now - last_pf > 600:
                 last_pf = now
@@ -1468,6 +1552,19 @@ LABEL_SEEDS = [
              "la dava al limite (78% top holder nuovi, 2 reti). Ricontrollo v8.2 alle 22:22: 15.6k holder, "
              "gruppo massimo 0.38%, nessuno sciame: oggi non e un cluster. Posizione tenuta con ricontrollo "
              "ogni CLUSTER_HELD_RECHECK_MIN."},
+    {"id": "pillsey-2026-10-30", "mint": "J5jxG3PFaWpj6BLEQExyC6FSqSvaTKNdQ9G3sZwBpump", "sym": "PILLSEY",
+     "label": "cluster", "pnl_pct": None, "rug": False,   # esito shadow gia registrato dal Learner
+     "note": "solo shadow: chiusa a -13.7% alle 22:46, riaperta alle 22:56. Bubblemaps: 13+ cluster ~33% (87 wallet "
+             "8.62%, 71 wallet 6.82%). v8.3 la dava soft (gruppo 10.7%/43 wallet, collegati 16.8%, 150/3665 holder). "
+             "Causa: l'hub 9Ja2iw (>=1000 tx/h) che finanzia in raffica i wallet era trattato da infrastruttura. "
+             "v8.4: 'hub burst' (60 wallet nuovi, acquisto entro 1h, quote uguali 0.18%) + stima estesa ~150 wallet "
+             "al 25.0% = HARD."},
+    {"id": "glitch-2026-10-30", "mint": "8Xg89xT8Ve34sKiYqYuMs46mycREsCA2F362UscRpump", "sym": "GLITCH",
+     "label": "cluster", "pnl_pct": None, "rug": False,
+     "note": "SOSPETTO (Kiwi). Eta 14 g, Token-2022 senza transfer fee (Taxes 1.25% = fee pool). 5 top holder "
+             "nuovi finanziati da MEXC 0.2-4 h prima di comprare nei primi 47 min, quote simili 1.3-2.9% = 11.1%; "
+             "GMGN: phishing 13.65%, bundler 2.73%, top10 26.74%. v8.4: regola CEX-fresh = HARD; eta 14 g = "
+             "penalita forte."},
 ]
 
 
@@ -1686,6 +1783,35 @@ async def _hp_quote(http, inp, out, amount, tries=4):
     return q, err
 
 
+def age_penalty(m, atr=None, cfg=None):
+    """v8.4: penalita graduata per eta della pool. -> (penalita, motivo_scarto|None, info).
+    Sopra AGE_ACT_MIN_DAYS il token deve avere volume E volatilita alti, altrimenti si scarta;
+    con attivita davvero alta la penalita si dimezza (mai azzerata)."""
+    c = cfg or CFG
+    am = m.get("age_min")
+    if am is None:
+        return 0.0, None, {"age_d": None}
+    d = fnum(am) / 1440.0
+    pen = (c["AGE_PEN_1D"] if d < 1 else c["AGE_PEN_1_3D"] if d < 3 else c["AGE_PEN_3_7D"] if d < 7
+           else c["AGE_PEN_7_30D"] if d < 30 else c["AGE_PEN_30D"])
+    vl = safe_div(fnum(m.get("vol_h1")), fnum(m.get("liq")), 0.0)
+    vm = safe_div(fnum(m.get("vol_h1")), fnum(m.get("mcap")), 0.0)
+    ch1 = abs(fnum(m.get("chg_h1")))
+    a = fnum(atr, 0.0) if atr is not None else None
+    info = {"age_d": round(d, 2), "vol_liq": round(vl, 2), "vol_mcap": round(vm, 3), "atr": a, "chg_h1": ch1}
+    if d >= c["AGE_ACT_MIN_DAYS"]:
+        act = vl >= c["AGE_MIN_VOL_LIQ"] or vm >= c["AGE_MIN_VOL_MCAP"]
+        vol = (a is not None and a >= c["AGE_MIN_ATR"]) or ch1 >= c["AGE_MIN_CHG_H1"]
+        if not (act and vol):
+            return pen, (f"token vecchio ({d:.0f} g) poco attivo: vol 1h/liq {vl:.2f}, vol 1h/mcap {vm * 100:.1f}%, "
+                         f"ATR {a if a is not None else 'n/d'}, var 1h {ch1:.0f}%"), info
+        if vl >= c["AGE_EASE_VOL_LIQ"] and ((a is not None and a >= c["AGE_EASE_ATR"]) or ch1 >= c["AGE_EASE_CHG_H1"]):
+            pen *= c["AGE_EASE_MULT"]
+            info["eased"] = True
+    info["pen"] = round(pen, 4)
+    return pen, None, info
+
+
 async def honeypot_check(st, http, mint, size_usd, sec):
     """Solo letture: account del mint (estensioni Token-2022 + authority), preventivo Jupiter di acquisto e di
     VENDITA alla nostra size (mai uno swap), rischi RugCheck gia letti dal Filter.
@@ -1707,6 +1833,7 @@ async def honeypot_check(st, http, mint, size_usd, sec):
         h, s_, info = hp.mint_flags(parsed, {"MAX_TRANSFER_FEE_BPS": CFG["HONEYPOT_MAX_FEE_BPS"]})
         hard += h
         soft += s_
+        out["fee_pct"] = round(fnum(info.get("fee_bps")) / 100.0, 3)
         out["extensions"] = info.get("extensions")
         out["token_program"] = (acc or {}).get("owner")
     else:
@@ -1729,6 +1856,17 @@ async def honeypot_check(st, http, mint, size_usd, sec):
             hard.append(why)
         elif not q2:
             miss.append(f"preventivo di vendita non disponibile ({err2})")
+    if CFG.get("GOPLUS_CHECK") and SRC.get("goplus"):   # v8.4: errore = unknown, mai ok
+        g = await SRC["goplus"].check(http, mint)
+        out["goplus_flags"] = g.get("flags") or []
+        out["goplus_level"] = g["level"]
+        if g["level"] == "hard":
+            hard += g.get("hard") or [g.get("why")]
+        elif g["level"] == "unknown":
+            miss.append(g.get("why") or "GoPlus non disponibile")
+        else:
+            soft += g.get("soft") or []
+        out["fee_pct"] = max(fnum(out.get("fee_pct")), fnum(g.get("fee_pct")))
     out["soft"] = soft
     if hard:
         out.update(level="hard", why="; ".join(hard))
@@ -1831,17 +1969,32 @@ def _tag_val(tags, pref):
 
 
 async def entry_features(st, http, mint, m, signals=None, candles=None, soft=None, narr=None, accel=None,
-                         size_mult=1.0, base_stop=None, allow_fetch=True):
+                         size_mult=1.0, base_stop=None, allow_fetch=True, prio=False):
     """v8.1: feature d'ingresso (trade veri e shadow) + stop dinamico. Mai eccezioni, valori mancanti = None."""
     fe = {}
     try:
         tags = [t for t in (signals.split("|") if isinstance(signals, str) else (signals or [])) if t]
+        # v8.4: ATR prima da Birdeye (candele 1m, solo candidati arrivati all'ingresso: trade paper o shadow),
+        # poi GeckoTerminal (cache o richiesta), poi tick. prio=True per i trade paper (budget prioritario).
+        v, be_rows, be_why = None, None, "spento"
+        be = be_client(http) if CFG.get("BIRDEYE_ATR", True) and allow_fetch else None
+        if be is not None:
+            be_rows = await be.ohlcv_1m(mint, prio=prio)
+            v = vol_from_candles(be_rows) if be_rows else None
+            if v is not None:
+                v = dict(v, src="birdeye_" + v["src"])
+                be_why = "ok"
+            else:
+                be_why = "nessuna candela" if be_rows is not None else "budget/errore"
         rows = candles or cached_candles(m.get("pair"))
-        if rows is None and allow_fetch:
+        if rows is None and allow_fetch and v is None:
             rows = await candles_for_entry(http, m.get("pair"))
-        v = vol_from_candles(rows) if rows else None
+        vg = vol_from_candles(rows) if rows else None
+        if v is None:
+            v = vg
         if v is None:
             v = vol_from_ticks(TICKS.get(mint))
+        rows = rows or be_rows
         base = fnum(base_stop, CFG["STOP_LOSS_PCT"])
         dyn, dmult = dyn_stop_calc(v["atr"] if v else None, base)
         mode = str(CFG["DYN_STOP_MODE"])
@@ -1877,6 +2030,13 @@ async def entry_features(st, http, mint, m, signals=None, candles=None, soft=Non
         fe.update({"src": m.get("src"), "trending_score": ti.get("trending_score"),
                    "trend_families": ti.get("families"), "trend_sources": ti.get("sources"),
                    "trend_paid": ti.get("paid")})
+        fe.update({"atr_gecko": vg["atr"] if vg and v is not vg else None, "atr_birdeye": be_why})   # v8.4
+        try:
+            log(st, "Analyst", "atr", f"{m.get('symbol', '?')} ATR 1m {fe['atr_1m_10']}% fonte {fe['atr_src']}"
+                + (f" (Birdeye: {be_why})" if be_why not in ("ok", "spento") else ""),
+                mint=mint, atr=fe["atr_1m_10"], atr_src=fe["atr_src"], atr_gecko=fe["atr_gecko"])
+        except Exception:  # noqa: BLE001
+            pass
     except Exception as e:  # noqa: BLE001
         fe = dict(fe, error=type(e).__name__)
     return fe
@@ -2789,6 +2949,21 @@ async def analyst_agent(st, http, q_in, q_out):
             score += bonus
             score_raw = score
             score -= pen
+            # v8.4: penalita graduata per eta della pool + requisiti di attivita sopra i 3 giorni
+            try:
+                _vc = vol_from_candles(candles) if candles else None
+            except Exception:  # noqa: BLE001
+                _vc = None
+            age_pen, age_rej, age_info = age_penalty(m, (_vc or {}).get("atr"))
+            if age_rej:
+                rej(age_rej, agent="Analyst", cat="token vecchio poco attivo")
+                so or add_shadow(st, mint, m, "eta")
+                continue
+            if age_pen > 0:
+                score -= age_pen
+                pen += age_pen
+                flags.append("eta_vecchia")
+                signals.append(f"age:{age_info['age_d']:.1f}d/-{age_pen:.3f}" + ("/eased" if age_info.get("eased") else ""))
             # v8.2: cluster v2 prima della decisione. 'unknown' (errore/tempo scaduto) non vale mai come 'ok'.
             cl = None
             if cluster2_on() and not so and score >= st.threshold:
@@ -3551,7 +3726,10 @@ async def _execute_buy(st, broker, c, mint, m):
         fe = await entry_features(st, getattr(broker, "http", None), mint, m, c.get("signals", ""),
                                   candles=c.get("candles"), soft=c.get("soft"), narr=c.get("narr_bonus"),
                                   accel=c.get("accel"), size_mult=c.get("size_mult", 1.0),
-                                  base_stop=CFG["STOP_LOSS_PCT"])
+                                  base_stop=CFG["STOP_LOSS_PCT"], prio=True)
+    if fe is not None and (c.get("hp_fee_pct") or c.get("goplus_flags")):
+        fe["hp_fee_pct"] = c.get("hp_fee_pct")
+        fe["goplus_flags"] = c.get("goplus_flags") or []
     dyn_on = CFG["DYN_STOP_MODE"] == "on" and fe.get("atr_1m_10") is not None
     if dyn_on:
         size *= clamp(fnum(fe.get("dyn_size_mult"), 1.0), 0.05, 1.0)
@@ -3570,6 +3748,16 @@ async def _execute_buy(st, broker, c, mint, m):
             reject(st, mint, m["symbol"], f"honeypot: {hp['why']}", agent="Executor", cat="honeypot")
             st.labels.setdefault(mint, "suspected_rug")
             return
+        hp_fee = fnum(hp.get("fee_pct"))
+        hp_pen = CFG["FEE_PEN_PER_PCT"] * hp_fee + (CFG["GOPLUS_SOFT_PENALTY"] if any(
+            "GoPlus" in x and "fee" not in x for x in hp.get("soft") or []) else 0.0)
+        c["hp_fee_pct"], c["goplus_flags"] = hp_fee, hp.get("goplus_flags") or []
+        if hp_pen > 0 and fnum(c.get("score")) - hp_pen < st.threshold:
+            reject(st, mint, m["symbol"], f"punteggio sotto soglia dopo segnali honeypot soft (fee {hp_fee:g}%, "
+                   f"-{hp_pen:.2f}): {hp['why']}", agent="Executor", cat="honeypot soft")
+            return
+        if hp_fee > 0:
+            size *= max(0.3, 1.0 - CFG["FEE_SIZE_PER_PCT"] * hp_fee)
         if hp["level"] == "unknown":
             if CFG["HONEYPOT_UNKNOWN_ACTION"] == "skip":
                 reject(st, mint, m["symbol"], f"honeypot non verificabile: {hp['why']}", agent="Executor",
@@ -3581,8 +3769,35 @@ async def _execute_buy(st, broker, c, mint, m):
                 reject(st, mint, m["symbol"], "size troppo piccola dopo honeypot non verificato", agent="Executor",
                        cat="conto vuoto")
                 return
+    # v8.4: controllo incrociato Birdeye (overview) per prefiltro e honeypot. MAI un filtro duro:
+    # "shadow" = solo registrato, "soft" = size ridotta se Birdeye non conferma.
+    if str(CFG.get("BIRDEYE_XCHECK_MODE", "shadow")) != "off":
+        be = be_client(getattr(broker, "http", None))
+        ov = await be.overview(mint, prio=True) if be is not None else None
+        if ov is not None:
+            xf = SRC["be"].xcheck(ov, m, min_liq=fnum(CFG.get("PF_MIN_LIQ_USD"), 8000.0),
+                                  min_buyers=fnum(CFG.get("PF_MIN_BUYS_M5"), 5.0),
+                                  min_holders=fnum(CFG.get("BIRDEYE_MIN_HOLDERS"), 100.0),
+                                  liq_ratio=fnum(CFG.get("BIRDEYE_LIQ_RATIO"), 0.5))
+            fe.update({"be_flags": xf, "be_liq": ov.get("liquidity"), "be_holders": ov.get("holder"),
+                       "be_buyers_5m": ov.get("uniqueBuyer5m"), "be_sell_1h": ov.get("sell1h")})
+            log(st, "Executor", "birdeye", f"{m['symbol']} Birdeye: liq {fnum(ov.get('liquidity')):,.0f}$ "
+                f"holder {ov.get('holder')} acquirenti unici 5m {ov.get('uniqueBuyer5m')} -> "
+                + (", ".join(xf) if xf else "coerente") + f" (modo {CFG.get('BIRDEYE_XCHECK_MODE')})",
+                mint=mint, be_flags=xf)
+            if xf and str(CFG.get("BIRDEYE_XCHECK_MODE")) == "soft":
+                size *= clamp(fnum(CFG.get("BIRDEYE_XCHECK_SIZE_MULT"), 0.5), 0.05, 1.0)
+                c["soft"] = list(c.get("soft") or []) + ["birdeye_xcheck"]
+                if size < 1:
+                    reject(st, mint, m["symbol"], "size troppo piccola dopo il controllo Birdeye", agent="Executor",
+                           cat="conto vuoto")
+                    return
+        else:
+            fe["be_flags"] = None
     # costi: scarta se 5 x costo stimato andata+ritorno supera il primo gradino di profitto
     rt = roundtrip_cost_pct(size, m["liq"])
+    hp_fee_rt = 2.0 * fnum(c.get("hp_fee_pct"))   # v8.4: fee di trasferimento pagata in acquisto e in vendita
+    rt += hp_fee_rt
     pre = None
     if getattr(broker, "realistic", False):
         # v6: preventivo reale d'acquisto + rivendita immediata (anti-honeypot, utile anche in live)
@@ -3591,7 +3806,7 @@ async def _execute_buy(st, broker, c, mint, m):
             reject(st, mint, m["symbol"], pre["why"], agent="Executor", cat=pre.get("cat", "preventivo"))
             return
         if pre and pre.get("rt_pct") is not None:
-            rt = pre["rt_pct"]  # costo andata+ritorno misurato sui preventivi, non stimato
+            rt = pre["rt_pct"] + hp_fee_rt  # costo a/r dai preventivi (+ fee di trasferimento, v8.4)
     if rt * CFG["COST_GATE_MULT"] > CFG["TP1_PCT"]:
         reject(st, mint, m["symbol"], f"costi troppo alti: andata+ritorno {rt:.1f}% x {CFG['COST_GATE_MULT']:g} > "
                f"TP1 {CFG['TP1_PCT']:g}%", agent="Executor", cat="costi troppo alti")
@@ -3646,6 +3861,10 @@ async def _execute_buy(st, broker, c, mint, m):
         url=m["url"], quote_src=res.get("src", "formula"), quote_impact=res.get("quote_impact"),
         latency_slip=res.get("latency_slip"), prio_fee_sol=res.get("prio_fee_sol"),
         fill_failed=res.get("fill_failed", 0), rt_cost_pct=round(rt, 2))
+    _fe = st.positions[mint].get("entry_features") or {}
+    tg_send(f"ACQUISTO {CFG['MODE'].upper()} {m['symbol']}\n{mint}\nPrezzo {entry:.8g} | size ${res['cost']:.2f}\n"
+            f"Score {fnum(c.get('score')):.2f}: {str(c.get('thesis') or '')[:200]}\n"
+            f"Stop applicato: {fnum(_fe.get('stop_applied'), CFG['STOP_LOSS_PCT']):g}%")
     save_state(st, force=True)
 
 
@@ -3749,6 +3968,32 @@ OVR_LIMITS.update({"TREND_WATCH_TOP": (10.0, 150.0), "WATCH_NEW_MAX": (200.0, 20
 OVR_INT_KEYS |= {"TREND_WATCH_TOP", "WATCH_NEW_MAX", "TREND_SCOUT_SEC"}
 OVR_GLOBAL_MAP.update({k: k for k in list(SRC["pf"].LIMITS if "pf" in SRC else []) + ["TREND_WATCH_TOP", "WATCH_NEW_MAX",
                                                                                       "TREND_SCOUT_SEC", "TREND_MULTI_BONUS"]})
+# v8.4: Birdeye (piano gratuito Standard: 30.000 CU/mese, 1 rps)
+if "be" in SRC:
+    for _k, _v in SRC["be"].DEFAULTS.items():
+        CFG.setdefault(_k, _v)
+CFG.setdefault("TELEGRAM_ENABLED", True)      # v8.4: notifiche Telegram (token da env TELEGRAM_BOT_TOKEN)
+CFG.setdefault("TELEGRAM_RECAP_HOUR", 23)     # ora di Roma del riepilogo giornaliero
+CFG.setdefault("HELIUS_MONTHLY_CREDITS", 1_000_000)  # piano Free Helius (helius.dev/docs/billing): 1M crediti/mese
+CFG.setdefault("HELIUS_SAVE_AT", 0.80)        # dall'80%: solo chiamate core
+CFG.setdefault("HELIUS_STOP_AT", 0.95)        # dal 95%: solo RPC pubblici
+CFG.setdefault("BIRDEYE_CYCLE_SAVE_AT", 0.80)
+CFG.setdefault("BIRDEYE_CYCLE_STOP_AT", 0.95)
+if "helius" in SRC:   # i limiti del ciclo Helius vengono dal CFG
+    SRC["helius"].CFG.update(MONTHLY_CREDITS=int(CFG["HELIUS_MONTHLY_CREDITS"]),
+                             SAVE_AT=float(CFG["HELIUS_SAVE_AT"]), STOP_AT=float(CFG["HELIUS_STOP_AT"]))
+CFG.setdefault("BIRDEYE_ATR", True)            # ATR 1m da Birdeye come fonte primaria (fallback GeckoTerminal / tick)
+CFG.setdefault("BIRDEYE_TREND", True)          # trending Birdeye come fonte in piu (famiglia "birdeye")
+CFG.setdefault("BIRDEYE_XCHECK_MODE", "shadow")  # off / shadow (solo registra) / soft (size ridotta)
+CFG.setdefault("BIRDEYE_XCHECK_SIZE_MULT", 0.5)
+CFG.setdefault("BIRDEYE_MIN_HOLDERS", 100)
+CFG.setdefault("BIRDEYE_LIQ_RATIO", 0.5)
+OVR_LIMITS.update({"BIRDEYE_XCHECK_SIZE_MULT": (0.2, 1.0), "BIRDEYE_MIN_HOLDERS": (10.0, 1000.0),
+                   "BIRDEYE_LIQ_RATIO": (0.2, 0.9), "BIRDEYE_TREND_SEC": (3600.0, 86400.0),
+                   "BIRDEYE_RESERVE_CU": (500.0, 10000.0), "BIRDEYE_SAVE_AT": (0.5, 0.95)})
+OVR_INT_KEYS |= {"BIRDEYE_MIN_HOLDERS", "BIRDEYE_TREND_SEC", "BIRDEYE_RESERVE_CU"}
+OVR_GLOBAL_MAP.update({k: k for k in ("BIRDEYE_XCHECK_SIZE_MULT", "BIRDEYE_MIN_HOLDERS", "BIRDEYE_LIQ_RATIO",
+                                      "BIRDEYE_TREND_SEC", "BIRDEYE_RESERVE_CU", "BIRDEYE_SAVE_AT")})
 OVR_DEFAULTS = {k: CFG[k] for k in list(OVR_LIMITS) + list(OVR_STR_KEYS)}
 
 
@@ -4029,6 +4274,9 @@ async def _sell_position(st, broker, mint, reason, fraction=1.0, zero=False, mar
             mint=mint, quote_src=res.get("src", "formula"), quote_impact=res.get("quote_impact"),
             latency_slip=res.get("latency_slip"), prio_fee_sol=res.get("prio_fee_sol"),
             fill_failed=res.get("fill_failed", 0))
+        _pp = (p["realized"] + mark_value(p)) / p["cost"] * 100 - 100 if p.get("cost") else 0.0
+        tg_send(f"VENDITA {CFG['MODE'].upper()} parziale {p['symbol']}: {fraction * 100:.0f}% per ${res['value']:.2f} "
+                f"(PnL posizione {_pp:+.1f}%)\nMotivo: {reason}")
         save_state(st, force=True)
         return
     st.positions.pop(mint, None)
@@ -4062,6 +4310,8 @@ async def _sell_position(st, broker, mint, reason, fraction=1.0, zero=False, mar
     log(st, "Risk", "sell", f"CHIUDE {p['symbol']} {t['pnl_pct']:+.1f}% (${pnl:+.2f}): {reason}", mint=mint,
         pnl=t["pnl"], quote_src=res.get("src", "formula"), quote_impact=res.get("quote_impact"),
         latency_slip=res.get("latency_slip"), prio_fee_sol=res.get("prio_fee_sol"), fill_failed=res.get("fill_failed", 0))
+    tg_send(f"VENDITA {CFG['MODE'].upper()} {p['symbol']}: chiusa {t['pnl_pct']:+.1f}% (${pnl:+.2f}) dopo "
+            f"{t['minutes']} min\nMotivo: {reason}")
     learn_from_trade(st, p, pnl, reason)
     rug = bool(zero or "rug" in reason or "invendibile" in reason or is_rug_event(reason, t["minutes"]))
     if rug and reason.startswith("liquidita crollata"):
@@ -4594,11 +4844,16 @@ async def helius_agent(st):
         H.save(force=True)
         if not H.on():
             continue
+        if hasattr(H, "fetch_official"):   # v8.4 (solo con env HELIUS_PROJECT_ID; altrimenti stima locale)
+            try:
+                await asyncio.to_thread(H.fetch_official)
+            except Exception:  # noqa: BLE001
+                pass
         u = H.summary()
         top = ", ".join(f"{m} {c}" for m, c in u["top"])
         log(st, "Helius", "info", f"crediti oggi {u['credits_today']}/{u['day_budget']} (questa ora {u['credits_this_hour']}, "
             f"media {u['avg_per_hour']}/h, mese {u['month_credits']}), chiamate {u['calls_today']}, 429 {u['r429']}, "
-            f"rinviate al pubblico per budget {u['skipped']} | {top}", **{k: u[k] for k in ("credits_today", "credits_this_hour", "avg_per_hour", "month_credits", "r429")})
+            f"rinviate al pubblico per budget {u['skipped']}, ciclo {u.get('cycle_pct')}% ({u.get('level')}) | {top}", **{k: u[k] for k in ("credits_today", "credits_this_hour", "avg_per_hour", "month_credits", "r429")})
 
 
 async def recap_agent(st):
@@ -4740,6 +4995,119 @@ async def readiness_check(st, http, broker):
     return rep
 
 
+# ======================================================================= v8.4: budget mensile e Telegram
+TG_STATE = os.path.join(DATA_DIR, "telegram_state.json")   # solo date e soglie gia avvisate (niente token/chat)
+BUDGET_ALERTS = (50, 80, 95)
+
+
+def budget_rows():
+    """Consumo del ciclo mensile gratuito di Helius (crediti) e Birdeye (CU)."""
+    rows = []
+    H = SRC.get("helius")
+    if H and H.on():
+        u = H.summary()
+        rows.append({"name": "Helius", "unit": "crediti", "used": int(u["cycle_credits"]), "limit": int(u["limit"]),
+                     "pct": u["cycle_pct"], "today": int(u["credits_today"]), "proj": H.projection(),
+                     "pace": int(u["day_budget"]), "days_left": u["days_left"], "level": u["level"],
+                     "cycle": f"helius:{u['cycle_start']}", "official": u["official"]})
+    be = BE_REF[0]
+    if be is not None:
+        b = be.status()
+        rows.append({"name": "Birdeye", "unit": "CU", "used": int(b["cycle_used"]), "limit": int(b["limit"]),
+                     "pct": b["cycle_pct"], "today": int(b["spent_today"]), "proj": int(b["projection"]),
+                     "pace": int(fnum(b.get("day_budget"))), "days_left": b["days_left"], "level": b["cycle_level"],
+                     "cycle": f"birdeye:{int(fnum(be.st.get('cycle_end')))}", "official": True})
+    return rows
+
+
+def budget_line(r):
+    pp = r["proj"] / r["limit"] * 100 if r["limit"] else 0.0
+    lv = {"ok": "normale", "risparmio": "RISPARMIO (solo chiamate essenziali)",
+          "stop": "STOP (solo fonti gratuite)"}.get(r["level"], r["level"])
+    return (f"{r['name']}: {r['pct']:.1f}% del mese ({r['used']}/{r['limit']} {r['unit']}), oggi {r['today']}, "
+            f"proiezione fine ciclo {r['proj']} ({pp:.0f}%), ritmo max {r['pace']}/giorno, "
+            f"{r['days_left']} gg rimasti, stato {lv}")
+
+
+def tg_load():
+    try:
+        with open(TG_STATE) as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def tg_save(d):
+    try:
+        tmp = TG_STATE + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(d, f)
+        os.replace(tmp, TG_STATE)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def budget_alerts(tgs, rows=None):
+    """Avvisa una volta per ciclo quando si superano 50/80/95%. Ritorna i messaggi mandati."""
+    out = []
+    al = tgs.setdefault("alerts", {})
+    for r in (budget_rows() if rows is None else rows):
+        done = al.setdefault(r["cycle"], [])
+        hit = [t for t in BUDGET_ALERTS if r["pct"] >= t and t not in done]
+        if not hit:
+            continue
+        t = max(hit)
+        what = {50: "nessuna limitazione per ora", 80: "ridotte le chiamate non essenziali (trending, arricchimenti)",
+                95: "solo fonti gratuite di fallback (controllo cluster via RPC pubblico)"}[t]
+        msg = f"AVVISO budget {r['name']}: superato il {t}% del limite mensile gratuito. {what}.\n{budget_line(r)}"
+        tg_send(msg)
+        out.append(msg)
+        done.extend(x for x in BUDGET_ALERTS if x <= t and x not in done)
+    if len(al) > 8:   # tieni solo i cicli recenti
+        for k in sorted(al)[:-8]:
+            al.pop(k, None)
+    return out
+
+
+def tg_recap_text(st):
+    today = datetime.now(TZ).strftime("%Y-%m-%d")
+    tr = [t for t in st.closed if str(t.get("chiuso", "")).startswith(today)]
+    pnl = sum(fnum(t.get("pnl")) for t in tr)
+    win = sum(1 for t in tr if fnum(t.get("pnl")) > 0)
+    lines = [f"Riepilogo {today} ({CFG['MODE'].upper()})", f"Equity ${equity(st):.2f} (cassa ${st.cash:.2f})",
+             f"Trade chiusi oggi: {len(tr)} (in utile {win}), PnL ${pnl:+.2f}"]
+    for t in tr[-10:]:
+        lines.append(f"- {t.get('symbol')} {fnum(t.get('pnl_pct')):+.1f}% ({str(t.get('reason'))[:50]})")
+    lines.append(f"Posizioni aperte: {len(st.positions)}")
+    for p in list(st.positions.values())[:10]:
+        pp = (p["realized"] + mark_value(p)) / p["cost"] * 100 - 100 if p.get("cost") else 0.0
+        lines.append(f"- {p['symbol']} {pp:+.1f}% (${mark_value(p):.2f})")
+    rows = budget_rows()
+    if rows:
+        lines.append("Budget API (piano gratuito):")
+        lines.extend(budget_line(r) for r in rows)
+    return "\n".join(lines)
+
+
+async def telegram_agent(st):
+    """v8.4: riepilogo giornaliero alle TELEGRAM_RECAP_HOUR (ora di Roma) e avvisi di budget 50/80/95%."""
+    tgs = tg_load()
+    while True:
+        await asyncio.sleep(30)
+        try:
+            budget_alerts(tgs)
+            now = datetime.now(TZ)
+            day = now.strftime("%Y-%m-%d")
+            if now.hour >= int(CFG.get("TELEGRAM_RECAP_HOUR", 23)) and tgs.get("recap_day") != day:
+                tg_send(tg_recap_text(st))
+                tgs["recap_day"] = day
+                log(st, "Telegram", "info", "riepilogo giornaliero inviato")
+            tg_save(tgs)
+        except Exception as e:  # noqa: BLE001
+            log(st, "Telegram", "warn", f"riepilogo/avvisi: {type(e).__name__}")
+
+
 # ======================================================================= avvio
 async def supervise(st, name, factory):
     while True:
@@ -4749,6 +5117,10 @@ async def supervise(st, name, factory):
             raise
         except Exception as e:  # noqa: BLE001
             log(st, "Logger", "error", f"{name}: {type(e).__name__} {e}. Riavvio tra 10s")
+            _m = SRC["tg"].mask(f"{name}: {type(e).__name__} {e}") if "tg" in SRC else name
+            if "helius" in SRC:
+                _m = SRC["helius"].mask(_m)
+            tg_group("err", f"{_m[:200]}", 60, "ERRORE GRAVE (agente riavviato):")
             await asyncio.sleep(10)
 
 
@@ -4776,6 +5148,17 @@ async def main():
         log(st, "Logger", "info", f"avvio in modalita {mode.upper()}"
             + (" - SOLDI VERI" if mode == "live" else ", nessun ordine reale"))
         save_state(st, force=True)
+        if CFG.get("TELEGRAM_ENABLED") and "tg" in SRC:   # v8.4
+            try:
+                TG_REF[0] = SRC["tg"].Notifier(enabled=True, logf=lambda m: write_event("Telegram", "warn", m, {}))
+            except Exception as e:  # noqa: BLE001
+                TG_REF[0] = None
+                print(f"telegram non avviato ({type(e).__name__})")
+        _tok = TG_REF[0] is not None and TG_REF[0].status().get("enabled")
+        log(st, "Telegram", "info", "notifiche Telegram attive" if _tok else "notifiche Telegram spente "
+            "(TELEGRAM_ENABLED falso, token o chat id mancanti)")
+        tg_send(f"Desk avviato in {mode.upper()} - PID {os.getpid()} - {datetime.now(TZ).strftime('%d/%m %H:%M')} "
+                f"(Roma)\nEquity ${equity(st):.2f}, posizioni aperte {len(st.positions)}")
         try:
             await readiness_check(st, http, broker)
         except Exception as e:  # noqa: BLE001
@@ -4794,6 +5177,7 @@ async def main():
             "Shadow": lambda: shadow_trade_agent(st, http),
             "Recap": lambda: recap_agent(st),
             "Helius": lambda: helius_agent(st),
+            "Telegram": lambda: telegram_agent(st),
             "Dashboard": lambda: dashboard(st),
         }
         await asyncio.gather(*(supervise(st, n, f) for n, f in jobs.items()))
@@ -4807,3 +5191,9 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\nFermato. Lo stato e salvato in state.json")
+    except Exception as _fatal:  # noqa: BLE001  (v8.4: avviso Telegram, poi il crash resta visibile nel log)
+        _txt = f"ERRORE GRAVE: il desk si e fermato ({type(_fatal).__name__})"
+        tg_send(_txt)
+        if TG_REF[0] is not None:
+            TG_REF[0].flush(5)
+        raise

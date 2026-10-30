@@ -83,6 +83,30 @@ CFG = {
     "MULTI_GROUP_MIN_PCT": 2.0,  # HARD: almeno MULTI_GROUP_N gruppi veri da >= 2% ciascuno...
     "MULTI_GROUP_N": 3,
     "MULTI_GROUP_SUM_PCT": 20.0,  # ...che insieme fanno >= 20%
+    # v8.4 (PILLSEY): un "hub" scoperto in automatico (non un exchange noto) che finanzia in raffica wallet nuovi
+    # che comprano subito questo token con quote quasi uguali e un distributore insider, non infrastruttura
+    "HUB_BURST_MIN": 10,         # almeno 10 holder finanziati dallo stesso hub...
+    "HUB_BURST_FRESH": 0.8,      # ...per l'80% wallet nuovi...
+    "HUB_BURST_DELAY_H": 1.0,    # ...con acquisto mediano entro 1 ora dal finanziamento...
+    "HUB_BURST_CV": 0.5,         # ...e quote simili (coefficiente di variazione <= 0.5)
+    # v8.4: stima della dimensione reale del gruppo maggiore sui holder letti ma senza controllo del funder
+    "EST_ENABLED": True,
+    "EST_MIN_RATE": 0.5,         # si estende solo se nel campione controllato il pattern e dominante (>= 50%)
+    "EST_WIN_SEC": 300,          # finestra: acquisti entro +-5 min da quelli del gruppo
+    "EST_PCT_LO": 0.8, "EST_PCT_HI": 1.25,   # e quote nel range del gruppo
+    # v8.4 (GLITCH): wallet nuovi finanziati da un exchange noto poco prima di comprare, vicino al lancio,
+    # con quote simili 1-5%: tipico di un solo operatore che ritira da CEX su tanti wallet
+    "CEXF_MAX_DELAY_H": 6.0, "CEXF_EARLY_H": 3.0, "CEXF_MIN_PCT": 1.0, "CEXF_MAX_PCT": 5.0,
+    "CEXF_MIN_N": 4, "CEXF_CV": 0.5,
+    "CEXF_HARD_PCT": 10.0,       # stesso exchange, >= 4 wallet, somma >= 10% = HARD (GLITCH 11.1%, DESSA 0%)
+    "CEXF_SOFT_PCT": 6.0,        # tutti gli exchange insieme >= 6% = soft forte
+    # v8.4: quota dei top holder che hanno ricevuto i token con un trasferimento (non comprati): proxy gratuito
+    # dei "phishing/flagged wallet" di GMGN, segnale aggiuntivo
+    # v8.4 (CATE): prove insieme: collegati veri >= 10% E gruppo con exchange/app >= 15% = HARD
+    "COMBO_LINKED_PCT": 10.0, "COMBO_INFRA_PCT": 15.0,
+    "COMBO_INFRA_EXTRA_PCT": 5.0,  # ...di cui almeno 5 punti portati davvero da exchange/app (non lo stesso gruppo)
+    "RECV_SOFT_PCT": 15.0,       # soft graduato sopra il 15%
+    "RECV_HARD_PCT": 30.0,       # HARD sopra il 30%
     "EXPAND": True,              # espansione dei gruppi: altri holder (su TUTTA la lista) degli stessi funder/distributori
     "EXPAND_MIN_LINKED": 3.0,    # si espande solo se i collegati veri nei top holder sono gia >= 3%
     "EXPAND_ADDRS": 10,          # indirizzi (funder, fee payer, distributori) espansi al massimo
@@ -155,6 +179,14 @@ class _UF:
             self.p[rb] = ra
 
 
+def _cv(xs):
+    xs = [float(x) for x in xs]
+    if len(xs) < 2:
+        return 0.0
+    m = sum(xs) / len(xs)
+    return (sum((x - m) ** 2 for x in xs) / len(xs)) ** 0.5 / m if m > 0 else 0.0
+
+
 def analyze(rows, infra=None, funder_of_funder=None, cfg=None, swarm=None, distributors=None):
     """rows: [{o, pct, ntx, src, ts, slot}] (src/ts/slot solo per i wallet nuovi).
     infra: {indirizzo: etichetta} dei funder infrastrutturali (oltre alla lista nota).
@@ -165,7 +197,6 @@ def analyze(rows, infra=None, funder_of_funder=None, cfg=None, swarm=None, distr
     fof = funder_of_funder or {}
     holders = {r["o"] for r in rows}
     dist = set(distributors or ())
-    is_infra = lambda a: a not in dist and bool(infra_label(a, infra))  # noqa: E731
     uf_true, uf_inf = _UF(), _UF()
     reasons = {}
     by_src = {}
@@ -173,6 +204,23 @@ def analyze(rows, infra=None, funder_of_funder=None, cfg=None, swarm=None, distr
         s = r.get("src")
         if s:
             by_src.setdefault(s, []).append(r["o"])
+    rmap = {r["o"]: r for r in rows}
+    burst = {}
+    for s, ws in by_src.items():   # v8.4: hub automatico che finanzia in raffica (PILLSEY)
+        lab = infra_label(s, infra) or ""
+        if not lab.startswith("hub") or len(ws) < c["HUB_BURST_MIN"]:
+            continue
+        rr = [rmap[w] for w in ws]
+        fr = sum(1 for r in rr if r.get("ntx") is not None and r["ntx"] < c["FRESH_TX"]) / len(rr)
+        dl = sorted(((r.get("acq") or {}).get("ts") or 0) - (r.get("ts") or 0) for r in rr
+                    if (r.get("acq") or {}).get("ts") and r.get("ts"))
+        med = dl[len(dl) // 2] / 3600 if dl else 99
+        cv = _cv([float(r.get("pct") or 0) for r in rr])
+        if fr >= c["HUB_BURST_FRESH"] and 0 <= med <= c["HUB_BURST_DELAY_H"] and cv <= c["HUB_BURST_CV"]:
+            burst[s] = len(ws)
+            reasons["hub_burst"] = reasons.get("hub_burst", 0) + len(ws)
+    dist |= set(burst)
+    is_infra = lambda a: a not in dist and bool(infra_label(a, infra))  # noqa: E731
     for s, ws in by_src.items():
         if is_infra(s):
             for w in ws[1:]:
@@ -259,6 +307,24 @@ def analyze(rows, infra=None, funder_of_funder=None, cfg=None, swarm=None, distr
         i = j + 1
     pct = {r["o"]: float(r.get("pct") or 0) for r in rows}
     fresh = {r["o"] for r in rows if r.get("ntx") is not None and r["ntx"] < c["FRESH_TX"]}
+    # v8.4 (GLITCH): wallet nuovi finanziati da exchange noti poco prima di comprare, vicino al lancio
+    t_first = min([(r.get("acq") or {}).get("ts") for r in rows if (r.get("acq") or {}).get("ts")] or [0])
+    cexf = {}
+    for r in rows:
+        a = r.get("acq") or {}
+        lab = infra_label(r["src"], infra) if r.get("src") else None
+        if not lab or lab.startswith("hub") or r["o"] not in fresh or not r.get("ts") or not a.get("ts"):
+            continue
+        p_ = pct[r["o"]]
+        if not (c["CEXF_MIN_PCT"] <= p_ <= c["CEXF_MAX_PCT"]):
+            continue
+        if 0 <= a["ts"] - r["ts"] <= c["CEXF_MAX_DELAY_H"] * 3600 and a["ts"] - t_first <= c["CEXF_EARLY_H"] * 3600:
+            cexf.setdefault(lab, []).append(p_)
+    cexf_all = round(sum(sum(v) for v in cexf.values()), 3)
+    cexf_best = max(((round(sum(v), 3), len(v), k, _cv(v)) for k, v in cexf.items()), default=(0.0, 0, None, 0.0))
+    # v8.4: quota dei top holder che hanno RICEVUTO i token (trasferimento, non acquisto da pool)
+    recv_pct = round(sum(pct[r["o"]] for r in rows if not r.get("ext") and (r.get("acq") or {}).get("from")
+                         and not (r.get("acq") or {}).get("swap")), 3)
 
     def groups(uf, extra_infra=False):
         g = {}
@@ -286,7 +352,38 @@ def analyze(rows, infra=None, funder_of_funder=None, cfg=None, swarm=None, distr
     fresh_share = round(len(fresh) / scanned, 3) if scanned else 0.0
     infra_used = sorted({infra_label(s, infra) for s in list(by_src) + list(by_payer) + list(by_from)
                          if is_infra(s)} - {None})
+    # v8.4: stima della dimensione reale del gruppo maggiore (holder letti senza controllo del funder)
+    est_n, est_pct = max_true_n, max_true
+    if c.get("EST_ENABLED") and tg:
+        mem = set(tg[0][2])
+        ats = [(rmap[w].get("acq") or {}).get("ts") for w in mem if (rmap[w].get("acq") or {}).get("ts")]
+        pps = [pct[w] for w in mem]
+        if ats and pps:
+            lo_t, hi_t = min(ats) - c["EST_WIN_SEC"], max(ats) + c["EST_WIN_SEC"]
+            lo_p, hi_p = min(pps) * c["EST_PCT_LO"], max(pps) * c["EST_PCT_HI"]
+            like = lambda r: lo_t <= ((r.get("acq") or {}).get("ts") or 0) <= hi_t and lo_p <= pct[r["o"]] <= hi_p  # noqa: E731
+            checked_like = [r for r in rows if r.get("ntx") is not None and not r.get("ext") and like(r)]
+            unk = [r for r in rows if r.get("ntx") is None and not r.get("ext") and r["o"] not in mem and like(r)]
+            rate = sum(1 for r in checked_like if r["o"] in mem) / len(checked_like) if checked_like else 0.0
+            if unk and rate >= c["EST_MIN_RATE"]:
+                est_n = int(round(max_true_n + rate * len(unk)))
+                est_pct = round(max_true + rate * sum(pct[r["o"]] for r in unk), 3)
+    est_linked = round(linked_pct + (est_pct - max_true), 3)
     why, level = [], "none"
+    if est_n > max_true_n and est_linked >= c["LINKED_HARD_PCT"] and linked_pct < c["LINKED_HARD_PCT"]:
+        why.append(f"wallet collegati stimati al {est_linked:.1f}% (gruppo esteso a ~{est_n} wallet con lo stesso schema)")
+    if est_n > max_true_n and est_n >= c["BIG_GROUP_WALLETS"] and est_pct >= c["BIG_GROUP_PCT"] and not (
+            max_true_n >= c["BIG_GROUP_WALLETS"] and max_true >= c["BIG_GROUP_PCT"]):
+        why.append(f"gruppo enorme stimato: ~{est_n} wallet con il {est_pct:.1f}%")
+    if cexf_best[1] >= c["CEXF_MIN_N"] and cexf_best[0] >= c["CEXF_HARD_PCT"] and cexf_best[3] <= c["CEXF_CV"]:
+        why.append(f"{cexf_best[1]} wallet nuovi finanziati da {cexf_best[2]} poco prima di comprare al lancio, "
+                   f"quote simili, insieme al {cexf_best[0]:.1f}%")
+    if linked_pct >= c["COMBO_LINKED_PCT"] and max_all[0] >= c["COMBO_INFRA_PCT"] and \
+            max_all[0] - max_true >= c["COMBO_INFRA_EXTRA_PCT"] and \
+            linked_pct < c["LINKED_HARD_PCT"] and max_all[0] < c["INFRA_GROUP_ALWAYS_PCT"]:
+        why.append(f"collegati veri al {linked_pct:.1f}% e gruppo con exchange/app al {max_all[0]:.1f}% insieme")
+    if recv_pct >= c["RECV_HARD_PCT"]:
+        why.append(f"top holder che hanno ricevuto i token senza comprarli al {recv_pct:.1f}%")
     if max_true >= c["GROUP_HARD_PCT"]:
         why.append(f"un gruppo di {max_true_n} wallet collegati tiene il {max_true:.1f}% dell'offerta")
     if linked_pct >= c["LINKED_HARD_PCT"]:
@@ -320,10 +417,16 @@ def analyze(rows, infra=None, funder_of_funder=None, cfg=None, swarm=None, distr
             why.append(f"{fresh_share * 100:.0f}% top holder nuovi")
         if sw_pct >= c["SWARM_SOFT_PCT"]:
             why.append(f"{sw_n} wallet con saldo identico al {sw_pct:.1f}%")
+        if cexf_all >= c["CEXF_SOFT_PCT"]:
+            why.append(f"wallet nuovi da exchange comprati al lancio al {cexf_all:.1f}%")
+        if recv_pct >= c["RECV_SOFT_PCT"]:
+            why.append(f"top holder con token ricevuti (non comprati) al {recv_pct:.1f}%")
         level = "soft" if why else "none"
     covered = round(sum(pct.values()), 3)
     return {"level": level, "why": "; ".join(why), "max_group_pct": max_true, "max_group_wallets": max_true_n,
-            "linked_pct": linked_pct, "linked_wallets": linked_n, "groups": [(round(p, 3), n) for p, n, _ in tg[:12]],
+            "linked_pct": linked_pct, "linked_wallets": linked_n, "est_group_wallets": est_n,
+            "est_group_pct": est_pct, "est_linked_pct": est_linked, "hub_burst": {k[:6]: v for k, v in burst.items()},
+            "cexf_pct": cexf_all, "cexf_best": list(cexf_best[:3]), "recv_pct": recv_pct, "groups": [(round(p, 3), n) for p, n, _ in tg[:12]],
             "multi_groups": len(multi), "multi_pct": multi_pct, "ext_wallets": ext_n,
             "ext_in_groups": sum(1 for x in tg for w in x[2] if w in {r["o"] for r in rows if r.get("ext")}),
             "cluster_infra_pct": infra_pct, "infra_group_pct": round(max_all[0], 3),
