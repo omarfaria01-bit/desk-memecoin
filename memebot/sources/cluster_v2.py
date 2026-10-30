@@ -353,9 +353,35 @@ def _b58(b):
     return "1" * (len(b) - len(b.lstrip(b"\0"))) + out
 
 
-async def top_holders(rpc, mint, exclude=(), token_program=None, top_n=150, min_pct=0.0):
-    """([(owner, % dell'offerta, token account principale)], n. holder). Quota sul totale dei saldi (pool
-    incluse, come Bubblemaps); pool/curve/locker (exclude) tolti dalla lista."""
+def _holders_out(per, main_acc, tot, top_n, min_pct):
+    tot = tot or 1
+    rows = sorted(((amt / tot * 100, o) for o, amt in per.items()), reverse=True)
+    # v8.2: "sciame" = tanti wallet con lo STESSO saldo esatto (distribuzione a wallet fantoccio)
+    same = {}
+    for o, amt in per.items():
+        same.setdefault(amt, []).append(o)
+    vals = [(amt, ws) for amt, ws in same.items() if len(ws) >= CFG["SWARM_MIN_WALLETS"]
+            and amt / tot * 100 >= CFG["SWARM_MIN_PCT"]]
+    swarm = {"pct": round(sum(amt * len(ws) for amt, ws in vals) / tot * 100, 3),
+             "wallets": sum(len(ws) for _, ws in vals),
+             "values": sorted(((round(amt / tot * 100, 5), len(ws)) for amt, ws in vals),
+                              key=lambda x: -x[0] * x[1])[:6],
+             "owners": {o for _, ws in vals for o in ws}}
+    return [(o, p, main_acc[o][0]) for p, o in rows if p >= min_pct][:top_n], len(per), swarm
+
+
+def _add(per, main_acc, excl, owner, acc, amt):
+    if owner in excl or acc in excl or amt <= 0:
+        return
+    per[owner] = per.get(owner, 0) + amt
+    if amt > main_acc.get(owner, ("", 0))[1]:
+        main_acc[owner] = (acc, amt)
+
+
+async def top_holders(rpc, mint, exclude=(), token_program=None, top_n=150, min_pct=0.0, das_pages=10):
+    """([(owner, % dell'offerta, token account principale)], n. holder, sciame). Quota sul totale dei saldi (pool
+    incluse, come Bubblemaps); pool/curve/locker (exclude) tolti dalla lista. v8.2: getProgramAccounts (Helius se
+    c'e la chiave, poi RPC pubblico); se fallisce, DAS getTokenAccounts di Helius (1000 account per pagina)."""
     excl = set(exclude or [])
     progs = [token_program] if token_program else ["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
                                                    "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"]
@@ -374,26 +400,31 @@ async def top_holders(rpc, mint, exclude=(), token_program=None, top_n=150, min_
                 except Exception:  # noqa: BLE001
                     continue
                 tot += amt
-                if o in excl or a.get("pubkey") in excl or amt <= 0:
-                    continue
-                per[o] = per.get(o, 0) + amt
-                if amt > main_acc.get(o, ("", 0))[1]:
-                    main_acc[o] = (a.get("pubkey"), amt)
-            tot = tot or 1
-            rows = sorted(((amt / tot * 100, o) for o, amt in per.items()), reverse=True)
-            # v8.2: "sciame" = tanti wallet con lo STESSO saldo esatto (distribuzione a wallet fantoccio)
-            same = {}
-            for o, amt in per.items():
-                same.setdefault(amt, []).append(o)
-            vals = [(amt, ws) for amt, ws in same.items() if len(ws) >= CFG["SWARM_MIN_WALLETS"]
-                    and amt / tot * 100 >= CFG["SWARM_MIN_PCT"]]
-            swarm = {"pct": round(sum(amt * len(ws) for amt, ws in vals) / tot * 100, 3),
-                     "wallets": sum(len(ws) for _, ws in vals),
-                     "values": sorted(((round(amt / tot * 100, 5), len(ws)) for amt, ws in vals),
-                                      key=lambda x: -x[0] * x[1])[:6],
-                     "owners": {o for _, ws in vals for o in ws}}
-            return [(o, p, main_acc[o][0]) for p, o in rows if p >= min_pct][:top_n], len(per), swarm
-    return None, 0, None
+                _add(per, main_acc, excl, o, a.get("pubkey"), amt)
+            return _holders_out(per, main_acc, tot, top_n, min_pct)
+    # ripiego DAS (solo Helius): pagine da 1000 account
+    per, main_acc, tot, complete = {}, {}, 0, False
+    for page in range(1, int(das_pages) + 1):
+        r = await rpc("getTokenAccounts", {"mint": mint, "page": page, "limit": 1000}, url=RPC_GPA)
+        rows = (r or {}).get("token_accounts") if isinstance(r, dict) else None
+        if not isinstance(rows, list):
+            break
+        for t in rows:
+            amt = int(t.get("amount") or 0)
+            tot += amt
+            _add(per, main_acc, excl, t.get("owner"), t.get("address"), amt)
+        if len(rows) < 1000:
+            complete = True
+            break
+    if not per:
+        return None, 0, None
+    if not complete:   # holder oltre le pagine lette: la quota va sulla supply intera
+        sup = await rpc("getTokenSupply", [mint])
+        try:
+            tot = max(tot, int(((sup or {}).get("value") or {}).get("amount")))
+        except Exception:  # noqa: BLE001
+            pass
+    return _holders_out(per, main_acc, tot, top_n, min_pct)
 
 
 def _keys(msg):

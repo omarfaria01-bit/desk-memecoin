@@ -653,3 +653,28 @@ DexScreener diventa la fonte trending principale, GeckoTerminal e pump.fun secon
 - **Log**: `src` in tutti gli eventi (rifiuti, pass, segnali); tag `src:trending_agg`, `trend_score`, `trend_src` nei segnali;
   `src`, `trending_score`, `trend_families`, `trend_sources`, `trend_paid` in entry_features.
 - Test: `tests/test_v83.py` + tutti i test precedenti passano. Live resta spento; wallet, chiavi e .env non toccati.
+
+## Aggiornamento 30/10/2026 (v8.2, seconda parte) – Helius come RPC principale (PAPER)
+
+- Nuovo `sources/helius.py`. La chiave si legge **solo** dalla variabile d'ambiente `HELIUS_API_KEY` e l'URL si
+  costruisce mentre il bot gira: non è mai scritta in file, log, eventi o export. Ogni testo che contiene
+  `api-key=` viene mascherato (`***`). Senza la chiave tutto torna agli RPC pubblici, come prima.
+- Le chiamate JSON-RPC che prima andavano agli RPC pubblici (mainnet-beta, PublicNode) provano prima Helius:
+  `RPC_URL`, `CLUSTER_RPC`, `RPC_GPA` in `cluster_v2`, controllo honeypot e `KOL_RPC` (kol_holders).
+  Se Helius dà 429 o errore, si usa il pubblico.
+- Cluster: la lista completa degli holder arriva da getProgramAccounts su Helius (10 crediti, circa 1 s anche con
+  15.000 holder). Se non funziona, si usa il DAS `getTokenAccounts` (1000 account per pagina), quindi anche gli
+  holder oltre i primi 40. L'endpoint `funded-by` di Helius è solo per i piani a pagamento (risponde 403), quindi
+  il finanziatore si cerca ancora con getSignaturesForAddress + getTransaction.
+- Limiti del piano gratuito: 6 richieste/s RPC, 1,5/s DAS, 4/s getProgramAccounts e 8 s di pausa dopo un 429.
+  Budget: 85% di 1M crediti al mese, cioè circa 28.300 al giorno, spesi a ritmo uniforme durante la giornata.
+  - "core" (holder, mint, honeypot): sempre su Helius, fino al 97% del budget del giorno.
+  - "bulk" (analisi per holder): su Helius solo se siamo entro il ritmo e Helius è libero, altrimenti va al pubblico.
+  - "low" (KOL): su Helius solo sotto il 60% del ritmo.
+  - In più, "bulk" e "low" hanno un tetto orario di circa 1.530 crediti (1,3 × budget giornaliero / 24), così
+    la sera non si brucia il resto del budget del giorno.
+- Contatore dei crediti (oggi, ora corrente, media per ora, mese, 429) in `helius_usage.json`, che contiene solo
+  numeri e non va su GitHub. Una riga "Helius:" nel log ogni 30 minuti.
+- `tools/sync_github.sh`: lo scan dei segreti blocca gli URL Helius con la chiave dentro e la chiave stessa letta
+  dall'ambiente, senza stamparla.
+- Test: `tests/test_v82.py`, sezione Helius (instradamento, budget, maschera, DAS) con una chiave finta, senza rete.

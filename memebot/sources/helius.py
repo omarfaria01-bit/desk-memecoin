@@ -1,0 +1,203 @@
+"""v8.2: Helius (piano free) come RPC principale, con limiti e contatore crediti.
+
+La chiave si legge SOLO da os.environ["HELIUS_API_KEY"] e l'URL si costruisce a runtime: mai scritta in file,
+log o eventi (usare mask() su ogni testo che puo contenere un URL). Senza chiave tutto torna agli RPC pubblici.
+Piano free: 1M crediti/mese, 10 richieste/s RPC, 2/s DAS, getProgramAccounts 5/s. 'funded-by' = solo piani a
+pagamento (403), quindi non usato.
+"""
+import json
+import os
+import re
+import threading
+import time
+from datetime import datetime
+
+BASE = "https://mainnet.helius-rpc.com/?api-key="
+CFG = {
+    "MONTHLY_CREDITS": 1_000_000,
+    "BUDGET_FRAC": 0.85,       # usiamo al massimo l'85% del mese (margine)
+    "RPS": 6.0,                # sotto il limite di 10/s (a 8/s arrivavano 429)
+    "DAS_RPS": 1.5,            # sotto il limite di 2/s
+    "GPA_RPS": 4.0,            # sotto il limite di 5/s
+    "SLACK": 1500,             # crediti di anticipo concessi rispetto al ritmo della giornata
+    "LOW_FRAC": 0.6,           # le chiamate "low" (KOL) solo sotto il 60% del ritmo
+    "HOUR_FRAC": 1.3,          # bulk/low: al massimo 1.3 x (budget del giorno / 24) in ogni ora
+    "CORE_STOP": 0.97,         # oltre il 97% del budget del giorno: niente Helius nemmeno per le chiamate core
+    "COOLDOWN_429": 8.0,       # dopo un 429: 8 s solo RPC pubblici
+}
+COST = {"getProgramAccounts": 10, "getProgramAccountsV2": 1, "getTokenAccounts": 10, "getAsset": 10,
+        "getTransactionsForAddress": 10, "getTransfersByAddress": 10}
+DAS = {"getTokenAccounts", "getAsset", "getAssetBatch", "searchAssets", "getAssetsByOwner", "getSignaturesForAsset"}
+USAGE_PATH = None              # impostato da desk.py (DATA_DIR/helius_usage.json), contiene solo contatori
+_MASK = re.compile(r"(api-key=)[^&\s'\"]+", re.I)
+_lock = threading.Lock()
+_next = {"rpc": 0.0, "das": 0.0, "gpa": 0.0}
+_cool = [0.0]
+U = {"day": "", "credits": 0, "calls": 0, "r429": 0, "fails": 0, "by_method": {}, "hours": {}, "month": "",
+     "month_credits": 0, "skipped": 0}
+_saved = [0.0]
+
+
+def key():
+    return (os.environ.get("HELIUS_API_KEY") or "").strip() or None
+
+
+def on():
+    return key() is not None
+
+
+def url():
+    k = key()
+    return BASE + k if k else None
+
+
+def is_helius(u):
+    return isinstance(u, str) and ("helius-rpc.com" in u or "helius.xyz" in u)
+
+
+def mask(s):
+    s = _MASK.sub(r"\1***", str(s))
+    k = key()
+    return s.replace(k, "***") if k else s
+
+
+def cost(method):
+    return COST.get(method, 1)
+
+
+def _roll(now=None):
+    now = now or time.time()
+    d = datetime.fromtimestamp(now)
+    day, mon = d.strftime("%Y-%m-%d"), d.strftime("%Y-%m")
+    if U["month"] != mon:
+        U["month"], U["month_credits"] = mon, 0
+    if U["day"] != day:
+        U.update(day=day, credits=0, calls=0, r429=0, fails=0, by_method={}, hours={}, skipped=0)
+    return d
+
+
+def load(path):
+    global USAGE_PATH
+    USAGE_PATH = path
+    try:
+        with open(path) as f:
+            d = json.load(f)
+        if isinstance(d, dict):
+            U.update({k: d[k] for k in U if k in d})
+    except Exception:  # noqa: BLE001
+        pass
+    _roll()
+
+
+def save(force=False):
+    if not USAGE_PATH or (not force and time.time() - _saved[0] < 60):
+        return
+    _saved[0] = time.time()
+    try:
+        with _lock:
+            data = json.dumps(U)
+        tmp = USAGE_PATH + ".tmp"
+        with open(tmp, "w") as f:
+            f.write(data)
+        os.replace(tmp, USAGE_PATH)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def day_budget():
+    return CFG["MONTHLY_CREDITS"] * CFG["BUDGET_FRAC"] / 30.0
+
+
+def pace_budget(now=None):
+    """Crediti che possiamo aver speso a quest'ora del giorno (ritmo uniforme) + anticipo."""
+    d = _roll(now)
+    frac = (d.hour * 3600 + d.minute * 60 + d.second) / 86400.0
+    return day_budget() * frac + CFG["SLACK"]
+
+
+def allow(method, tier="bulk", now=None):
+    """tier: 'core' (holder, mint, honeypot), 'bulk' (analisi cluster per holder), 'low' (KOL, extra)."""
+    if not on():
+        return False
+    now = now or time.time()
+    with _lock:
+        _roll(now)
+        if now < _cool[0]:
+            return False
+        used, c = U["credits"], cost(method)
+        if used + c > day_budget() * CFG["CORE_STOP"]:
+            ok = False
+        elif tier == "core":
+            ok = True
+        else:
+            hour_cap = day_budget() / 24.0 * CFG["HOUR_FRAC"]
+            hour_used = U["hours"].get(datetime.fromtimestamp(now).strftime("%H"), 0)
+            frac = CFG["LOW_FRAC"] if tier == "low" else 1.0
+            ok = used + c <= pace_budget(now) * frac and hour_used + c <= hour_cap * frac
+        if not ok:
+            U["skipped"] += 1
+        return ok
+
+
+def _slot(method):
+    lane = "das" if method in DAS else ("gpa" if method.startswith("getProgramAccounts") else "rpc")
+    rps = {"das": CFG["DAS_RPS"], "gpa": CFG["GPA_RPS"], "rpc": CFG["RPS"]}[lane]
+    with _lock:
+        now = time.time()
+        t = max(now, _next[lane], _next["rpc"])
+        _next[lane] = t + 1.0 / rps
+        if lane != "rpc":
+            _next["rpc"] = max(_next["rpc"], t + 1.0 / CFG["RPS"])
+        return t - now
+
+
+async def acquire(method):
+    import asyncio
+    w = _slot(method)
+    if w > 0:
+        await asyncio.sleep(w)
+
+
+def acquire_sync(method):
+    w = _slot(method)
+    if w > 0:
+        time.sleep(w)
+
+
+def note(method, status=200, ok=True):
+    """Registra una chiamata fatta a Helius. 429 -> pausa; le risposte fallite contano comunque (prudenza)."""
+    with _lock:
+        d = _roll()
+        c = cost(method) if status != 403 else 0
+        U["credits"] += c
+        U["month_credits"] += c
+        U["calls"] += 1
+        U["by_method"][method] = U["by_method"].get(method, 0) + c
+        h = d.strftime("%H")
+        U["hours"][h] = U["hours"].get(h, 0) + c
+        if status == 429:
+            U["r429"] += 1
+            _cool[0] = time.time() + CFG["COOLDOWN_429"]
+        elif not ok:
+            U["fails"] += 1
+            U.setdefault("fail_status", {})
+            U["fail_status"][str(status)] = U["fail_status"].get(str(status), 0) + 1
+    save()
+
+
+def summary():
+    with _lock:
+        _roll()
+        last_h = U["hours"].get(datetime.now().strftime("%H"), 0)
+        prev = sorted(U["hours"].items())
+        hrs = max(1, len([1 for _, v in prev if v]))
+        return {"on": on(), "credits_today": U["credits"], "day_budget": int(day_budget()),
+                "month_credits": U["month_credits"], "calls_today": U["calls"], "credits_this_hour": last_h,
+                "avg_per_hour": round(U["credits"] / hrs), "r429": U["r429"], "fails": U["fails"],
+                "skipped": U["skipped"], "top": sorted(U["by_method"].items(), key=lambda x: -x[1])[:4]}
+
+
+def wait_estimate(method):
+    lane = "das" if method in DAS else ("gpa" if method.startswith("getProgramAccounts") else "rpc")
+    with _lock:
+        return max(0.0, max(_next[lane], _next["rpc"]) - time.time())

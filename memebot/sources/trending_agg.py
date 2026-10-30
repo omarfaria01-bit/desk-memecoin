@@ -9,6 +9,8 @@ Fonti (famiglie):
   pump  (secondaria)  pump.fun frontend-api-v3 /coins/currently-live (pubblico, senza Cloudflare); su 429 pausa 15 min.
                       (king-of-the-hill / top-runners oggi rispondono 404.)
   gmgn  (inattiva)    solo se c'e la chiave personale GMGN (funzione passata dal bot); oggi assente.
+  birdeye (v8.4)      /defi/token_trending (mode=selective, 1h) dal piano gratuito Birdeye, tramite la funzione
+                      passata dal bot (budget CU e cache sono in sources/birdeye.py); conta per il bonus multi-fonte.
 
 Tutte le richieste passano dalla funzione `get(url, headers)` del bot (Http.get di desk.py): i limiti per sito
 (GeckoTerminal 1 chiamata ogni 6 s) sono quindi CONDIVISI con il resto del bot. Mai eccezioni verso il chiamante.
@@ -38,7 +40,8 @@ DEX_TOKENS = "https://api.dexscreener.com/tokens/v1/solana/"
 GECKO_HDR = {"Accept": "application/json;version=20230302"}
 
 FAMILY = {"dex_boost_top": "dex", "dex_boost_latest": "dex", "dex_profile": "dex", "dex_ads": "dex",
-          "gecko_5m": "gecko", "gecko_1h": "gecko", "gecko_6h": "gecko", "pump_live": "pump", "gmgn": "gmgn"}
+          "gecko_5m": "gecko", "gecko_1h": "gecko", "gecko_6h": "gecko", "pump_live": "pump", "gmgn": "gmgn",
+          "birdeye": "birdeye"}
 
 
 def _f(x, d=0.0):
@@ -154,8 +157,9 @@ def trending_score(n_fam, ranks, mx):
 
 class TrendingAgg:
     """refresh(get, cooldown=f): f(host) -> True se quel sito ha dato 429 da poco (allora si usa solo la cache)."""
-    def __init__(self, gmgn_fetch=None, gecko_every=300, pump_every=300, enrich_max=90):
+    def __init__(self, gmgn_fetch=None, gecko_every=300, pump_every=300, enrich_max=90, birdeye_fetch=None):
         self.gmgn_fetch = gmgn_fetch      # async () -> [(mint, rank, extra)] oppure None (nessuna chiave)
+        self.birdeye_fetch = birdeye_fetch  # v8.4: async () -> [(mint, rank, extra)] (cache e budget nel chiamato)
         self.gecko_every, self.pump_every, self.enrich_max = gecko_every, pump_every, enrich_max
         self.cache = {}                   # nome lista -> (ts, [(mint, rank, extra)])
         self.pump_pause_until = 0.0
@@ -201,6 +205,11 @@ class TrendingAgg:
                 lists["gmgn"] = await self.gmgn_fetch() or []
             except Exception:  # noqa: BLE001
                 lists["gmgn"] = []
+        if self.birdeye_fetch is not None:
+            try:
+                lists["birdeye"] = await self.birdeye_fetch() or []
+            except Exception:  # noqa: BLE001
+                lists["birdeye"] = []
         agg = {}
         for name, rows in lists.items():
             for m, rk, ex in rows:

@@ -24,6 +24,7 @@ import base64
 import json
 import os
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -56,9 +57,36 @@ def b58(b: bytes) -> str:
     return "1" * (len(b) - len(b.lstrip(b"\0"))) + s
 
 
+def _helius(method, body):
+    """v8.2: Helius (chiave solo da env, livello 'low' = solo se il budget del giorno e ampio). None = pubblico."""
+    try:
+        from sources import helius as H
+    except Exception:  # noqa: BLE001
+        return None
+    if not H.allow(method, "low"):
+        return None
+    H.acquire_sync(method)
+    st = 0
+    try:
+        req = urllib.request.Request(H.url(), data=body, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+            st = r.status
+            d = json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        st, d = e.code, None
+    except Exception:  # noqa: BLE001
+        d = None
+    ok = isinstance(d, dict) and "result" in d
+    H.note(method, st, ok)
+    return d if ok else None
+
+
 def _rpc(method, params, _retry=2):
-    time.sleep(CALL_GAP)
     body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode()
+    d = _helius(method, body)
+    if d is not None:
+        return d.get("result"), d.get("error")
+    time.sleep(CALL_GAP)
     req = urllib.request.Request(RPC, data=body, headers={"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as r:

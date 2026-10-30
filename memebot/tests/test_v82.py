@@ -252,3 +252,99 @@ assert g["CLUSTER_GROUP_HARD_PCT"] == 20 and g["HONEYPOT_SELL_IMPACT_PCT"] == 25
 assert g["CLUSTER_UNKNOWN_ACTION"] == "soft", g
 print("override OK")
 print("TUTTI I TEST v8.2 OK")
+
+# ---------------------------------------------------------------- v8.2: Helius (chiave finta, nessuna rete)
+import os as _os
+from sources import helius as H
+_old_key = _os.environ.get("HELIUS_API_KEY")
+_os.environ["HELIUS_API_KEY"] = "FAKEKEY123456"
+H.USAGE_PATH = None
+assert H.on() and H.url().endswith("FAKEKEY123456")
+_u = H.BASE + "FAKEKEY123456"   # URL costruito a runtime (niente chiavi scritte nei file)
+assert "FAKEKEY" not in H.mask("errore su " + _u + "&x=1")
+assert H.mask(_u).endswith("api-key=***")
+H.U.update(day="", credits=0)
+H._roll()
+assert H.allow("getProgramAccounts", "core")
+import datetime as _dt
+_noon = _dt.datetime.now().replace(hour=12, minute=0, second=0).timestamp()
+H.U["credits"] = int(H.pace_budget(_noon)) + 10     # a mezzogiorno oltre il ritmo: bulk e low al pubblico, core si
+assert not H.allow("getTransaction", "bulk", _noon) and not H.allow("getTransaction", "low", _noon)
+assert H.allow("getAccountInfo", "core", _noon)
+H.U["credits"] = int(H.day_budget())                 # budget del giorno finito: nemmeno core
+assert not H.allow("getAccountInfo", "core")
+H.U["credits"] = 0
+H.note("getProgramAccounts", 200, True)
+assert H.U["credits"] == 10 and H.U["by_method"]["getProgramAccounts"] == 10
+H.note("getSlot", 429, False)
+assert not H.allow("getSlot", "core")               # pausa dopo un 429
+H._cool[0] = 0
+
+
+class _Resp:
+    def __init__(self, status, data):
+        self.status, self.data = status, data
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+    async def json(self, content_type=None):
+        return self.data
+
+    async def text(self):
+        return json.dumps(self.data)
+
+
+class _Sess:
+    def __init__(self):
+        self.urls = []
+
+    def post(self, url, json=None, headers=None):
+        self.urls.append(url)
+        if "helius" in url:
+            return _Resp(200, {"jsonrpc": "2.0", "result": {"value": "da-helius"}})
+        return _Resp(200, {"jsonrpc": "2.0", "result": {"value": "da-pubblico"}})
+
+
+async def _route():
+    s = _Sess()
+    http = D.Http(s)
+    d = await http.post("https://api.mainnet-beta.solana.com", {"jsonrpc": "2.0", "id": 1, "method": "getAccountInfo", "params": ["x"]})
+    assert d["result"]["value"] == "da-helius", d
+    _os.environ.pop("HELIUS_API_KEY")
+    d = await http.post("https://api.mainnet-beta.solana.com", {"jsonrpc": "2.0", "id": 1, "method": "getAccountInfo", "params": ["x"]})
+    assert d["result"]["value"] == "da-pubblico", d
+    _os.environ["HELIUS_API_KEY"] = "FAKEKEY123456"
+    H.U["credits"] = int(H.day_budget())             # budget finito -> pubblico
+    d = await D._cl2_post(http, "https://solana-rpc.publicnode.com", {"jsonrpc": "2.0", "id": 1, "method": "getTransaction", "params": []}, "bulk")
+    assert d["result"]["value"] == "da-pubblico", d
+    H.U["credits"] = 0
+asyncio.run(_route())
+print("helius: instradamento e budget OK")
+
+
+async def _das():
+    calls = []
+
+    async def rpc(method, params, url=None):
+        calls.append(method)
+        if method == "getProgramAccounts":
+            return None
+        if method == "getTokenAccounts":
+            if params["page"] == 1:
+                return {"token_accounts": [{"owner": f"W{i}", "address": f"A{i}", "amount": 1000} for i in range(1000)]}
+            return {"token_accounts": [{"owner": "BIG", "address": "AB", "amount": 1_000_000}]}
+        return None
+    rows, n, sw = await CV.top_holders(rpc, "MINT", top_n=5)
+    assert rows[0][0] == "BIG" and n == 1001 and round(rows[0][1]) == 50, rows[:2]
+    assert sw["wallets"] >= 1000, sw["wallets"]           # 1000 wallet con saldo identico = sciame
+asyncio.run(_das())
+print("helius: ripiego DAS getTokenAccounts OK")
+if _old_key is None:
+    _os.environ.pop("HELIUS_API_KEY", None)
+else:
+    _os.environ["HELIUS_API_KEY"] = _old_key
+print("TUTTI I TEST v8.2 + Helius OK")

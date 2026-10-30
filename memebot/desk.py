@@ -369,6 +369,43 @@ try:
 except Exception:  # noqa: BLE001
     pass
 try:
+    from sources import helius as _helius  # noqa: E402  (v8.2: Helius come RPC principale, chiave solo da env)
+    SRC["helius"] = _helius
+    _helius.load(os.path.join(DATA_DIR, "helius_usage.json"))
+except Exception:  # noqa: BLE001
+    pass
+PUBLIC_RPC_HOSTS = ("api.mainnet-beta.solana.com", "solana-rpc.publicnode.com")
+HELIUS_CORE = ("getProgramAccounts", "getTokenAccounts", "getAccountInfo", "getTokenSupply", "getTokenLargestAccounts",
+               "getSlot", "getBalance", "getTokenAccountBalance", "getRecentPrioritizationFees")
+
+
+async def helius_first(sess, body, tier="core"):
+    """v8.2: prova Helius (se c'e la chiave e il budget lo consente); None = usa l'RPC pubblico."""
+    H = SRC.get("helius")
+    if not H or sess is None or not isinstance(body, dict) or not body.get("jsonrpc"):
+        return None
+    m = str(body.get("method") or "")
+    if m in HELIUS_CORE or m.startswith("getProgramAccounts"):
+        tier = "core"
+    if tier == "bulk" and H.wait_estimate(m) > 0.5:
+        return None   # Helius gia occupato: questa chiamata va sull'RPC pubblico (piu velocita totale)
+    if not H.allow(m, tier):
+        return None
+    await H.acquire(m)
+    st_, d = 0, None
+    try:
+        async with sess.post(H.url(), json=body) as r:
+            st_ = r.status
+            if st_ == 200:
+                d = await r.json(content_type=None)
+    except Exception:  # noqa: BLE001
+        d = None
+    ok = isinstance(d, dict) and "result" in d
+    H.note(m, st_, ok)
+    return d if ok else None
+
+
+try:
     from sources import trending_agg as _tagg, dex_prefilter as _pf  # noqa: E402  (v8.3)
     SRC["tagg"], SRC["pf"] = _tagg, _pf
 except Exception:  # noqa: BLE001
@@ -610,11 +647,16 @@ def write_event(agent, kind, msg, data=None):
     rec = {"ts": datetime.now(TZ).isoformat(timespec="seconds"), "agent": agent, "kind": kind, "msg": msg}
     if data:
         rec.update(data)
+    line = json.dumps(rec, ensure_ascii=False)
+    if "api-key" in line.lower() and SRC.get("helius"):   # v8.2: mai la chiave Helius nei file
+        line = SRC["helius"].mask(line)
     with open(os.path.join(DATA_DIR, "events.jsonl"), "a") as f:
-        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        f.write(line + "\n")
 
 
 def log(st, agent, kind, msg, **data):
+    if "api-key" in str(msg).lower() and SRC.get("helius"):
+        msg = SRC["helius"].mask(msg)
     st.activity.append(f"{datetime.now(TZ):%H:%M} {agent}: {msg}"[:110])
     if HEADLESS:
         print(f"{datetime.now(TZ):%H:%M:%S} {agent}: {msg}", flush=True)
@@ -707,7 +749,11 @@ class Http:
         except Exception:  # noqa: BLE001
             return None
 
-    async def post(self, url, body, headers=None):
+    async def post(self, url, body, headers=None, tier="core"):
+        if urlparse(url).netloc in PUBLIC_RPC_HOSTS:   # v8.2: Helius prima, pubblico come ripiego
+            d = await helius_first(getattr(self, "s", None), body, tier)
+            if d is not None:
+                return d
         await self._wait(url)
         try:
             async with self.s.post(url, json=body, headers=headers) as r:
@@ -1503,10 +1549,15 @@ def cluster2_signal(cl):
     return f"cluster2:{lv}" + ("" if lv == "unknown" else f":{b}")
 
 
-async def _cl2_post(http, url, body):
-    """POST JSON-RPC senza il passo fisso di Http (la cadenza la decide cluster_v2); 429 = None."""
+async def _cl2_post(http, url, body, tier="core"):
+    """POST JSON-RPC senza il passo fisso di Http (la cadenza la decide cluster_v2); 429 = None.
+    v8.2: verso gli RPC pubblici prova prima Helius (core: holder/mint; bulk: analisi per holder, entro il budget)."""
     if not hasattr(http, "s") or not hasattr(http, "_wait"):
         return await http.post(url, body)
+    if urlparse(url).netloc in PUBLIC_RPC_HOSTS:
+        d = await helius_first(http.s, body, tier)
+        if d is not None:
+            return d
     await http._wait(url)
     try:
         async with http.s.post(url, json=body) as r:
@@ -1547,7 +1598,7 @@ async def cluster2_scan(st, http, mint, sec, sym="?", rt=False):
         cfg = {"BUDGET_SEC": CFG["CLUSTER2_BUDGET_SEC"],
                "GROUP_HARD_PCT": min(20.0, fnum(CFG["CLUSTER_GROUP_HARD_PCT"], 20.0))}
         try:
-            res = await SRC["cluster2"].scan(lambda u, b: _cl2_post(http, u, b), mint,
+            res = await SRC["cluster2"].scan(lambda u, b: _cl2_post(http, u, b, "bulk"), mint,
                                              exclude=sec.get("exclude") or [], token_program=sec.get("token_program"),
                                              cfg=cfg)
         except Exception as e:  # noqa: BLE001
@@ -4531,6 +4582,25 @@ def build_recap(st):
     return "\n".join(lines)
 
 
+async def helius_agent(st):
+    """v8.2: ogni 30 minuti scrive nel log quanti crediti Helius abbiamo usato (mai la chiave)."""
+    H = SRC.get("helius")
+    if not H:
+        return
+    log(st, "Helius", "info", "chiave Helius presente: RPC principale (pubblici come ripiego)" if H.on()
+        else "nessuna chiave Helius: uso gli RPC pubblici")
+    while True:
+        await asyncio.sleep(60 if H.U.get("calls", 0) == 0 else 1800)
+        H.save(force=True)
+        if not H.on():
+            continue
+        u = H.summary()
+        top = ", ".join(f"{m} {c}" for m, c in u["top"])
+        log(st, "Helius", "info", f"crediti oggi {u['credits_today']}/{u['day_budget']} (questa ora {u['credits_this_hour']}, "
+            f"media {u['avg_per_hour']}/h, mese {u['month_credits']}), chiamate {u['calls_today']}, 429 {u['r429']}, "
+            f"rinviate al pubblico per budget {u['skipped']} | {top}", **{k: u[k] for k in ("credits_today", "credits_this_hour", "avg_per_hour", "month_credits", "r429")})
+
+
 async def recap_agent(st):
     while True:
         now = datetime.now(TZ)
@@ -4723,6 +4793,7 @@ async def main():
             "Learner": lambda: shadow_agent(st, http),
             "Shadow": lambda: shadow_trade_agent(st, http),
             "Recap": lambda: recap_agent(st),
+            "Helius": lambda: helius_agent(st),
             "Dashboard": lambda: dashboard(st),
         }
         await asyncio.gather(*(supervise(st, n, f) for n, f in jobs.items()))
