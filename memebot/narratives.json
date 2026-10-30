@@ -1,5 +1,5 @@
 {
- "updated_at": "2026-10-30T21:06:00Z",
+ "updated_at": "2026-10-30T22:05:00Z",
  "blocklist_mints": [
   "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
   "So11111111111111111111111111111111111111112",
@@ -25,7 +25,7 @@
     "99VUptA9qKPNKMuPdX7MDHXChLWwbnzbNfWe8V3vpump"
    ],
    "strength": 0.4,
-   "trend": "rising",
+   "trend": "stable",
    "sources": [
     "https://x.com/Pumpfun/status/2116253806455599394",
     "https://x.com/a1lon9/status/2116259832340832651",
@@ -35,10 +35,14 @@
     "https://x.com/Vision33X/status/2116255067540222452",
     "https://x.com/herrdevs/status/2116274911769452996",
     "https://x.com/dex_kolwatcher/status/2116269531836645739",
-    "https://x.com/bitecong/status/2116268756167254368"
+    "https://x.com/bitecong/status/2116268756167254368",
+    "https://x.com/zaika_hl/status/2116281585192632397",
+    "https://x.com/geekoshi/status/2116279681552888261",
+    "https://x.com/SkkrSKktt/status/2116275560955473937",
+    "https://x.com/Pumpfun/status/2116286186943570287"
    ],
-   "note": "Pump.fun announced a $100K Creator Program at 19:40Z (100K+ views); a1lon9 followed. skrootimburg (19K) pitching 'CREATOOOR' coin by analogy with 'collectooor' (packs meta, 1.5M). Several pumpfun/creator-themed launches today (bitecong). CREATOOOR FQcdwa...pump: paid-DEX listing, ~$8K MC, $0 liquidity (dex_kolwatcher). CREATOR 99VUpt...pump: bundler wallets flagged (bitecong). No reference coin yet; copies likely. Some skepticism (referral-volume based).",
-   "velocity": null,
+   "note": "Pump.fun $100K Creator Program (19:40Z); comp starts Mon 2/11, top 5 by referral volume. Discussion cooling: ~4 independent authors this scan vs 7 (zaika_hl, denko0x 'battle of referrals', geekoshi, Vision33X). Pumpfun also teasing 'perps x social trading'. CREATOOOR FQcdwa...pump: paid DEX, $0 liq. CREATOR 99VUpt...pump: bundler wallets flagged; pushed again by SkkrSKktt article. Opportunist launches piggybacking (PATE, TUFF). No reference coin.",
+   "velocity": -3,
    "mint_confidence": {
     "FQcdwaARE4ztbq12C7NWB26JarSC5WPZS2DZa9iApump": 0.2,
     "99VUptA9qKPNKMuPdX7MDHXChLWwbnzbNfWe8V3vpump": 0.15
@@ -61,7 +65,7 @@
    "mints": [
     "9hhLCxn41KZcmK1vAf7u5M6vKLHRcsVn1VmVgUrhpump"
    ],
-   "strength": 0.25,
+   "strength": 0.2,
    "trend": "fading",
    "sources": [
     "https://x.com/ChiefTroll_/status/2116244032632369357",
@@ -71,7 +75,7 @@
     "https://x.com/CTO_Robinhood/status/2116135898987495547",
     "https://x.com/degenhousepro/status/2116117320930034010"
    ],
-   "note": "'chief troll officer' posts/h 11 (19Z) -> 12 (20Z): flat at a low level, peak was 93 at 10Z. Late-entry risk. Many copies; 9hhL...pump is only the most-called one, no reference mint.",
+   "note": "'chief troll officer' posts/h 12 (20Z) -> 8 (21Z), peak 93 at 10Z: dying, remove next scan if still flat. Many copies; 9hhL...pump only the most-called. Late-entry risk.",
    "velocity": null,
    "trusted_mentions": 0,
    "mint_confidence": {
@@ -99,7 +103,7 @@
    "mints": [
     "nxPqZ4F7ux8Vph5NFu25rEP6Kx9Gr1U6Fmj36Rjpump"
    ],
-   "strength": 0.35,
+   "strength": 0.33,
    "trend": "stable",
    "sources": [
     "https://x.com/gta6dacity/status/2116258858440032647",
@@ -112,7 +116,7 @@
     "https://x.com/Amalekite1/status/2116224746715038191",
     "https://x.com/stitchdegen/status/2115751967402467759"
    ],
-   "note": "Event-driven (GTA 6 ~19/11). dacity/gta6cat posts/h 24 (19Z) -> 19 (20Z): drifting lower. DACITY ~$8.1M MC earlier (cherrytgbot, gta6dacity). New low-quality copy 'TTA6' (Trump x GTA6, DEPNwb...pump) from a 46-follower launch account, not included. SPAM: papaRRony 'same dev' reply network with FtHCpY... (blocklisted). Drainer warning on @DacitySolOnX 'allocation' posts still applies.",
+   "note": "Event-driven (GTA 6 ~19/11). dacity/gta6cat posts/h 19 (20Z) -> 15 (21Z): slow drift lower. DACITY ~$8.1M MC earlier. Ignore low-quality copies (TTA6). papaRRony 'same dev' spam with FtHCpY... (blocklisted). Drainer warning on @DacitySolOnX 'allocation' posts.",
    "velocity": null,
    "trusted_mentions": 0,
    "mint_confidence": {
@@ -137,8 +141,8 @@
     "3ApVr1xphYMpi9dn3rpqU4hwvpmCQDVwxET1rdCDpump",
     "BrsZa8LYyBuD4jjkzHCFzjacgtXCZSn9kuDFdeitpump"
    ],
-   "strength": 0.35,
-   "trend": "fading",
+   "strength": 0.37,
+   "trend": "rising",
    "sources": [
     "https://x.com/WhyCoinAF/status/2116256285507440773",
     "https://x.com/degenhousepro/status/2116247191765368985",
@@ -150,7 +154,7 @@
     "https://x.com/CryptoLogickal/status/2116239716974792922",
     "https://x.com/CrypticornAI/status/2116198878303113279"
    ],
-   "note": "'hyper inu OR hyperchan' posts/h 16 (19Z) -> 18 (20Z): bottoming at low level after decline from 98 peak. HI 3w2Tv...pump: ~13.6K holders, mint/freeze revoked (TRENCH_FORCE_). HYPERCHAN bundled launch reported (WhyCoinAF); competing HYPERCHAN mints 3ApVr1... vs BrsZa8.... Hierogly_Carve 'eligibility checker' posts look like a drainer.",
+   "note": "'hyper inu OR hyperchan' posts/h 18 (20Z) -> 41 (21Z): rebound after decline from 98 peak; authors not checked (velocity null), could be spam burst. HI 3w2Tv...pump: ~13.6K holders, mint/freeze revoked. HYPERCHAN bundled launch reported; competing mints 3ApVr1... vs BrsZa8.... Hierogly_Carve 'eligibility checker' looks like a drainer.",
    "velocity": null,
    "trusted_mentions": 0,
    "mint_confidence": {
@@ -180,8 +184,8 @@
    "mints": [
     "2gLhk8p2KvUFeUXur2hiF4hxjdRM1vBcbgo9Q7DMZfiw"
    ],
-   "strength": 0.3,
-   "trend": "stable",
+   "strength": 0.25,
+   "trend": "fading",
    "sources": [
     "https://x.com/fishoorman/status/2116243557837046072",
     "https://x.com/cryptojazper/status/2115768756995592454",
@@ -189,7 +193,7 @@
     "https://x.com/The_Stonk_Guy/status/2116021994986893525",
     "https://x.com/ainstein_001/status/2115895461961957550"
    ],
-   "note": "Structural meta, not re-scanned (decay applied). Fatigue noted earlier. STONK mint from a single account: verify.",
+   "note": "Structural meta, not re-scanned; no fresh mentions seen today evening, decaying. STONK mint single-source: verify.",
    "velocity": null,
    "trusted_mentions": 0,
    "mint_confidence": {
@@ -221,8 +225,8 @@
     "AqLSm8VjJj7JB6DWY7QzEBfQ4dU1syFPjtJW9mcspump",
     "9dXPgyPVpfxVYRtsBYaENQF7qAPEtWQXykQeQxr9pump"
    ],
-   "strength": 0.35,
-   "trend": "rising",
+   "strength": 0.3,
+   "trend": "fading",
    "sources": [
     "https://x.com/jizzmasonsolana/status/2116261524339671352",
     "https://x.com/theartofkula/status/2116252365850648918",
@@ -233,7 +237,7 @@
     "https://x.com/ceocryptoio/status/2116212893716721676",
     "https://x.com/RazMI_SOL/status/2116229265247392121"
    ],
-   "note": "Seasonal, peaks 31/10, dies from 1/11: exit by tomorrow. Halloween+solana/pumpfun posts/h 195 (18Z) -> 215 (19Z) -> 280 (20Z): rising into the day. Very fragmented, no reference coin; new self-promo 'Jizzoween' by the Jizzmas dev (no CA seen). Velocity null: authors not re-searched this scan. All mints low confidence.",
+   "note": "Seasonal, peaks 31/10, dies from 1/11. 'halloween solana' posts/h 76 (20Z) -> 29 (21Z) on today's count (earlier logged figures not comparable): cooling sharply into the night, may re-spike on 31/10. Fragmented, no reference coin; all mints low confidence. paoloardoino posted a pumpkin emoji (off-topic).",
    "velocity": null,
    "trusted_mentions": 0,
    "mint_confidence": {
@@ -242,6 +246,39 @@
     "AqLSm8VjJj7JB6DWY7QzEBfQ4dU1syFPjtJW9mcspump": 0.2,
     "9dXPgyPVpfxVYRtsBYaENQF7qAPEtWQXykQeQxr9pump": 0.2
    }
+  },
+  {
+   "theme": "4SKINNERS (Pump.fun official shout)",
+   "keywords": [
+    "4skinners",
+    "4 skinners",
+    "pumpfun",
+    "trailer"
+   ],
+   "tickers": [
+    "4SKINNERS"
+   ],
+   "mints": [
+    "2MutBiPq2Ynp3XMjRWfUJNQPSjAHmJnfHNo6syz8pump",
+    "9BRnnuDYztkRq58BtxeDa3YKeMdatyc23ZgZxodUEoii"
+   ],
+   "strength": 0.3,
+   "trend": "rising",
+   "sources": [
+    "https://x.com/Pumpfun/status/2116282286765490181",
+    "https://x.com/cryptsy_c/status/2116285573250076690",
+    "https://x.com/Fred_GPT/status/2116282421536600260",
+    "https://x.com/collectible/status/2116283261223637109",
+    "https://x.com/JJ19961998/status/2116283945062986112",
+    "https://x.com/radardotfunn/status/2116286890160914634"
+   ],
+   "note": "Pump.fun posted '4SKINNERS. NOW TRADING ON PUMPFUN.' at 21:33Z (23K views, 64 replies); CA not in post text. Reply crowd hyped (collectible 8.9K, JJ19961998 references a trailer). Competing mints: 2MutBi...pump called by cryptsy_c (1.3K); 9BRnn...Eoii by 42-follower Fred_GPT (non-pump suffix, likely copy). radardotfunn bot: top MC only ~$11.8K at 21:51Z. Unverified, small.",
+   "velocity": null,
+   "mint_confidence": {
+    "2MutBiPq2Ynp3XMjRWfUJNQPSjAHmJnfHNo6syz8pump": 0.3,
+    "9BRnnuDYztkRq58BtxeDa3YKeMdatyc23ZgZxodUEoii": 0.1
+   },
+   "trusted_mentions": 1
   }
  ]
 }

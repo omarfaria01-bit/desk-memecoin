@@ -79,6 +79,16 @@ CFG = {
     "LINKED_SOFT_PCT": 5.0,      # SOFT: collegati veri >= 5%
     "INFRA_SOFT_PCT": 10.0,      # SOFT: gruppo infra >= 10%
     "FRESH_SOFT": 0.5,           # SOFT: >= 50% dei top holder nuovi
+    # v8.4 (caso PILLSEY: 13+ cluster medi su Bubblemaps, ~33% in tutto, da noi solo "soft")
+    "MULTI_GROUP_MIN_PCT": 2.0,  # HARD: almeno MULTI_GROUP_N gruppi veri da >= 2% ciascuno...
+    "MULTI_GROUP_N": 3,
+    "MULTI_GROUP_SUM_PCT": 20.0,  # ...che insieme fanno >= 20%
+    "EXPAND": True,              # espansione dei gruppi: altri holder (su TUTTA la lista) degli stessi funder/distributori
+    "EXPAND_MIN_LINKED": 3.0,    # si espande solo se i collegati veri nei top holder sono gia >= 3%
+    "EXPAND_ADDRS": 10,          # indirizzi (funder, fee payer, distributori) espansi al massimo
+    "EXPAND_PAGES": 2,           # pagine da 100 transazioni per indirizzo (Helius getTransactionsForAddress, 10 crediti/pagina)
+    "EXPAND_HUB_SEC": 600,       # 100 transazioni in meno di 10 minuti e quasi nessuna su questo token = servizio, non espanso
+    "EXPAND_CACHE_SEC": 1800,    # i collegamenti trovati restano validi 30 minuti (le scansioni successive costano 0)
 }
 
 _infra_cache = {"t": 0.0, "d": {}}
@@ -271,7 +281,8 @@ def analyze(rows, infra=None, funder_of_funder=None, cfg=None, swarm=None, distr
     max_all = ag[0] if ag else (0.0, 0, [])
     infra_pct = round(max(0.0, max_all[0] - (max_true if tg and set(tg[0][2]) <= set(max_all[2]) else 0.0)), 3)
     all_fresh = round(sum(1 for w in max_all[2] if w in fresh) / max_all[1], 3) if max_all[1] else 0.0
-    scanned = len(rows)
+    scanned = sum(1 for r in rows if not r.get("ext"))
+    ext_n = len(rows) - scanned
     fresh_share = round(len(fresh) / scanned, 3) if scanned else 0.0
     infra_used = sorted({infra_label(s, infra) for s in list(by_src) + list(by_payer) + list(by_from)
                          if is_infra(s)} - {None})
@@ -286,6 +297,11 @@ def analyze(rows, infra=None, funder_of_funder=None, cfg=None, swarm=None, distr
             max_all[0] >= c["INFRA_GROUP_HARD_PCT"] and (all_fresh >= c["INFRA_GROUP_MIN_FRESH"] or max_true >= 3)):
         why.append(f"gruppo collegato anche via exchange/app ({max_all[1]} wallet, {all_fresh * 100:.0f}% nuovi) "
                    f"al {max_all[0]:.1f}%")
+    multi = [x for x in tg if x[0] >= c["MULTI_GROUP_MIN_PCT"]]
+    multi_pct = round(sum(x[0] for x in multi), 3)
+    if len(multi) >= c["MULTI_GROUP_N"] and multi_pct >= c["MULTI_GROUP_SUM_PCT"]:
+        why.append(f"{len(multi)} gruppi collegati da >= {c['MULTI_GROUP_MIN_PCT']:g}% ciascuno, insieme al "
+                   f"{multi_pct:.1f}%")
     sw = swarm or {}
     sw_pct, sw_n = float(sw.get("pct") or 0), int(sw.get("wallets") or 0)
     sw_in_group = bool(tg) and any(r.get("swarm") for r in rows if r["o"] in set(tg[0][2]))
@@ -307,7 +323,9 @@ def analyze(rows, infra=None, funder_of_funder=None, cfg=None, swarm=None, distr
         level = "soft" if why else "none"
     covered = round(sum(pct.values()), 3)
     return {"level": level, "why": "; ".join(why), "max_group_pct": max_true, "max_group_wallets": max_true_n,
-            "linked_pct": linked_pct, "linked_wallets": linked_n, "groups": [(round(p, 3), n) for p, n, _ in tg[:6]],
+            "linked_pct": linked_pct, "linked_wallets": linked_n, "groups": [(round(p, 3), n) for p, n, _ in tg[:12]],
+            "multi_groups": len(multi), "multi_pct": multi_pct, "ext_wallets": ext_n,
+            "ext_in_groups": sum(1 for x in tg for w in x[2] if w in {r["o"] for r in rows if r.get("ext")}),
             "cluster_infra_pct": infra_pct, "infra_group_pct": round(max_all[0], 3),
             "infra_group_wallets": max_all[1], "infra_group_fresh": all_fresh, "infra_used": infra_used,
             "fresh_share": fresh_share, "scanned": scanned, "swarm_pct": round(sw_pct, 3), "swarm_wallets": sw_n,
@@ -327,8 +345,8 @@ class _Rpc:
         self.post, self.urls, self.gap, self.last, self.calls, self.fails = post, list(urls), gap, 0.0, 0, 0
         self.lock = asyncio.Lock()
 
-    async def __call__(self, method, params, url=None):
-        for attempt in range(3):
+    async def __call__(self, method, params, url=None, tries=3):
+        for attempt in range(tries):
             async with self.lock:
                 dt = time.time() - self.last
                 if dt < self.gap:
@@ -353,8 +371,10 @@ def _b58(b):
     return "1" * (len(b) - len(b.lstrip(b"\0"))) + out
 
 
-def _holders_out(per, main_acc, tot, top_n, min_pct):
+def _holders_out(per, main_acc, tot, top_n, min_pct, full=None):
     tot = tot or 1
+    if full is not None:   # v8.4: quota di TUTTI gli holder (per espandere i gruppi oltre i top analizzati)
+        full.update({o: amt / tot * 100 for o, amt in per.items()})
     rows = sorted(((amt / tot * 100, o) for o, amt in per.items()), reverse=True)
     # v8.2: "sciame" = tanti wallet con lo STESSO saldo esatto (distribuzione a wallet fantoccio)
     same = {}
@@ -378,7 +398,7 @@ def _add(per, main_acc, excl, owner, acc, amt):
         main_acc[owner] = (acc, amt)
 
 
-async def top_holders(rpc, mint, exclude=(), token_program=None, top_n=150, min_pct=0.0, das_pages=10):
+async def top_holders(rpc, mint, exclude=(), token_program=None, top_n=150, min_pct=0.0, das_pages=10, full=None):
     """([(owner, % dell'offerta, token account principale)], n. holder, sciame). Quota sul totale dei saldi (pool
     incluse, come Bubblemaps); pool/curve/locker (exclude) tolti dalla lista. v8.2: getProgramAccounts (Helius se
     c'e la chiave, poi RPC pubblico); se fallisce, DAS getTokenAccounts di Helius (1000 account per pagina)."""
@@ -401,7 +421,7 @@ async def top_holders(rpc, mint, exclude=(), token_program=None, top_n=150, min_
                     continue
                 tot += amt
                 _add(per, main_acc, excl, o, a.get("pubkey"), amt)
-            return _holders_out(per, main_acc, tot, top_n, min_pct)
+            return _holders_out(per, main_acc, tot, top_n, min_pct, full)
     # ripiego DAS (solo Helius): pagine da 1000 account
     per, main_acc, tot, complete = {}, {}, 0, False
     for page in range(1, int(das_pages) + 1):
@@ -424,7 +444,126 @@ async def top_holders(rpc, mint, exclude=(), token_program=None, top_n=150, min_
             tot = max(tot, int(((sup or {}).get("value") or {}).get("amount")))
         except Exception:  # noqa: BLE001
             pass
-    return _holders_out(per, main_acc, tot, top_n, min_pct)
+    return _holders_out(per, main_acc, tot, top_n, min_pct, full)
+
+
+EXP_CACHE = {}   # v8.4: mint -> (ts, {holder: (indirizzo, tipo)}) collegamenti trovati espandendo i gruppi
+
+
+def _tx_links(tx, addr, mint):
+    """Da una transazione di `addr`: [(destinatario, tipo)] con tipo 'sol' (SOL mandati da addr), 'payer' (addr paga
+    la fee di chi riceve il token) o 'token' (addr cede il token)."""
+    out = []
+    try:
+        msg = tx["transaction"]["message"]
+        ks = _keys(msg)
+        meta = tx.get("meta") or {}
+        ins = list(msg.get("instructions") or [])
+        for ii in meta.get("innerInstructions") or []:
+            ins += ii.get("instructions") or []
+        for x in ins:
+            p = x.get("parsed") if isinstance(x, dict) else None
+            if isinstance(p, dict) and isinstance(p.get("info"), dict) and p.get("type") in (
+                    "transfer", "createAccount", "transferWithSeed", "createAccountWithSeed") \
+                    and x.get("program") == "system":
+                info = p["info"]
+                if info.get("source") == addr:
+                    d = info.get("destination") or info.get("newAccount")
+                    if d:
+                        out.append((d, "sol"))
+        pre = {(b.get("owner"), b.get("accountIndex")): float((b.get("uiTokenAmount") or {}).get("uiAmount") or 0)
+               for b in meta.get("preTokenBalances") or [] if b.get("mint") == mint}
+        post = {(b.get("owner"), b.get("accountIndex")): float((b.get("uiTokenAmount") or {}).get("uiAmount") or 0)
+                for b in meta.get("postTokenBalances") or [] if b.get("mint") == mint}
+        sent = any(post.get(k, 0.0) - pre.get(k, 0.0) < 0 for k in set(pre) | set(post) if k[0] == addr)
+        payer = bool(ks) and ks[0] == addr
+        if sent or payer:
+            for k in set(post):
+                if k[0] and k[0] != addr and post.get(k, 0.0) - pre.get(k, 0.0) > 0:
+                    out.append((k[0], "token" if sent else "payer"))
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
+async def expand_groups(rpc, mint, rows, full, excl, infra, distributors, checked, c):
+    """v8.4: stima la dimensione VERA dei gruppi. Per i funder / fee payer / distributori (non infrastruttura, gia
+    controllati come non-hub) dei gruppi trovati nei top holder, legge le loro ultime transazioni (Helius
+    getTransactionsForAddress, 10 crediti ogni 100) e aggiunge gli holder di TUTTA la lista che hanno ricevuto da
+    loro SOL, fee pagate o token. Cosi un gruppo da 43 wallet nei top 150 diventa quello reale (es. 87)."""
+    now = time.time()
+    hit = EXP_CACHE.get(mint)
+    links, used, skipped = {}, [], []
+    if hit and now - hit[0] < c["EXPAND_CACHE_SEC"]:
+        links = hit[1]
+    else:
+        holders = set(rows)
+        score = {}
+        for r in rows.values():
+            a = r.get("acq") or {}
+            for addr in (r.get("src"), a.get("payer"), a.get("from")):
+                if not addr or addr in holders or addr in excl or infra_label(addr, infra):
+                    continue
+                if addr not in checked and addr not in distributors:
+                    continue
+                score[addr] = score.get(addr, 0.0) + float(r.get("pct") or 0) + 0.01
+        cands = sorted(score.items(), key=lambda x: -x[1])[:int(c["EXPAND_ADDRS"])]
+        for addr, _ in cands:
+            if time.time() - now > 40:
+                break
+            tok, txs = None, []
+            for _p in range(int(c["EXPAND_PAGES"])):
+                prm = {"transactionDetails": "full", "sortOrder": "desc", "limit": 100, "encoding": "jsonParsed",
+                       "maxSupportedTransactionVersion": 1, "filters": {"status": "succeeded"}}
+                if tok:
+                    prm["paginationToken"] = tok
+                r = await rpc("getTransactionsForAddress", [addr, prm], url=RPC_GPA, tries=1)
+                if not isinstance(r, dict) or not isinstance(r.get("data"), list):
+                    break
+                txs += r["data"]
+                tok = r.get("paginationToken")
+                if not tok or len(r["data"]) < 100:
+                    break
+            if not txs:
+                skipped.append((addr[:6], "nessun dato (solo Helius)"))
+                continue
+            found = []
+            for tx in txs:
+                found += _tx_links(tx, addr, mint)
+            bt = [t.get("blockTime") for t in txs if t.get("blockTime")]
+            on_mint = sum(1 for tx in txs if any(b.get("mint") == mint for b in
+                                                 ((tx.get("meta") or {}).get("postTokenBalances") or [])))
+            if len(txs) >= 100 and bt and max(bt) - min(bt) < c["EXPAND_HUB_SEC"] and on_mint < 0.3 * len(txs):
+                skipped.append((addr[:6], "hub"))
+                infra[addr] = "hub (espansione)"
+                continue
+            used.append(addr[:6])
+            for d, kind in found:
+                if d in full and d not in excl and d != addr:
+                    links.setdefault(d, (addr, kind))
+        EXP_CACHE[mint] = (now, links)
+        for k in [k for k, v in EXP_CACHE.items() if now - v[0] > c["EXPAND_CACHE_SEC"]]:
+            EXP_CACHE.pop(k, None)
+    added = relinked = 0
+    for d, (addr, kind) in links.items():
+        r = rows.get(d)
+        if r is None:
+            r = rows[d] = {"o": d, "pct": full.get(d, 0.0), "acc": None, "ntx": None, "src": None, "ts": None,
+                           "slot": None, "ext": True}
+            added += 1
+        elif r.get("ext"):
+            continue
+        else:
+            relinked += 1
+        if kind == "sol" and not r.get("src"):
+            r["src"] = addr
+        elif kind in ("payer", "token"):
+            a = r.setdefault("acq", {}) if r.get("acq") is not None else r.setdefault("acq", {})
+            key = "payer" if kind == "payer" else "from"
+            if not a.get(key):
+                a[key] = addr
+    return {"addrs": used, "skipped": skipped, "added": added, "relinked": relinked, "links": len(links),
+            "cached": bool(hit and now - hit[0] < c["EXPAND_CACHE_SEC"])}
 
 
 def _keys(msg):
@@ -509,7 +648,9 @@ async def scan(post, mint, rpc_urls=None, exclude=(), token_program=None, cfg=No
     unk = lambda why, **k: dict({"level": "unknown", "why": why, "calls": rpc.calls,  # noqa: E731
                                  "sec": round(time.time() - t0, 1)}, **k)
     excl = set(exclude or [])
-    holders, n_hold, swarm = await top_holders(rpc, mint, excl, token_program, int(c["TOP_N"]), c["MIN_PCT"])
+    full = {}
+    holders, n_hold, swarm = await top_holders(rpc, mint, excl, token_program, int(c["TOP_N"]), c["MIN_PCT"],
+                                               full=full)
     if not holders:
         return unk("lista holder non disponibile dalla RPC")
     rows = {o: {"o": o, "pct": p, "acc": a, "ntx": None, "src": None, "ts": None, "slot": None}
@@ -549,6 +690,7 @@ async def scan(post, mint, rpc_urls=None, exclude=(), token_program=None, cfg=No
             if s:
                 cnt[s] = cnt.get(s, 0) + 1
     found_infra, fof, distributors = {}, {}, {}
+    checked = set()   # v8.4: funder controllati e NON hub (gli unici che si possono espandere)
     # chi ha MANDATO i token a >= 3 holder e un distributore di questo token, mai infrastruttura
     snd = {}
     for r in rows.values():
@@ -578,6 +720,7 @@ async def scan(post, mint, rpc_urls=None, exclude=(), token_program=None, cfg=No
             else:
                 found_infra[s] = "hub (>=1000 tx/h)"
             continue
+        checked.add(s)
         if sigs and len(sigs) < 1000:
             g, _, _ = await _funding(rpc, s, sigs[-1]["signature"])
             if g:
@@ -586,6 +729,13 @@ async def scan(post, mint, rpc_urls=None, exclude=(), token_program=None, cfg=No
     for r in rows.values():
         r["swarm"] = r["o"] in (swarm or {}).get("owners", ())
     res = analyze(list(rows.values()), found_infra, fof, c, swarm=swarm, distributors=distributors)
+    exp = {}
+    if c.get("EXPAND") and excl and res.get("linked_pct", 0) >= c["EXPAND_MIN_LINKED"] and \
+            time.time() - t0 < c["BUDGET_SEC"] + 40:
+        exp = await expand_groups(rpc, mint, rows, full, excl, found_infra, distributors, checked, c)
+        if exp.get("added") or exp.get("relinked"):
+            res = analyze(list(rows.values()), found_infra, fof, c, swarm=swarm, distributors=distributors)
+    res["expand"] = {k: v for k, v in exp.items() if k != "links"}
     res.update(calls=rpc.calls, sec=round(time.time() - t0, 1), holders_total=n_hold, acq_read=done,
                new_infra=sorted(found_infra), distributors=sorted(distributors),
                top_funders=[(s[:6] + ".." + s[-4:], n, infra_label(s, found_infra))

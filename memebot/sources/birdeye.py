@@ -44,6 +44,8 @@ DEFAULTS = {
     "BIRDEYE_TREND_SEC": 14400,       # trending ogni 4 ore (6 x 30 = 180 CU/giorno)
     "BIRDEYE_CREDITS_SEC": 3600,      # consumo ufficiale ogni ora (24 CU/giorno)
     "BIRDEYE_OHLCV_BARS": 60,         # 60 candele 1m = 25 CU (<=100)
+    "BIRDEYE_CYCLE_SAVE_AT": 0.80,    # v8.4: dall'80% del ciclo: niente trending e niente chiamate non prioritarie
+    "BIRDEYE_CYCLE_STOP_AT": 0.95,    # dal 95% del ciclo: nessuna chiamata (solo fonti gratuite di fallback)
 }
 
 
@@ -152,6 +154,30 @@ class Birdeye:
     def spent_today(self):
         return sum(self.st["spent_day"].values())
 
+    def cycle_used(self):
+        return max(0.0, self.c("BIRDEYE_MONTHLY_CU") - self.remaining_est())
+
+    def cycle_pct(self):
+        return self.cycle_used() / max(1.0, float(self.c("BIRDEYE_MONTHLY_CU")))
+
+    def cycle_level(self):
+        p = self.cycle_pct()
+        return "stop" if p >= self.c("BIRDEYE_CYCLE_STOP_AT") else (
+            "risparmio" if p >= self.c("BIRDEYE_CYCLE_SAVE_AT") else "ok")
+
+    def days_left(self, now=None):
+        now = now or time.time()
+        end = _f(self.st.get("cycle_end"))
+        return max(1, int(math.ceil((end - now) / 86400))) if end > now else 30
+
+    def projection(self, now=None):
+        """CU a fine ciclo se si continua al ritmo di oggi (stima)."""
+        now = now or time.time()
+        d = datetime.fromtimestamp(now)
+        frac = max(0.1, (d.hour * 3600 + d.minute * 60 + d.second) / 86400)
+        rate = self.spent_today() / frac
+        return round(self.cycle_used() + rate * (1 - frac) + rate * max(0, self.days_left(now) - 1))
+
     def allow(self, cat, prio=False, now=None):
         """(True, '') oppure (False, motivo). Non fa chiamate."""
         now = now or time.time()
@@ -168,6 +194,14 @@ class Birdeye:
         if ep and now < self.denied.get(ep, 0):
             return False, "endpoint non incluso nel piano"
         cost = COST.get(cat, 30)
+        cl = self.cycle_level()   # v8.4: soglie del ciclo mensile (mai oltre il piano gratuito)
+        if cat != "credits" and cl == "stop":
+            self._set_level("stop", "95% del ciclo mensile")
+            return False, "95% del ciclo"
+        if cat == "trending" and cl == "risparmio":
+            return False, "80% del ciclo (trending sospeso)"
+        if cat != "credits" and cl == "risparmio" and not prio:
+            return False, "80% del ciclo (solo prioritarie)"
         if self.remaining_est() - cost < self.c("BIRDEYE_RESERVE_CU"):
             self._set_level("stop", "riserva mensile raggiunta")
             return False, "riserva mensile"
@@ -359,7 +393,10 @@ class Birdeye:
 
     def status(self):
         self._roll_day(time.time())
-        return {"level": self.level, "spent_today": self.spent_today(), "day_budget": self.st.get("day_budget"),
+        return {"level": self.level, "cycle_level": self.cycle_level(), "cycle_pct": round(self.cycle_pct() * 100, 2),
+                "cycle_used": round(self.cycle_used()), "limit": self.c("BIRDEYE_MONTHLY_CU"),
+                "projection": self.projection(), "days_left": self.days_left(),
+                "spent_today": self.spent_today(), "day_budget": self.st.get("day_budget"),
                 "remaining_est": round(self.remaining_est()), "calls": dict(self.st["calls_day"]),
                 "fallback": dict(self.st["fallback_day"]), "errors": dict(self.st["errors_day"])}
 

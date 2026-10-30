@@ -7,7 +7,7 @@
 """
 
 CFG = {
-    "MAX_TRANSFER_FEE_BPS": 500,     # fee di trasferimento Token-2022 oltre il 5% = honeypot
+    "MAX_TRANSFER_FEE_BPS": 999,     # v8.4: fee Token-2022 >= 10% = rigido; sotto e soft (entra nel costo a/r)
     "SELL_IMPACT_HARD_PCT": 25.0,    # impatto del preventivo di vendita oltre il 25% = scarto
     "RT_HARD_PCT": 35.0,             # andata+ritorno immediato che perde oltre il 35% = scarto
 }
@@ -21,6 +21,7 @@ def mint_flags(parsed, cfg=None):
     c = dict(CFG, **(cfg or {}))
     info = (parsed or {}).get("info") or {}
     hard, soft, ext_names = [], [], []
+    fee_bps = 0
     if info.get("mintAuthority"):
         hard.append("mint authority attiva (possono stampare token)")
     if info.get("freezeAuthority"):
@@ -38,8 +39,9 @@ def mint_flags(parsed, cfg=None):
                 hard.append(f"fee di trasferimento {bps / 100:.1f}%")
             elif bps > 0:
                 soft.append(f"fee di trasferimento {bps / 100:.2f}%")
-            if s.get("transferFeeConfigAuthority"):
-                soft.append("la fee di trasferimento puo essere alzata")
+            fee_bps = max(fee_bps, bps)
+            if s.get("transferFeeConfigAuthority"):   # v8.4: il dev puo alzarla fino a farne un honeypot
+                hard.append("la fee di trasferimento puo essere alzata dal dev (authority attiva)")
         elif name == "permanentDelegate" and s.get("delegate"):
             hard.append("permanent delegate (possono prendere i token da ogni wallet)")
         elif name == "defaultAccountState" and str(s.get("accountState", "")).lower() == "frozen":
@@ -52,7 +54,7 @@ def mint_flags(parsed, cfg=None):
             (hard if s.get("paused") else soft).append("token pausabile" + (" (in pausa)" if s.get("paused") else ""))
         elif name not in SAFE_EXT:
             soft.append(f"estensione insolita {name}")
-    return hard, soft, {"extensions": ext_names, "decimals": info.get("decimals")}
+    return hard, soft, {"extensions": ext_names, "decimals": info.get("decimals"), "fee_bps": fee_bps}
 
 
 def sell_verdict(sell_quote, sell_err, buy_lamports, cfg=None):
