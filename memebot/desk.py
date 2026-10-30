@@ -194,7 +194,12 @@ CFG = {
     "AGE_EASE_ATR": 2.0,              #   penalita dimezzata
     "AGE_EASE_CHG_H1": 25.0,
     "AGE_EASE_MULT": 0.5,
-    "HONEYPOT_UNKNOWN_ACTION": "soft",# controllo non riuscito: 'soft' (size ridotta) o 'skip'
+    "HONEYPOT_UNKNOWN_ACTION": "skip",# v8.4c (Kiwi): controllo non riuscito = MAI acquisto, solo shadow 'honeypot_unknown'
+    "HONEYPOT_RETRY_MIN": 5,          # v8.4c: dopo uno 'sconosciuto' il token puo tornare dopo 5 min (giro successivo)...
+    "HONEYPOT_RETRY_MAX": 3,          # ...al massimo 3 volte, poi cooldown normale (COOLDOWN_MIN)
+    # v8.4c (BNB "Broke Nigga Baddie"): ticker di grandi asset/exchange su un mint NON ufficiale = blocco nel Filter
+    # (storico: impostore HYPE shadow -92.6%, BNB cattivo; nessun impostore vincente). 'block' oppure 'off'
+    "TICKER_IMPOSTOR_ACTION": "block",
     # v8.2: etichette 'bad_cluster'/'suspected_rug' diventano 'rug' se il prezzo crolla dal massimo o la LP sparisce
     "RUG_PROMOTE_DROP_PCT": 50.0,
     "RUG_PROMOTE_LIQ_DROP_PCT": 50.0,
@@ -1532,6 +1537,52 @@ async def cluster_scan(st, http, mint, sec):
     return res
 
 
+# ----------------------------------------------------------------------- v8.4c: honeypot sconosciuto, ticker impostori
+HP_RETRY = {}   # mint -> tentativi dopo un honeypot 'sconosciuto' (in memoria)
+
+
+def honeypot_unknown_skip(st, http, mint, m, c, hp, now=None):
+    """Honeypot/sicurezza 'sconosciuto': niente acquisto. Shadow 'honeypot_unknown' e nuovo controllo al giro
+    successivo (cooldown breve HONEYPOT_RETRY_MIN, al massimo HONEYPOT_RETRY_MAX volte, poi cooldown normale)."""
+    now = now or time.time()
+    n = HP_RETRY[mint] = HP_RETRY.get(mint, 0) + 1
+    retry = n <= int(CFG.get("HONEYPOT_RETRY_MAX", 3))
+    reject(st, mint, m["symbol"], f"honeypot non verificabile ({'riprovo' if retry else 'basta tentativi'} "
+           f"{min(n, int(CFG.get('HONEYPOT_RETRY_MAX', 3)))}/{int(CFG.get('HONEYPOT_RETRY_MAX', 3))}): {hp.get('why')}",
+           agent="Executor", cat="honeypot non verificato")
+    if retry:   # libera il mint (st.processed blocca 6 h) con un cooldown breve: lo Scout lo riprende al giro dopo
+        st.processed.pop(mint, None)
+        st.cooldown[mint] = now + float(CFG.get("HONEYPOT_RETRY_MIN", 5)) * 60
+    if CFG.get("SHADOW_TRADES"):
+        spawn_shadow(st, http, mint, m, ["honeypot_unknown"], f"honeypot sconosciuto: {hp.get('why')}",
+                     fnum(c.get("score")), list(c.get("soft") or []), tag="honeypot_unknown")
+    return retry
+
+
+MAJOR_TICKERS = {"BNB", "WBNB", "BTC", "WBTC", "CBBTC", "XBT", "ETH", "WETH", "SOL", "WSOL", "USDC", "USDT", "USD1",
+                 "PYUSD", "XRP", "DOGE", "ADA", "TRX", "TON", "AVAX", "DOT", "LINK", "LTC", "SUI", "BCH", "XLM", "HYPE",
+                 "JUP", "PUMP", "TRUMP", "BINANCE", "COINBASE", "OKX", "BYBIT", "KRAKEN", "KUCOIN", "BITGET", "MEXC"}
+OFFICIAL_MINTS = {   # mint ufficiali su Solana (gli unici ammessi con questi ticker)
+    "So11111111111111111111111111111111111111112",    # SOL/WSOL
+    "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",   # USDC
+    "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",   # USDT
+    "9gP2kCy3wA1ctvYWQk75guqXuHfrEomqydHLtcTCqiLa",   # BNB (Wormhole)
+    "3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh",   # WBTC (Wormhole)
+    "cbbtcf3aa214zXHbiAZQwf4122FBYbraNdFqgw4iMij",    # cbBTC
+    "7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs",   # WETH (Wormhole)
+    "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",    # JUP
+    "pumpCmXqMfrsAkQ5r49WcJnRayYRqmXz6ae8H7H9Dfn",    # PUMP
+    "98sMhvDwXj1RQi5c5Mndm3vPe9cBqPrbLaufMXFNMh5g",   # HYPE
+    "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN",   # TRUMP
+}
+
+
+def ticker_impostor(symbol, mint):
+    """v8.4c: ticker di un grande asset/exchange su un mint non ufficiale -> ticker, altrimenti None."""
+    t = re.sub(r"[^A-Z0-9]", "", str(symbol or "").upper())
+    return t if t in MAJOR_TICKERS and mint not in OFFICIAL_MINTS else None
+
+
 # ----------------------------------------------------------------------- v8.2: cluster v2, honeypot, etichette
 ST_REF = [None]   # stato corrente (per path_tick -> label_watch_tick)
 CL2 = {"tasks": {}, "cache": {}, "sem_bg": None, "sem_rt": None}
@@ -1565,6 +1616,14 @@ LABEL_SEEDS = [
              "Causa: l'hub 9Ja2iw (>=1000 tx/h) che finanzia in raffica i wallet era trattato da infrastruttura. "
              "v8.4: 'hub burst' (60 wallet nuovi, acquisto entro 1h, quote uguali 0.18%) + stima estesa ~150 wallet "
              "al 25.0% = HARD."},
+    {"id": "bnb-2026-10-30", "mint": "EYqygbhZjP7EbM4fSn8devctnksAvPAD1Bt57XBFpump", "sym": "BNB",
+     "label": "cluster", "pnl_pct": None, "rug": False,   # posizione paper aperta: esito registrato dalle uscite normali
+     "note": "TOKEN CATTIVO (Kiwi, 30/10 23:54), 5a lezione negativa: 'Broke Nigga Baddie', ticker BNB impostore "
+             "(non il BNB Wormhole 9gP2kC), eta ~2 h, liq ~$67k, +1089% in 6 h. Bubblemaps: centinaia di holder "
+             "con esattamente lo 0.10% (sciame) e 5-6 cluster a stella da 8-12 wallet. v8.4b la dava soft (collegati "
+             "6.1%, 40% nuovi: tutti i 60 controllati finanziati dall'hub 36MESj); honeypot 'sconosciuto' per errore "
+             "GoPlus (TypeError) e comprata a size x0.2. v8.4c: quote uniformi (125 wallet al 12.3%) = HARD, "
+             "ticker impostore = blocco, honeypot sconosciuto = niente acquisto. MAI esempio pulito."},
     {"id": "glitch-2026-10-30", "mint": "8Xg89xT8Ve34sKiYqYuMs46mycREsCA2F362UscRpump", "sym": "GLITCH",
      "label": "cluster", "pnl_pct": None, "rug": False,
      "note": "SOSPETTO (Kiwi). Eta 14 g, Token-2022 senza transfer fee (Taxes 1.25% = fee pool). 5 top holder "
@@ -1863,7 +1922,7 @@ async def honeypot_check(st, http, mint, size_usd, sec):
         elif not q2:
             miss.append(f"preventivo di vendita non disponibile ({err2})")
     if CFG.get("GOPLUS_CHECK") and SRC.get("goplus"):   # v8.4: errore = unknown, mai ok
-        g = await SRC["goplus"].check(http, mint)
+        g = await SRC["goplus"].check(getattr(http, "s", http), mint)   # v8.4c: sessione aiohttp, non il wrapper Http
         out["goplus_flags"] = g.get("flags") or []
         out["goplus_level"] = g["level"]
         if g["level"] == "hard":
@@ -2646,6 +2705,14 @@ async def filter_agent(st, http, q_out):
                     st.hot.append((now, word, mint))
                 if m["price"] <= 0 or m["liq"] <= 0 or m["liq"] < CFG["MIN_LIQUIDITY_USD"]:
                     reject(st, mint, m["symbol"], f"liquidita ${m['liq']:,.0f} troppo bassa", cat="liquidita bassa")
+                    continue
+                imp = ticker_impostor(m["symbol"], mint) if CFG.get("TICKER_IMPOSTOR_ACTION") == "block" else None
+                if imp:   # v8.4c: prima di ogni chiamata a pagamento (cluster, honeypot, Birdeye)
+                    reject(st, mint, m["symbol"], f"ticker {imp} di un grande asset/exchange ma mint non ufficiale "
+                           f"(impostore)", cat="ticker impostore")
+                    if CFG["SHADOW_TRADES"]:
+                        spawn_shadow(st, http, mint, m, ["ticker_impostor"], f"ticker impostore {imp}", 0.0, [],
+                                     tag="ticker_impostor")
                     continue
                 if CFG["PF_ENABLED"] and "pf" in SRC:   # v8.3: prefiltro economico stile DexScreener
                     ti = TREND_INFO.get(mint) or {}
@@ -3764,17 +3831,9 @@ async def _execute_buy(st, broker, c, mint, m):
             return
         if hp_fee > 0:
             size *= max(0.3, 1.0 - CFG["FEE_SIZE_PER_PCT"] * hp_fee)
-        if hp["level"] == "unknown":
-            if CFG["HONEYPOT_UNKNOWN_ACTION"] == "skip":
-                reject(st, mint, m["symbol"], f"honeypot non verificabile: {hp['why']}", agent="Executor",
-                       cat="honeypot non verificato")
-                return
-            size *= soft_size(st, "honeypot_unknown")
-            c["soft"] = list(c.get("soft") or []) + ["honeypot_unknown"]
-            if size < 1:
-                reject(st, mint, m["symbol"], "size troppo piccola dopo honeypot non verificato", agent="Executor",
-                       cat="conto vuoto")
-                return
+        if hp["level"] == "unknown":   # v8.4c (Kiwi): MAI acquisto (niente size ridotta), shadow + nuovo tentativo
+            honeypot_unknown_skip(st, getattr(broker, "http", None), mint, m, c, hp)
+            return
     # v8.4: controllo incrociato Birdeye (overview) per prefiltro e honeypot. MAI un filtro duro:
     # "shadow" = solo registrato, "soft" = size ridotta se Birdeye non conferma.
     if str(CFG.get("BIRDEYE_XCHECK_MODE", "shadow")) != "off":
@@ -3952,7 +4011,7 @@ OVR_LIMITS = {"STOP_LOSS_PCT": (-30.0, -3.0), "TRAIL_DISTANCE_PCT": (3.0, 25.0),
               **BONUS_LIMITS}
 OVR_STR_KEYS = {"DYN_STOP_MODE": ("off", "shadow", "on"), "DYN_TP_MODE": ("off", "shadow"),
                 "CLUSTER_UNKNOWN_ACTION": ("soft", "skip"), "CLUSTER_HELD_ACTION": ("exit", "alert"),
-                "HONEYPOT_UNKNOWN_ACTION": ("soft", "skip")}  # v8.1: valori testuali ammessi
+                "HONEYPOT_UNKNOWN_ACTION": ("skip",)}  # v8.1: valori testuali ammessi
 OVR_BOOL_KEYS = {"DYN_STOP_SIZE_SCALE"}
 OVR_INT_KEYS = {"MAX_HOLD_MIN", "TIME_STOP_MIN", "SOFT_MAX_FLAGS", "BUNDLE_MAX_NETWORKS", "BUNDLE_NET_MIN_WALLETS",
                 "BUNDLE_MAX_INSIDER_WALLETS", "CLUSTER_SOFT_NETWORKS", "LP_SOFT_MAX_HOLD_MIN", "DEEP_HOLD_EXTRA_MIN",

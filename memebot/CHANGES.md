@@ -749,3 +749,28 @@ Kiwi: DESSA (npz2Fh…pump) **non** è un buon token. Non è più usato come ese
 - **CEX-fresh, stima estesa, gruppo enorme**: invariate (non erano state ammorbidite per DESSA; abbassare BIG_GROUP/EST
   colpirebbe HYPERCHAN, stima 14,3%).
 - Test: `tests/test_v84.py` (wallet nuovi tipo DESSA = soft, controllo HYPERCHAN = soft mai hard, combo 8/12, seed).
+
+## v8.4c — 31/10/2026 (00:0x) – BNB: honeypot sconosciuto = niente acquisto, ticker impostori, quote uniformi (PAPER)
+
+Kiwi: il paper buy di BNB (EYqygb…pump, "Broke Nigga Baddie") è un token cattivo. 5ª lezione negativa (dopo DESSA, BEAST,
+PILLSEY, GLITCH): seed `bnb-2026-10-30`, etichetta "cluster", mai esempio pulito. La posizione aperta NON è stata chiusa a
+mano: la gestiscono le regole d'uscita normali (incluso il ricontrollo cluster delle posizioni ogni 20 min, `CLUSTER_HELD_ACTION` "exit").
+- **Bug GoPlus**: `honeypot_check` passava il wrapper `Http` invece della sessione aiohttp → TypeError a ogni chiamata →
+  honeypot sempre "sconosciuto" (così è passato BNB). Ora `getattr(http, "s", http)`.
+- **Honeypot sconosciuto = skip** (`HONEYPOT_UNKNOWN_ACTION` "skip", unico valore ammesso): niente più acquisto a size ridotta.
+  Shadow con tag `honeypot_unknown`; nuovo tentativo dopo `HONEYPOT_RETRY_MIN` 5 min, al massimo `HONEYPOT_RETRY_MAX` 3 volte
+  (poi il blocco normale di 6 h).
+- **Ticker impostori** (`TICKER_IMPOSTOR_ACTION` "block"): ticker di grandi asset/exchange (BNB, BTC, ETH, SOL, USDC, USDT,
+  XRP, DOGE, HYPE, JUP, PUMP, TRUMP, BINANCE, …) con mint non ufficiale → scartato nel Filter prima di ogni chiamata a
+  pagamento, shadow `ticker_impostor`. Storico: impostori HYPE (shadow −92,6%), BTC ×2, ADA, TRUMP (liq 0–2,6k), BNB (cattivo);
+  nessun impostore vincente. Anche i ticker ufficiali (HYPE, JUP, PUMP, WETH) nei segnali simulati: 40 segnali, win 2%.
+- **cluster_v2, quote uniformi** (HARD): altopiano dal rango ≤ 10 di holder consecutivi con quota[s]/quota[k] ≤ 1,10 (≈ ±5%);
+  hard con ≥ 20 wallet, oppure ≥ 10 wallet che insieme fanno ≥ 15%; soft da 12. Calibrazione (top 150): BNB 125 wallet/12,3%,
+  PILLSEY 56/9,9% (cattivi) → hard; HYPERCHAN 7, Bonnie 4, DESSA 4, CATE 4, GLITCH 5, BEAST 4. HYPERCHAN e Bonnie restano soft.
+- **cluster_v2, cluster a stella**: finanziatore comune (non exchange noto) di ≥ 8 holder controllati = stella; ≥ 3 stelle = hard,
+  1–2 = segnale soft. Nello storico nessun token ha ≥ 2 stelle; HYPERCHAN ha 1 stella da 59 (soft).
+- Perché v2 aveva lasciato passare BNB: la regola sciame vuole saldi IDENTICI (BNB: quote 0,092–0,104%, non identiche);
+  i 60 holder controllati erano tutti finanziati dall'hub 36MESj (gruppo 6,1%, sotto le soglie 8/20/25%); la stima estesa
+  (147 wallet, 14,4%) era sotto il 15% del "gruppo enorme"; le stelle da 8–12 di Bubblemaps non si vedono col solo primo
+  finanziatore dei primi 60. Honeypot "sconosciuto" per il bug GoPlus.
+- Test: `tests/test_v84.py` §18–20; `tests/test_v82.py` e §13 di test_v84 con quote sintetiche identiche adattati.

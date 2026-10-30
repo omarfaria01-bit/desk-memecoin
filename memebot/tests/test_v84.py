@@ -266,7 +266,7 @@ for i in range(90):   # stesso schema, funder non letto (oltre WALLET_TOP_N)
 r = C.analyze(rows)
 assert r["hub_burst"] and r["max_group_wallets"] == 60 and r["est_group_wallets"] == 150, r
 assert r["level"] == "hard" and "stimat" in r["why"], r["why"]
-r0 = C.analyze(rows, cfg={"HUB_BURST_MIN": 999})      # senza la regola: solo gruppo infrastruttura -> non hard
+r0 = C.analyze(rows, cfg={"HUB_BURST_MIN": 999, "UNIFORM_HARD_WALLETS": 999, "UNIFORM_HARD_PCT": 999})  # senza le regole
 assert r0["level"] != "hard" and not r0["hub_burst"]
 # GLITCH: 5 wallet nuovi da MEXC poco prima di comprare al lancio, quote 1.3-2.9% = 11.1%
 g = [{"o": "L0", "pct": 0.5, "ntx": 50, "acq": {"ts": t0, "slot": 1, "swap": True}}]
@@ -277,15 +277,16 @@ rg = C.analyze(g)
 assert rg["level"] == "hard" and "MEXC" in rg["why"] and abs(rg["cexf_best"][0] - 11.14) < 0.01, rg
 rg2 = C.analyze([dict(x, ts=(x.get("ts") or 0) - 86400 * 3) if x.get("src") else x for x in g])  # fondi vecchi
 assert rg2["cexf_pct"] == 0 and rg2["level"] != "hard"
+# v8.4c: quote sintetiche naturali/decrescenti (150 quote identiche = sciame tipo BNB, ora hard)
 # controllo pulito sintetico: tanti holder piccoli, scollegati, wallet vecchi = pulito (DESSA NON e piu un esempio pulito)
-dd = [{"o": f"d{i}", "pct": 0.1, "ntx": 100, "acq": {"ts": t0 + i * 977, "slot": i * 5000, "swap": True}} for i in range(150)]
+dd = [{"o": f"d{i}", "pct": 0.3 / (i + 1) ** 0.5, "ntx": 100, "acq": {"ts": t0 + i * 977, "slot": i * 5000, "swap": True}} for i in range(150)]
 assert C.analyze(dd)["level"] == "none"
 # v8.4b: wallet nuovi (ntx controllato solo sui primi 60 di 150): 52 nuovi su 60 controllati (tipo DESSA, cattivo) = soft
 dn = [dict(x, ntx=(5 if i < 52 else 150) if i < 60 else None) for i, x in enumerate(dd)]
 rn = C.analyze(dn)
 assert rn["level"] == "soft" and "nuovi" in rn["why"] and rn["fresh_share"] >= C.CFG["FRESH_SOFT"], rn
 # controllo vincente HYPERCHAN (trade +6.4%, picco +46%): un funder per 59 wallet nuovi al 6.5% = soft, MAI hard
-hy = [{"o": f"h{i}", "pct": 6.5 / 59, "ntx": 5, "src": "HubX", "ts": t0 + i * 3000,
+hy = [{"o": f"h{i}", "pct": 0.17 * (i + 1) ** -0.2, "ntx": 5, "src": "HubX", "ts": t0 + i * 3000,
        "acq": {"ts": t0 + i * 3000 + 7200 + i * 37, "slot": i * 9000, "swap": True}} for i in range(59)]
 hy += [{"o": f"z{i}", "pct": 0.05, "ntx": None, "acq": {"ts": t0 + 900000 + i * 977, "slot": 9e6 + i * 5000, "swap": True}}
        for i in range(91)]
@@ -298,11 +299,12 @@ def _combo(each, ncex):
           for g in range(3) for j in range(3)]
     return cb + [{"o": f"x{j}", "pct": 1.0, "ntx": 500, "src": _cex, "ts": t0 + 90000 + j * 700} for j in range(ncex)]
 _saved_infra = dict(C._infra_cache)
+_NOUNI = {"UNIFORM_HARD_WALLETS": 999, "UNIFORM_HARD_PCT": 999}   # v8.4c: quote sintetiche identiche, regola a parte
 C._infra_cache.update(t=9e12, d={_cex: "Binance"})   # lista exchange fissata per il test
-rcb = C.analyze(_combo(0.95, 13))      # collegati 8.55%, exchange/app 13%
+rcb = C.analyze(_combo(0.95, 13), cfg=_NOUNI)      # collegati 8.55%, exchange/app 13%
 assert rcb["level"] == "hard" and "insieme" in rcb["why"], rcb
-assert C.analyze(_combo(0.95, 11))["level"] == "soft"     # exchange/app 11% < 12%
-assert C.analyze(_combo(0.80, 13))["level"] == "soft"     # collegati 7.2% < 8%
+assert C.analyze(_combo(0.95, 11), cfg=_NOUNI)["level"] == "soft"     # exchange/app 11% < 12%
+assert C.analyze(_combo(0.80, 13), cfg=_NOUNI)["level"] == "soft"     # collegati 7.2% < 8%
 C._infra_cache.clear(); C._infra_cache.update(_saved_infra)
 # multi-gruppo: 3 gruppi >= 2% che fanno >= 20% = hard
 mg = []
@@ -397,5 +399,66 @@ assert ids["dessa-2026-10-30-cattivo"]["label"] == "cluster" and "CATTIVO" in id
 assert ids["dessa-2026-10-30-cattivo"]["pnl_pct"] is None
 assert ids["pillsey-2026-10-30"]["label"] == "cluster" and "SOSPETTO" in ids["glitch-2026-10-30"]["note"]
 print("lezioni OK")
+
+# ---- 18. v8.4c: honeypot sconosciuto = niente acquisto, shadow + nuovo tentativo; GoPlus con la sessione vera
+import inspect
+assert D.CFG["HONEYPOT_UNKNOWN_ACTION"] == "skip"
+assert 'SRC["goplus"].check(getattr(http, "s", http), mint)' in inspect.getsource(D.honeypot_check)
+
+assert 'soft_size(st, "honeypot_unknown")' not in open(D.__file__).read()   # niente piu size ridotta
+st18 = D.State()
+calls = []
+_orig_spawn = D.spawn_shadow
+D.spawn_shadow = lambda *a, **k: calls.append((a[4], k.get("tag")))
+mintx = "HPunk1111111111111111111111111111111111pump"
+st18.processed[mintx] = time.time()
+m18 = {"symbol": "HPX", "price": 1.0, "liq": 50000}
+for i in range(D.CFG["HONEYPOT_RETRY_MAX"]):
+    assert D.honeypot_unknown_skip(st18, None, mintx, m18, {"score": 0.6}, {"why": "GoPlus non disponibile"})
+    assert mintx not in st18.processed and 0 < st18.cooldown[mintx] - time.time() <= D.CFG["HONEYPOT_RETRY_MIN"] * 60 + 1
+    st18.processed[mintx] = time.time()
+assert not D.honeypot_unknown_skip(st18, None, mintx, m18, {"score": 0.6}, {"why": "x"})   # oltre il massimo
+assert mintx in st18.processed
+assert calls and all(c == (["honeypot_unknown"], "honeypot_unknown") for c in calls)
+D.spawn_shadow = _orig_spawn
+print("honeypot sconosciuto = skip + shadow + retry OK")
+
+# ---- 19. v8.4c: ticker impostori
+assert D.ticker_impostor("BNB", "EYqygbhZjP7EbM4fSn8devctnksAvPAD1Bt57XBFpump") == "BNB"
+assert D.ticker_impostor("$btc", "ra4qZ6xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump") == "BTC"
+assert D.ticker_impostor("HYPE", "Dn9ucMxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump") == "HYPE"
+assert D.ticker_impostor("HYPE", "98sMhvDwXj1RQi5c5Mndm3vPe9cBqPrbLaufMXFNMh5g") is None
+assert D.ticker_impostor("BNB", "9gP2kCy3wA1ctvYWQk75guqXuHfrEomqydHLtcTCqiLa") is None
+assert D.ticker_impostor("USDC", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v") is None
+for ok_sym in ("HYPERCHAN", "Bonnie", "DESSA", "BNBX", "SOLANA", "PILLSEY", "BEAST"):
+    assert D.ticker_impostor(ok_sym, "Zzzz1111111111111111111111111111111111pump") is None, ok_sym
+assert D.CFG["TICKER_IMPOSTOR_ACTION"] == "block"
+print("ticker impostori OK")
+
+# ---- 20. v8.4c: cluster v2, quote uniformi (sciame BNB) e cluster a stella
+def _rows(pcts, src=None):
+    return [{"o": f"W{i:04d}", "pct": p, "ntx": None, **({"src": src[i]} if src and src[i] else {})}
+            for i, p in enumerate(pcts)]
+bnb_like = _rows([0.1035 - 0.00008 * i for i in range(150)])          # 150 holder ~0.10% (BNB su Bubblemaps)
+r = C.analyze(bnb_like, {}, {}, {})
+assert r["level"] == "hard" and "uniformi" in r["why"] and r["uniform"]["wallets"] >= 100, r
+natural = _rows([4.0 / (i + 1) ** 0.9 for i in range(150)])           # distribuzione naturale (legge di potenza)
+r = C.analyze(natural, {}, {}, {})
+assert r["level"] != "hard" and r["uniform"]["wallets"] < C.CFG["UNIFORM_SOFT_WALLETS"], r
+dev_then_swarm = _rows([5.0, 3.0] + [0.2] * 30 + [0.01] * 100)        # dev/CEX in cima, sciame sotto
+assert C.analyze(dev_then_swarm, {}, {}, {})["level"] == "hard"
+few = _rows([3.0, 2.0] + [0.5] * 9 + [0.05 / (i + 1) for i in range(100)])   # 9 uguali: sotto soglia
+assert C.uniform_plateau(few)[0] < C.CFG["UNIFORM_HARD_WALLETS"] and C.analyze(few, {}, {}, {})["level"] != "hard"
+srcs = [f"F{i // 10}" if i < 30 else None for i in range(150)]         # 3 stelle da 10 wallet
+r = C.analyze(_rows([4.0 / (i + 1) ** 0.9 for i in range(150)], srcs), {}, {}, {})
+assert r["level"] == "hard" and "stella" in r["why"] and len(r["stars"]) == 3, r
+srcs1 = [("F0" if i < 10 else None) for i in range(150)]               # una sola stella: soft
+r = C.analyze(_rows([4.0 / (i + 1) ** 0.9 for i in range(150)], srcs1), {}, {}, {})
+assert "stella" in r["why"] and len(r["stars"]) == 1
+print("quote uniformi e cluster a stella OK")
+ids = {x["id"]: x for x in D.LABEL_SEEDS}
+assert ids["bnb-2026-10-30"]["label"] == "cluster" and ids["bnb-2026-10-30"]["pnl_pct"] is None
+assert "CATTIVO" in ids["bnb-2026-10-30"]["note"] and "MAI esempio pulito" in ids["bnb-2026-10-30"]["note"]
+print("lezione BNB OK")
 
 print("TUTTI I TEST v8.4 OK")

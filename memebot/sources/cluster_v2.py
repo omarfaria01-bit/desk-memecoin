@@ -91,6 +91,18 @@ CFG = {
     "HUB_BURST_FRESH": 0.8,      # ...per l'80% wallet nuovi...
     "HUB_BURST_DELAY_H": 1.0,    # ...con acquisto mediano entro 1 ora dal finanziamento...
     "HUB_BURST_CV": 0.5,         # ...e quote simili (coefficiente di variazione <= 0.5)
+    # v8.4c (BNB, Bubblemaps: centinaia di holder con esattamente lo 0.10%): quote UNIFORMI (non identiche).
+    # Altopiano: dal rango s (s < UNIFORM_MAX_START, per saltare dev/CEX in cima) i holder consecutivi con
+    # quota[s]/quota[k] <= UNIFORM_RATIO (1.10 = circa +-5% attorno al centro). Storico (top 150):
+    # BNB 125 wallet/12.4%, PILLSEY 56/9.9% (cattivi); HYPERCHAN 7, Bonnie 4, DESSA 4, CATE 4, GLITCH 5, BEAST 4.
+    "UNIFORM_RATIO": 1.10, "UNIFORM_MAX_START": 10, "UNIFORM_MIN_PCT": 0.02,
+    "UNIFORM_HARD_WALLETS": 20,  # HARD: >= 20 wallet con quote uniformi...
+    "UNIFORM_HARD_PCT": 15.0,    # ...oppure >= 10 wallet uniformi che insieme fanno >= 15% dell'offerta
+    "UNIFORM_HARD_MIN_N": 10,
+    "UNIFORM_SOFT_WALLETS": 12,
+    # v8.4c: cluster a stella = un solo finanziatore (non exchange noto) di >= STAR_MIN_WALLETS holder controllati
+    "STAR_MIN_WALLETS": 8,
+    "STAR_HARD_N": 3,            # HARD: >= 3 stelle distinte (BNB su Bubblemaps: 5-6 stelle da 8-12); 1-2 = soft
     # v8.4: stima della dimensione reale del gruppo maggiore sui holder letti ma senza controllo del funder
     "EST_ENABLED": True,
     "EST_MIN_RATE": 0.5,         # si estende solo se nel campione controllato il pattern e dominante (>= 50%)
@@ -188,6 +200,42 @@ def _cv(xs):
         return 0.0
     m = sum(xs) / len(xs)
     return (sum((x - m) ** 2 for x in xs) / len(xs)) ** 0.5 / m if m > 0 else 0.0
+
+
+def uniform_plateau(rows, cfg=None):
+    """v8.4c: altopiano di quote quasi uguali tra i top holder -> (wallet, % insieme, rango di partenza)."""
+    c = dict(CFG)
+    c.update(cfg or {})
+    ps = sorted((float(r.get("pct") or 0) for r in rows if not r.get("ext")), reverse=True)
+    best = (0, 0.0, 0)
+    for s in range(min(c["UNIFORM_MAX_START"], len(ps))):
+        if ps[s] < c["UNIFORM_MIN_PCT"]:
+            break
+        k = s
+        while k < len(ps) and ps[k] > 0 and ps[s] / ps[k] <= c["UNIFORM_RATIO"]:
+            k += 1
+        if k - s > best[0]:
+            best = (k - s, round(sum(ps[s:k]), 3), s)
+    return best
+
+
+def star_clusters(rows, infra=None, cfg=None):
+    """v8.4c: finanziatori comuni (non exchange noti) di >= STAR_MIN_WALLETS holder -> [(funder, n, %)]."""
+    c = dict(CFG)
+    c.update(cfg or {})
+    by = {}
+    for r in rows:
+        s = r.get("src")
+        if s:
+            by.setdefault(s, []).append(float(r.get("pct") or 0))
+    out = []
+    for s, v in by.items():
+        lab = infra_label(s, infra or {}) or ""
+        if lab and not lab.startswith("hub"):   # exchange/app noti: ritiri di tante persone diverse
+            continue
+        if len(v) >= c["STAR_MIN_WALLETS"]:
+            out.append((s, len(v), round(sum(v), 3)))
+    return sorted(out, key=lambda x: -x[1])
 
 
 def analyze(rows, infra=None, funder_of_funder=None, cfg=None, swarm=None, distributors=None):
@@ -407,9 +455,19 @@ def analyze(rows, infra=None, funder_of_funder=None, cfg=None, swarm=None, distr
     sw_in_group = bool(tg) and any(r.get("swarm") for r in rows if r["o"] in set(tg[0][2]))
     if sw_pct >= c["SWARM_HARD_PCT"] and sw_n >= c["SWARM_HARD_WALLETS"]:
         why.append(f"{sw_n} wallet con saldo identico (wallet fantoccio) tengono il {sw_pct:.1f}%")
+    uni_n, uni_pct, uni_s = uniform_plateau(rows, c)
+    if uni_n >= c["UNIFORM_HARD_WALLETS"] or (uni_n >= c["UNIFORM_HARD_MIN_N"] and uni_pct >= c["UNIFORM_HARD_PCT"]):
+        why.append(f"{uni_n} top holder con quote uniformi (+-5%, dal #{uni_s + 1}) al {uni_pct:.1f}%: sciame di wallet")
+    stars = star_clusters(rows, infra, c)
+    if len(stars) >= c["STAR_HARD_N"]:
+        why.append(f"{len(stars)} cluster a stella (un finanziatore -> {', '.join(str(x[1]) for x in stars[:6])} wallet)")
     if why:
         level = "hard"
     else:
+        if uni_n >= c["UNIFORM_SOFT_WALLETS"]:
+            why.append(f"{uni_n} top holder con quote uniformi al {uni_pct:.1f}%")
+        if stars:
+            why.append(f"cluster a stella: un finanziatore -> {stars[0][1]} wallet ({stars[0][2]:.1f}%)")
         if max_true >= c["GROUP_SOFT_PCT"]:
             why.append(f"gruppo collegato al {max_true:.1f}% ({max_true_n} wallet)")
         if linked_pct >= c["LINKED_SOFT_PCT"]:
@@ -438,7 +496,9 @@ def analyze(rows, infra=None, funder_of_funder=None, cfg=None, swarm=None, distr
             "swarm_values": sw.get("values", [])[:4], "swarm_in_group": sw_in_group,
             "cluster_pct": round(max(max_true, sw_pct if sw_in_group else 0.0), 3), "covered_pct": covered, "reasons": reasons,
             # compatibilita con il formato v7 (signals/log)
-            "networks": len(tg), "net_pct": linked_pct, "wallets": linked_n}
+            "networks": len(tg), "net_pct": linked_pct, "wallets": linked_n,
+            "uniform": {"wallets": uni_n, "pct": uni_pct, "from_rank": uni_s + 1},
+            "stars": [(x[0][:6], x[1], x[2]) for x in stars[:8]]}
 
 
 

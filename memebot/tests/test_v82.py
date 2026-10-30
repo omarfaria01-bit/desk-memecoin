@@ -5,6 +5,7 @@ from sources import cluster_v2 as CV, honeypot as HP
 D.CFG["SIGNALS_ENABLED"] = False; D.CFG["PROJECT_CHECK"] = False
 
 A = CV.analyze
+NOUNI = {"UNIFORM_HARD_WALLETS": 999, "UNIFORM_HARD_PCT": 999, "STAR_HARD_N": 999}   # v8.4c: regole a parte
 KRAKEN = "6LY1" + "x" * 36 + "zkzF"          # indirizzo che corrisponde a un pattern CEX noto (Kraken)
 
 
@@ -34,9 +35,13 @@ assert r["level"] == "hard" and r["max_group_pct"] >= 20 and "gruppo di 20 walle
 rows = [row(i, 0.32, ntx=5, src="F2") for i in range(55)]
 r = A(rows)
 assert r["level"] == "hard" and "gruppo enorme" in r["why"], r
-r = A(rows, cfg={"GROUP_HARD_PCT": 20.0, "BIG_GROUP_WALLETS": 80})
+assert "uniformi" in r["why"]                      # v8.4c: 55 quote identiche = anche sciame (quote uniformi)
+r = A(rows, cfg={"GROUP_HARD_PCT": 20.0, "BIG_GROUP_WALLETS": 80, **NOUNI})
 assert r["level"] == "soft", r                       # 17.6% senza gruppo enorme: soft (>= 8%)
 print("gruppo >= 20% / gruppo enorme OK")
+# v8.4c: da qui in poi le quote sintetiche sono identiche per costruzione: quote uniformi e stelle sono
+# testate in test_v84 (calibrate sui dati reali), qui restano spente per isolare le regole v8.2
+A = lambda *a, **k: CV.analyze(*a, **{**k, "cfg": {**NOUNI, **(k.get("cfg") or {})}})  # noqa: E731
 
 # ---- 3) falsi legami: stesso hot wallet CEX / fee payer di app -> non insider, ma loggato a parte
 rows = [row(i, 0.3, src=KRAKEN, ntx=300) for i in range(30)]
