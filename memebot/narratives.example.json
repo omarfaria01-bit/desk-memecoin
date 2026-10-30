@@ -1,0 +1,8 @@
+{
+  "updated_at": "2026-10-30T18:00:00Z",
+  "blocklist_mints": [],
+  "narratives": [
+    {"theme": "esempio", "strength": 0.6, "trend": "rising", "tickers": ["$ESEMPIO"],
+     "mints": [], "mint_confidence": {}, "keywords": ["esempio"], "velocity": null, "trusted_mentions": 0}
+  ]
+}

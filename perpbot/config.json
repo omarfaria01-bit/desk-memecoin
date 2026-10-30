@@ -1,0 +1,72 @@
+{
+  "MODE": "paper",
+  "LIVE_ENABLED": false,
+  "start_cash": 1000.0,
+  "exchange": "hyperliquid",
+  "fees": {
+    "taker": 0.00045,
+    "maker": 0.00015,
+    "_note": "tier base Hyperliquid perps (volume 14g < $5M)"
+  },
+  "paper": {
+    "latency_ms": [
+      150,
+      600
+    ],
+    "reject_prob": 0.02,
+    "market_slippage_cap_pct": 5.0,
+    "trigger_slippage_cap_pct": 10.0
+  },
+  "data": {
+    "tick_s": 5,
+    "ctx_refresh_s": 60,
+    "bar_delay_s": 20,
+    "rate_budget_per_min": 600
+  },
+  "universe": {
+    "size": 18,
+    "refresh_min": 60,
+    "min_day_volume_usd": 20000000,
+    "exclude": []
+  },
+  "strategy": {
+    "ema_fast": 50,
+    "ema_slow": 200,
+    "atr_len": 14,
+    "donchian_n": 40,
+    "vol_mult": 1.0,
+    "max_ext_atr15": 1.5,
+    "regime_atr_min_pct": 0.25,
+    "regime_atr_max_pct": 3.5,
+    "near_miss_atr15": 0.3,
+    "sl_atr": 1.5,
+    "tp1_r": 1.5,
+    "tp1_frac": 0.5,
+    "be_offset_pct": 0.1,
+    "trail_activate_r": 1.0,
+    "trail_atr": 3.0,
+    "tp2_r": 0.0,
+    "max_hold_h": 48,
+    "funding_mr_enabled": false,
+    "funding_mr_rate_1h": 0.0001,
+    "funding_mr_stretch_atr15": 2.0,
+    "funding_block_rate_1h": 0.0005,
+    "trend_min_atr": 1.0,
+    "breakout_tf": "15m",
+    "donchian_n_1h": 24
+  },
+  "risk": {
+    "risk_per_trade_pct": 1.0,
+    "max_positions": 4,
+    "max_exposure_x": 3.0,
+    "daily_loss_stop_pct": 5.0,
+    "max_leverage": 10,
+    "liq_buffer_x": 2.0,
+    "max_margin_per_trade_pct": 30.0,
+    "min_notional_usd": 15.0,
+    "corr_threshold": 0.7,
+    "corr_max_same_dir": 2,
+    "corr_lookback_h": 168,
+    "est_slippage_pct": 0.05
+  }
+}

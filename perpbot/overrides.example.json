@@ -1,0 +1,6 @@
+{
+  "updated_at": "2026-10-30T21:00:00+01:00",
+  "reason": "esempio: chi scrive (Stewy/ticher) spiega il perche",
+  "strategy": {"sl_atr": 2.0, "trail_atr": 3.5, "funding_mr_enabled": false},
+  "risk": {"risk_per_trade_pct": 0.75, "max_positions": 3}
+}

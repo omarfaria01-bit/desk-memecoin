@@ -1,0 +1,30 @@
+{
+  "updated_at": "2026-10-30T19:30:00+01:00",
+  "reason": "volatilita alta: stop piu stretto, prese di profitto prima",
+  "global": {
+    "STOP_LOSS_PCT": -8.0,
+    "TP1_PCT": 25.0,
+    "TP1_FRACTION": 0.3,
+    "TP2_PCT": 70.0,
+    "TP2_FRACTION": 0.3,
+    "BREAKEVEN_PCT": 3.0,
+    "TRAIL_START_PCT": 35.0,
+    "TRAIL_DIST_PCT": 12.0,
+    "TRAIL_TIGHT_AFTER_PCT": 120.0,
+    "TRAIL_TIGHT_DIST_PCT": 8.0,
+    "TIME_STOP_MIN": 25,
+    "TIME_STOP_MIN_PCT": 5.0,
+    "MAX_HOLD_MIN": 150
+  },
+  "positions": {
+    "<MINT_DI_UNA_POSIZIONE_APERTA>": {
+      "stop_loss_pct": -5.0,
+      "take_profit_pct": 60.0,
+      "tp_sell_fraction": 0.3,
+      "trail_dist_pct": 8.0,
+      "action": "hold",
+      "action_id": "opzionale-id-unico",
+      "reason": "volume in calo, protezione del profitto"
+    }
+  }
+}

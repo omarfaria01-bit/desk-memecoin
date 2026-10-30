@@ -1,0 +1,249 @@
+{
+ "updated_at": "2026-10-30T20:10:00Z",
+ "blocklist_mints": [
+  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  "So11111111111111111111111111111111111111112",
+  "FtHCpYdjVx8WR6vc4zqe6iXqHydZcKhNnmSNF2NXKfy1"
+ ],
+ "narratives": [
+  {
+   "theme": "Binance hack / Elon 'Chief Troll Officer' (CTO)",
+   "keywords": [
+    "chief troll officer",
+    "cto",
+    "elon",
+    "cz",
+    "binance hack",
+    "spcx"
+   ],
+   "tickers": [
+    "CTO"
+   ],
+   "mints": [
+    "9hhLCxn41KZcmK1vAf7u5M6vKLHRcsVn1VmVgUrhpump"
+   ],
+   "strength": 0.3,
+   "trend": "fading",
+   "sources": [
+    "https://x.com/ChiefTroll_/status/2116244032632369357",
+    "https://x.com/CryptocatXX/status/2116228951144095825",
+    "https://x.com/Trollfather/status/2116232629762871798",
+    "https://x.com/rutradebtc/status/2116116239080632708",
+    "https://x.com/CTO_Robinhood/status/2116135898987495547",
+    "https://x.com/degenhousepro/status/2116117320930034010"
+   ],
+   "note": "Still cooling: 'chief troll officer' posts/h 17 (17Z) -> 18 (18Z) -> 11 (19Z), peak was 93 at 10Z. Late-entry risk. Many copies; 9hhL...pump is only the most-called one, no reference mint. Not re-searched this scan.",
+   "velocity": null,
+   "trusted_mentions": 0,
+   "mint_confidence": {
+    "9hhLCxn41KZcmK1vAf7u5M6vKLHRcsVn1VmVgUrhpump": 0.3
+   }
+  },
+  {
+   "theme": "Binance hack memes (SAFU, Lazarus, Zeroday, Black Swan)",
+   "keywords": [
+    "binance hack",
+    "safu",
+    "lazarus",
+    "zeroday",
+    "everyday is zeroday",
+    "black swan"
+   ],
+   "tickers": [
+    "SAFU",
+    "LAZARUS",
+    "BLACKSWAN",
+    "ZERODAY"
+   ],
+   "mints": [
+    "4yGXKiS9XwqGAcqn6yTyYzFZhT9nzwQeBsEELpf9pump",
+    "HWDp6Zh5yQyyXKTeYxFjYToxdikzWSBDfAzXYaCopump",
+    "EFaQg27P3c3PHob2mFw4mHCUcWBHHDdatAEsXq2xpump",
+    "AHgqStQviBDBiPra3cLxb8gQs2auRAmXT4s9v7LKpump"
+   ],
+   "strength": 0.2,
+   "trend": "fading",
+   "sources": [
+    "https://x.com/kindworldlabs/status/2116200181565988864",
+    "https://x.com/MidCurveMortal/status/2116236453776966046",
+    "https://x.com/bigchog/status/2116141417613382056",
+    "https://x.com/nowtradesafu/status/2115921888652452191",
+    "https://x.com/kollens/status/2115939007314145787"
+   ],
+   "note": "Hack is now macro news, not new memes; no coin-specific posts seen in this scan's general search. Many SAFU copies from bundle wallets. Treat mints as noise; candidate for removal next scan if still silent.",
+   "velocity": null,
+   "trusted_mentions": 0,
+   "mint_confidence": {
+    "4yGXKiS9XwqGAcqn6yTyYzFZhT9nzwQeBsEELpf9pump": 0.25,
+    "HWDp6Zh5yQyyXKTeYxFjYToxdikzWSBDfAzXYaCopump": 0.25,
+    "EFaQg27P3c3PHob2mFw4mHCUcWBHHDdatAEsXq2xpump": 0.25,
+    "AHgqStQviBDBiPra3cLxb8gQs2auRAmXT4s9v7LKpump": 0.25
+   }
+  },
+  {
+   "theme": "GTA 6 countdown (DACITY, GATO, GTA6, CHICO)",
+   "keywords": [
+    "gta 6",
+    "gta6",
+    "vice city",
+    "leonida",
+    "lucia",
+    "dacity",
+    "gta6cat",
+    "take-two"
+   ],
+   "tickers": [
+    "DACITY",
+    "GATO",
+    "GTA6",
+    "CHICO"
+   ],
+   "mints": [
+    "nxPqZ4F7ux8Vph5NFu25rEP6Kx9Gr1U6Fmj36Rjpump"
+   ],
+   "strength": 0.4,
+   "trend": "stable",
+   "sources": [
+    "https://x.com/gta6dacity/status/2116258858440032647",
+    "https://x.com/BirdBrain2025/status/2116258170293166386",
+    "https://x.com/sghingoide/status/2116256573202829757",
+    "https://x.com/cherrytgbot/status/2116251313738588618",
+    "https://x.com/kodacrypto0x/status/2116252144710058240",
+    "https://x.com/gta6dacity/status/2116243744743698601",
+    "https://x.com/tobitheski/status/2116238037932011930",
+    "https://x.com/Amalekite1/status/2116224746715038191",
+    "https://x.com/stitchdegen/status/2115751967402467759"
+   ],
+   "note": "Event-driven (GTA 6 ~19/11, 20 days). dacity/gta6cat posts/h 72 (17Z) -> 22 (18Z) -> 24 (19Z): flat after the drop. DACITY ~$8.1M MC, ~$1.41M 24h volume (cherrytgbot, gta6dacity). Copies: 'AUDACITY' DKYcjo...pump pushed by one account (not included). SPAM: papaRRony reply network posting identical 'same dev, newly verified GTA 6 coin' with FtHCpY... (blocklisted). Earlier drainer warning on @DacitySolOnX 'allocation' posts still applies.",
+   "velocity": -2,
+   "trusted_mentions": 0,
+   "mint_confidence": {
+    "nxPqZ4F7ux8Vph5NFu25rEP6Kx9Gr1U6Fmj36Rjpump": 0.3
+   }
+  },
+  {
+   "theme": "Hyper-* / Pump x Hyperliquid (HYPER INU)",
+   "keywords": [
+    "hyper inu",
+    "hyperliquid",
+    "hyperchan",
+    "pump x hyperliquid",
+    "hi"
+   ],
+   "tickers": [
+    "HI",
+    "HYPERCHAN"
+   ],
+   "mints": [
+    "3w2TvVmTrtq4kSkoFVrTFQgz6MX7ThzDVrx9r5c3pump",
+    "3ApVr1xphYMpi9dn3rpqU4hwvpmCQDVwxET1rdCDpump",
+    "BrsZa8LYyBuD4jjkzHCFzjacgtXCZSn9kuDFdeitpump"
+   ],
+   "strength": 0.4,
+   "trend": "fading",
+   "sources": [
+    "https://x.com/WhyCoinAF/status/2116256285507440773",
+    "https://x.com/degenhousepro/status/2116247191765368985",
+    "https://x.com/CryptoLogickal/status/2116239716974792922",
+    "https://x.com/Brooceleaf/status/2116239287494807977",
+    "https://x.com/TRENCH_FORCE_/status/2116236192526287074",
+    "https://x.com/investmentcat_/status/2116259634885312904",
+    "https://x.com/IN_FINITY/status/2116187669981974731",
+    "https://x.com/CryptoLogickal/status/2116239716974792922",
+    "https://x.com/CrypticornAI/status/2116198878303113279"
+   ],
+   "note": "'hyper inu OR hyperchan' posts/h 34 (17Z) -> 26 (18Z) -> 16 (19Z): fading. HI 3w2Tv...pump: ~13.6K holders, ~$150K pool, mint/freeze revoked (TRENCH_FORCE_). HYPERCHAN ran to ~$1.6-3M MC on ~$3M volume but WhyCoinAF reports bundled launch (23/25 launch-block wallets funded 2s before, dev paid fees for 5). HYPERCHAN mints compete: 3ApVr1...pump (single call account degenhousepro) vs earlier BrsZa8...pump. Mostly paid-TG call spam; Hierogly_Carve 'HYPERCHAN eligibility checker' posts look like a wallet drainer. Spin-offs (HyperCat) appearing.",
+   "velocity": -5,
+   "trusted_mentions": 0,
+   "mint_confidence": {
+    "3w2TvVmTrtq4kSkoFVrTFQgz6MX7ThzDVrx9r5c3pump": 0.55,
+    "3ApVr1xphYMpi9dn3rpqU4hwvpmCQDVwxET1rdCDpump": 0.3,
+    "BrsZa8LYyBuD4jjkzHCFzjacgtXCZSn9kuDFdeitpump": 0.2
+   }
+  },
+  {
+   "theme": "Stock-paired launchpads (memes paired with tokenized stocks)",
+   "keywords": [
+    "stock-paired",
+    "stonk",
+    "stonkfun",
+    "spcx",
+    "ttwo",
+    "tokenized stocks",
+    "float",
+    "pairing"
+   ],
+   "tickers": [
+    "STONK",
+    "FLOAT",
+    "DACITY",
+    "CTO"
+   ],
+   "mints": [
+    "2gLhk8p2KvUFeUXur2hiF4hxjdRM1vBcbgo9Q7DMZfiw"
+   ],
+   "strength": 0.35,
+   "trend": "stable",
+   "sources": [
+    "https://x.com/fishoorman/status/2116243557837046072",
+    "https://x.com/cryptojazper/status/2115768756995592454",
+    "https://x.com/fishoorman/status/2115570501791920387",
+    "https://x.com/The_Stonk_Guy/status/2116021994986893525",
+    "https://x.com/ainstein_001/status/2115895461961957550"
+   ],
+   "note": "Structural meta, not re-scanned this round (slight decay applied). Variants keep appearing; fatigue noted earlier ('pairings are killing the trenches'). STONK mint from a single account: verify.",
+   "velocity": null,
+   "trusted_mentions": 0,
+   "mint_confidence": {
+    "2gLhk8p2KvUFeUXur2hiF4hxjdRM1vBcbgo9Q7DMZfiw": 0.3
+   }
+  },
+  {
+   "theme": "Halloween / pumpkin (seasonal)",
+   "keywords": [
+    "halloween",
+    "pumpkin",
+    "spooky",
+    "ghost",
+    "costume",
+    "trumpkin",
+    "halloween mode"
+   ],
+   "tickers": [
+    "PUMPKIN",
+    "TRUMPKIN",
+    "THM",
+    "GHOST",
+    "PUMPKINU",
+    "SOLANAWEEN"
+   ],
+   "mints": [
+    "BfrZeXvaQV6HrpVbahhgtukefjwpB2kUTm3j7x4Cpump",
+    "DkND6CmPqUuTVC5rCkKB137P1rFW8NqjUS3mcpoEpump",
+    "AqLSm8VjJj7JB6DWY7QzEBfQ4dU1syFPjtJW9mcspump",
+    "9dXPgyPVpfxVYRtsBYaENQF7qAPEtWQXykQeQxr9pump"
+   ],
+   "strength": 0.3,
+   "trend": "rising",
+   "sources": [
+    "https://x.com/theartofkula/status/2116252365850648918",
+    "https://x.com/Risky1Huh/status/2116253878828363965",
+    "https://x.com/hardfibd/status/2116245193234186542",
+    "https://x.com/Ikanmaskoikoii/status/2116247380731539655",
+    "https://x.com/Grinch7777/status/2116245643912204503",
+    "https://x.com/ceocryptoio/status/2116212893716721676",
+    "https://x.com/RazMI_SOL/status/2116229265247392121",
+    "https://x.com/WHImageGen/status/2116212722232623211"
+   ],
+   "note": "Seasonal, peaks 31/10, dies from 1/11: short window, exit by tomorrow. Very fragmented, no reference coin: many small spooky launches (Solanaween 9dXPgy...pump pushed by Solween_ + one shill account; HALLOWIFY, CWCH, JEFF/JOE, Pumpkin Jim, black-cat coins). Ignored: 0-follower reply spam for 'Saturween' 5THtNE...pump, self-promo launch accounts. All mints low confidence.",
+   "velocity": 4,
+   "trusted_mentions": 0,
+   "mint_confidence": {
+    "BfrZeXvaQV6HrpVbahhgtukefjwpB2kUTm3j7x4Cpump": 0.25,
+    "DkND6CmPqUuTVC5rCkKB137P1rFW8NqjUS3mcpoEpump": 0.25,
+    "AqLSm8VjJj7JB6DWY7QzEBfQ4dU1syFPjtJW9mcspump": 0.2,
+    "9dXPgyPVpfxVYRtsBYaENQF7qAPEtWQXykQeQxr9pump": 0.2
+   }
+  }
+ ]
+}

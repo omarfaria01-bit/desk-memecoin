@@ -1,0 +1,412 @@
+{
+  "version": 1,
+  "updated": "2026-10-30T20:44:55+0100",
+  "rules": {
+    "tier_A": "bonus pieno (KOL_BONUS)",
+    "tier_B": "meta' bonus (x weight, es. rasmr 0.75)",
+    "non_listed": "bonus zero (solo informativo)",
+    "status": "active = conta; proposed = NON conta finche' l'utente non approva (o KOL_INCLUDE_PROPOSED=1); demoted/off = gestito dal Learner",
+    "selection": "candidati SOLO da leaderboard PnL pubbliche con winrate reale, mai da follower",
+    "tier_S": "1.25x KOL_BONUS (sempre dentro TOTAL_BONUS_CAP 0.10)",
+    "demotion": "S -> A -> B -> off (Learner, KolLedger)",
+    "weight": "moltiplicatore extra per KOL (default 1.0)",
+    "promotion": "il Learner puo' promuovere B -> A (solo KOL promotable/consigliati dall'utente) dopo >=6 esiti buoni; mai oltre A (S lo decide solo l'utente)",
+    "verified": "false = attribuzione di terzi (kolscan/tracker), non pubblicata dal KOL; 'confidence' indica quanto e' solida"
+  },
+  "kols": [
+    {
+      "handle": "unipcs",
+      "x": "@theunipcs",
+      "name": "Unipcs (aka 'Bonk Guy')",
+      "tier": "S",
+      "status": "active",
+      "wallets": [
+        {
+          "address": "5M8ACGKEXG1ojKDTMH3sMqhTihTgHYMSsZc6W8i7QW3Y",
+          "verified": false,
+          "source": "kolscan.io/account/5M8ACGKEXG1ojKDTMH3sMqhTihTgHYMSsZc6W8i7QW3Y + kol-quest GitHub dataset (kolscan scrape)",
+          "note": "Attribuzione di kolscan, NON verificata indipendentemente (nessun post firmato del KOL). Wallet attivo on-chain il 30/10/2026.",
+          "confidence": "media (sola attribuzione kolscan)"
+        }
+      ],
+      "source": "scelto dall'utente (Kiwi) come KOL migliore; wallet da kolscan",
+      "why": "richiesta utente",
+      "note": "Su X l'handle collegato da kolscan e' @theunipcs (non @unipcs). Le statistiche kolscan su questo wallet sono 0/0 (non nel ranking attivo): puo' usare altri wallet non noti.",
+      "user_recommended": true
+    },
+    {
+      "handle": "pointfarmcap",
+      "x": "@pointfarmcap",
+      "name": "point farm capital",
+      "tier": "A",
+      "status": "active",
+      "aka": [
+        "poinfarmcapital (come scritto dall'utente)"
+      ],
+      "wallets": [
+        {
+          "address": "Beqv6dzTcjV2eodo8RRXCiCcnSYrS1vkQKhfqwHXqeit",
+          "verified": false,
+          "source": "vaulted.finance/vaults/pointfarmcap (9 posizioni Fomo combaciate on-chain, 1/9/2026) + exposer.run/kol/pointfarmcap (match 85%) + etichetta OKX Web3 'point farm capital'",
+          "note": "Attribuzione di terzi (profilo Fomo @pointfarmcap), NON pubblicata dal KOL. Non presente su kolscan. Wallet attivo on-chain il 30/10/2026.",
+          "confidence": "medio-alta (2 tracker, match 85%)"
+        }
+      ],
+      "source": "suggerito dall'utente (Kiwi); wallet da fonti pubbliche di terzi",
+      "stats_public": {
+        "okx_total_pnl_usd": "+3.92M (193%) - in gran parte NON realizzato (+4.09M unrealized, es. STONK)",
+        "okx_1d_pnl": "-39.3%",
+        "fomo_22d_solana": "773 buy / 219 sell, ~$248k volume (exposer, 15/10/2026)",
+        "exposer_verdict": "LIGHT PULL: dopo i suoi buy entrano pochi wallet in piu'; 0 vendite dentro l'onda (no segnali di dump sui follower)"
+      },
+      "why": "richiesta utente",
+      "note": "Trader molto attivo (~35 buy/giorno) e con grosse posizioni lunghe: molti suoi buy sono piccoli (0.03 SOL) -> KOL_MIN_SOL filtra quelli.",
+      "user_recommended": true
+    },
+    {
+      "handle": "frankdegods",
+      "x": "@frankdegods",
+      "name": "Frank (DeGods)",
+      "aka": [
+        "Frankdegoods"
+      ],
+      "tier": "B",
+      "status": "active",
+      "user_recommended": true,
+      "promotable": true,
+      "wallets": [
+        {
+          "address": "498g1rVnFcnjBjpfw1xyqA1WvgQXUU8RWuELjxkjAayQ",
+          "verified": false,
+          "confidence": "alta (piu' tracker indipendenti)",
+          "source": "vaulted.finance (59 posizioni Fomo combaciate, 1/9/2026) + kolexplorer.com + articolo con dati GMGN (8/10/2026) + fomowalletfinder"
+        }
+      ],
+      "stats_public": {
+        "gmgn_30d_8oct": "+$863k realizzati, 702 buy / 736 sell",
+        "kolexplorer": "7D -$1.3k, 30D -$158k, 90D +$130k realizzati; hold mediano 1.9h"
+      },
+      "source": "consigliato dall'utente (Kiwi)"
+    },
+    {
+      "handle": "orangie",
+      "x": "@orangie",
+      "name": "orangie",
+      "tier": "B",
+      "status": "active",
+      "user_recommended": true,
+      "promotable": true,
+      "wallets": [
+        {
+          "address": "DuQabFqdC9eeBULVa7TTdZYxe8vK8ct5DZr4Xcf7docy",
+          "verified": false,
+          "confidence": "media (sola attribuzione kolscan)",
+          "source": "kolscan.io (lista KOL)"
+        }
+      ],
+      "stats_public": {
+        "kolscan": "in lista KOL ma non nel leaderboard attivo (nessuna statistica)"
+      },
+      "source": "consigliato dall'utente (Kiwi)"
+    },
+    {
+      "handle": "ether_monk",
+      "x": "@ether_monk",
+      "name": "Ethermonk",
+      "aka": [
+        "ethermonk"
+      ],
+      "tier": "B",
+      "status": "active",
+      "user_recommended": true,
+      "promotable": true,
+      "wallets": [
+        {
+          "address": "2xUbYAVq1oJGj45d6JjnaYHAke3NQecUcqWvvVbwmYw8",
+          "verified": false,
+          "confidence": "alta (piu' tracker indipendenti)",
+          "source": "fomoapi.io/traders/ether_monk + provadata.com (verified) + vaulted.finance (22 match) + pocketwatch.fun"
+        }
+      ],
+      "stats_public": {
+        "fomo_via_pocketwatch": "30d +$1.81M, all-time +$2.11M, 3319 trade (dati di ~1 mese fa)"
+      },
+      "source": "consigliato dall'utente (Kiwi)"
+    },
+    {
+      "handle": "tvmx",
+      "x": "@tvmx",
+      "name": "TVMX",
+      "aka": [
+        "TVMX",
+        "tvmx__"
+      ],
+      "tier": "B",
+      "status": "active",
+      "user_recommended": true,
+      "promotable": true,
+      "wallets": [
+        {
+          "address": "F5hkYsi8JxjyA2JHN5CA7MbnnhWubkXB2ZQB7Gkaxqs6",
+          "verified": false,
+          "confidence": "alta (piu' tracker indipendenti)",
+          "source": "fomoapi.io/traders/tvmx + fomoradar.io + provadata.com (verified)"
+        }
+      ],
+      "stats_public": {
+        "provadata_30oct": "24h +$30.9k, 7d +$159k, 30d -$2.63M, all-time +$2.14M, 1508 trade"
+      },
+      "note": "30 giorni molto negativi: il Learner deve guardarlo da vicino. Il vecchio account X sembra sospeso (nuovo @tvmx__).",
+      "source": "consigliato dall'utente (Kiwi)"
+    },
+    {
+      "handle": "rowdy",
+      "x": "@RowdyCrypto",
+      "name": "ROWDY",
+      "tier": "B",
+      "status": "active",
+      "user_recommended": true,
+      "promotable": true,
+      "wallets": [
+        {
+          "address": "DKgvpfttzmJqZXdavDwTxwSVkajibjzJnN2FA99dyciK",
+          "verified": false,
+          "confidence": "media (sola attribuzione kolscan)",
+          "source": "kolscan.io (lista KOL, nome 'R\ud83d\udcabWDY')",
+          "note": "Handle supposto: l'utente ha scritto 'rowdy', kolscan collega @RowdyCrypto. Da confermare con l'utente."
+        }
+      ],
+      "stats_public": {
+        "kolscan_apr2026_30d": "-2.6 SOL, 0W/1L (dataset vecchio)"
+      },
+      "source": "consigliato dall'utente (Kiwi)",
+      "x_handle": "@RowdyCrypto",
+      "x_handle_confirmed_by_user": true
+    },
+    {
+      "handle": "rasmr",
+      "x": "@rasmr_eth",
+      "name": "rasmr",
+      "aka": [
+        "rasmr"
+      ],
+      "tier": "B",
+      "status": "active",
+      "user_recommended": true,
+      "promotable": true,
+      "weight": 0.75,
+      "flag": "user: less confident",
+      "wallets": [
+        {
+          "address": "9CNyLECt2j8tnDhqxtjYk5HUhZ2b8Nwnyb7sfYN7vND2",
+          "verified": false,
+          "confidence": "alta (piu' tracker indipendenti)",
+          "source": "fomoradar.io + provadata.com (verified) + pocketwatch.fun + exposer.run (95%, profilo Fomo linkato da X)"
+        }
+      ],
+      "stats_public": {
+        "fomoradar_27oct": "30d -$441k, 7d +$135k, all-time +$464k su $22.3M volume (+2.1%)",
+        "exposer": "buy molto grandi (25-240 SOL): tanti copy-bot gli vanno dietro subito"
+      },
+      "source": "consigliato dall'utente (Kiwi), con meno fiducia"
+    },
+    {
+      "handle": "slingoorio",
+      "x": "@slingoorio",
+      "name": "slingoor",
+      "tier": "B",
+      "status": "proposed",
+      "wallets": [
+        {
+          "address": "5YRgrP3mjGzrzirYYN5HAQH19cTYREYwGxW6XRJQUzij",
+          "verified": false,
+          "source": "kolscan.io leaderboard (30d)"
+        }
+      ],
+      "source": "kolscan.io leaderboard 30d",
+      "stats_30d": {
+        "profit_sol": 16521.9,
+        "wins": 516,
+        "losses": 320,
+        "winrate": 0.617
+      },
+      "why": "PnL 30d positivo, winrate>=55%, 50-1500 trade/mese (esclusi bot ad altissima frequenza)"
+    },
+    {
+      "handle": "im0pnl",
+      "x": "@im0pnl",
+      "name": "zeropnl",
+      "tier": "B",
+      "status": "proposed",
+      "wallets": [
+        {
+          "address": "4xY9T1Q7foJzJsJ6YZDSsfp9zkzeZsXnxd45SixduMmr",
+          "verified": false,
+          "source": "kolscan.io leaderboard (30d)"
+        }
+      ],
+      "source": "kolscan.io leaderboard 30d",
+      "stats_30d": {
+        "profit_sol": 3534.9,
+        "wins": 818,
+        "losses": 213,
+        "winrate": 0.793
+      },
+      "why": "PnL 30d positivo, winrate>=55%, 50-1500 trade/mese (esclusi bot ad altissima frequenza)"
+    },
+    {
+      "handle": "xWugi_wara",
+      "x": "@xWugi_wara",
+      "name": "Wugi",
+      "tier": "B",
+      "status": "proposed",
+      "wallets": [
+        {
+          "address": "862TYSvRYoiHAK3F3WwTRYAfuGiQaGdxedN9AGvRGWo2",
+          "verified": false,
+          "source": "kolscan.io leaderboard (30d)"
+        }
+      ],
+      "source": "kolscan.io leaderboard 30d",
+      "stats_30d": {
+        "profit_sol": 711.9,
+        "wins": 63,
+        "losses": 2,
+        "winrate": 0.969
+      },
+      "why": "PnL 30d positivo, winrate>=55%, 50-1500 trade/mese (esclusi bot ad altissima frequenza)"
+    },
+    {
+      "handle": "jijo_exe",
+      "x": "@jijo_exe",
+      "name": "Jijo",
+      "tier": "B",
+      "status": "proposed",
+      "wallets": [
+        {
+          "address": "4BdKaxN8G6ka4GYtQQWk4G4dZRUTX2vQH9GcXdBREFUk",
+          "verified": false,
+          "source": "kolscan.io leaderboard (30d)"
+        }
+      ],
+      "source": "kolscan.io leaderboard 30d",
+      "stats_30d": {
+        "profit_sol": 400.4,
+        "wins": 187,
+        "losses": 124,
+        "winrate": 0.601
+      },
+      "why": "PnL 30d positivo, winrate>=55%, 50-1500 trade/mese (esclusi bot ad altissima frequenza)"
+    },
+    {
+      "handle": "VERYKOOLLUKEY",
+      "x": "@VERYKOOLLUKEY",
+      "name": "LUKEY \u2723",
+      "tier": "B",
+      "status": "proposed",
+      "wallets": [
+        {
+          "address": "DjM7Tu7whh6P3pGVBfDzwXAx2zaw51GJWrJE3PwtuN7s",
+          "verified": false,
+          "source": "kolscan.io leaderboard (30d)"
+        }
+      ],
+      "source": "kolscan.io leaderboard 30d",
+      "stats_30d": {
+        "profit_sol": 167.9,
+        "wins": 53,
+        "losses": 31,
+        "winrate": 0.631
+      },
+      "why": "PnL 30d positivo, winrate>=55%, 50-1500 trade/mese (esclusi bot ad altissima frequenza)"
+    },
+    {
+      "handle": "CookDoc1993",
+      "x": "@CookDoc1993",
+      "name": "CookDoc",
+      "tier": "B",
+      "status": "proposed",
+      "wallets": [
+        {
+          "address": "Dvbv5TdAyPpJk16X9mUxWFVicYtCUxTLhuof8TGuUaRv",
+          "verified": false,
+          "source": "kolscan.io leaderboard (30d)"
+        }
+      ],
+      "source": "kolscan.io leaderboard 30d",
+      "stats_30d": {
+        "profit_sol": 208.1,
+        "wins": 44,
+        "losses": 32,
+        "winrate": 0.579
+      },
+      "why": "PnL 30d positivo, winrate>=55%, 50-1500 trade/mese (esclusi bot ad altissima frequenza)"
+    },
+    {
+      "handle": "narracanz",
+      "x": "@narracanz",
+      "name": "narc",
+      "tier": "B",
+      "status": "proposed",
+      "wallets": [
+        {
+          "address": "CxgPWvH2GoEDENELne2XKAR2z2Fr4shG2uaeyqZceGve",
+          "verified": false,
+          "source": "kolscan.io leaderboard (30d)"
+        }
+      ],
+      "source": "kolscan.io leaderboard 30d",
+      "stats_30d": {
+        "profit_sol": 422.5,
+        "wins": 168,
+        "losses": 122,
+        "winrate": 0.579
+      },
+      "why": "PnL 30d positivo, winrate>=55%, 50-1500 trade/mese (esclusi bot ad altissima frequenza)"
+    },
+    {
+      "handle": "TheMisterFrog",
+      "x": "@TheMisterFrog",
+      "name": "Mr. Frog",
+      "tier": "B",
+      "status": "proposed",
+      "wallets": [
+        {
+          "address": "4DdrfiDHpmx55i4SPssxVzS9ZaKLb8qr45NKY9Er9nNh",
+          "verified": false,
+          "source": "kolscan.io leaderboard (30d)"
+        }
+      ],
+      "source": "kolscan.io leaderboard 30d",
+      "stats_30d": {
+        "profit_sol": 388.3,
+        "wins": 806,
+        "losses": 81,
+        "winrate": 0.909
+      },
+      "why": "PnL 30d positivo, winrate>=55%, 50-1500 trade/mese (esclusi bot ad altissima frequenza)"
+    },
+    {
+      "handle": "idrawline",
+      "x": "@idrawline",
+      "name": "Mitch",
+      "tier": "B",
+      "status": "proposed",
+      "wallets": [
+        {
+          "address": "4Be9CvxqHW6BYiRAxW9Q3xu1ycTMWaL5z8NX4HR3ha7t",
+          "verified": false,
+          "source": "kolscan.io leaderboard (30d)"
+        }
+      ],
+      "source": "kolscan.io leaderboard 30d",
+      "stats_30d": {
+        "profit_sol": 243.7,
+        "wins": 32,
+        "losses": 18,
+        "winrate": 0.64
+      },
+      "why": "PnL 30d positivo, winrate>=55%, 50-1500 trade/mese (esclusi bot ad altissima frequenza)"
+    }
+  ]
+}

@@ -1,0 +1,742 @@
+{
+  "updated_at": "2026-10-30T20:35:52Z",
+  "note": "Curated accounts for narrative discovery. group=mover: huge reach, any on-topic crypto/meme tweet = high-priority fast narrative (check every scan). group=signal: quality accounts (whitelist KOLs, traders, analysts, founders, ecosystem), rotate if needed. @unipcs does not exist on X: the user's KOL is @theunipcs. followers approximate (X public_metrics, 2026-10-30). Handles verified via X user lookup. 2026-10-30: added exchanges (official + verified CEOs) and Solana ecosystem accounts.",
+  "scan_queries": {
+    "movers": [
+      "(from:elonmusk OR from:realDonaldTrump OR from:cz_binance OR from:heyibinance OR from:VitalikButerin OR from:saylor OR from:brian_armstrong OR from:justinsuntron OR from:toly OR from:rajgokal OR from:CryptoHayes OR from:blknoiz06 OR from:MustStopMurad OR from:paoloardoino OR from:binance OR from:coinbase OR from:Bybit_Official OR from:okx OR from:bitget OR from:BinanceWallet OR from:BNBCHAIN OR from:krakenfx OR from:HyperliquidX) -is:retweet"
+    ],
+    "signal": [
+      "(from:theunipcs OR from:pointfarmcap OR from:frankdegods OR from:orangie OR from:ether_monk OR from:tvmx__ OR from:RowdyCrypto OR from:rasmr_eth OR from:HsakaTrades OR from:GCRClassic OR from:Cented7 OR from:Cupseyy OR from:Ga__ke OR from:sibeleth OR from:gainzy222 OR from:notthreadguy OR from:DefiIgnas OR from:Route2FI OR from:0xSisyphus OR from:inversebrah OR from:lookonchain OR from:bubblemaps OR from:zachxbt OR from:mert OR from:weremeow OR from:a1lon9 OR from:kashdhanda OR from:Pumpfun OR from:solana OR from:SolanaFloor OR from:dexscreener OR from:tier10k OR from:_RichardTeng OR from:benbybit OR from:star_okx OR from:GracyBitget OR from:SolanaFndn OR from:JupiterExchange OR from:phantom OR from:MagicEden OR from:Raydium OR from:MeteoraAG) -is:retweet -is:reply"
+    ],
+    "max_query_chars": 1024,
+    "queries_per_scan": 2,
+    "lengths": {
+      "movers": [
+        445
+      ],
+      "signal": [
+        775
+      ]
+    },
+    "usage": "Run each query with search_posts_all, start_time=last scan. Movers: any on-topic crypto/meme post = high-priority fast narrative."
+  },
+  "accounts": [
+    {
+      "handle": "@elonmusk",
+      "user_id": "44196397",
+      "group": "mover",
+      "category": "mover",
+      "whitelist": false,
+      "followers": 241500000,
+      "user_follows": true,
+      "reason": "Largest reach on X; a single crypto/meme tweet (DOGE, CTO meme) can spawn a narrative within minutes.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@realDonaldTrump",
+      "user_id": "25073877",
+      "group": "mover",
+      "category": "mover",
+      "whitelist": false,
+      "followers": 111900000,
+      "user_follows": false,
+      "reason": "US President; any crypto/token mention (TRUMP coin, policy) moves the whole market and spawns themed memes.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@cz_binance",
+      "user_id": "902926941413453824",
+      "group": "mover",
+      "category": "mover",
+      "whitelist": false,
+      "followers": 12980000,
+      "user_follows": true,
+      "reason": "Binance founder; his meme-ish posts regularly spawn copycat tokens (BNB and Solana). User follows him.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@heyibinance",
+      "user_id": "1003840309166366721",
+      "group": "mover",
+      "category": "mover",
+      "whitelist": false,
+      "followers": 665000,
+      "user_follows": true,
+      "reason": "Binance co-founder; her posts/replies often launch BNB/Solana memes. User follows her.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@VitalikButerin",
+      "user_id": "295218901",
+      "group": "mover",
+      "category": "mover",
+      "whitelist": false,
+      "followers": 7940000,
+      "user_follows": false,
+      "reason": "Ethereum co-founder; viral posts (animals, quotes) frequently get tokenized.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@saylor",
+      "user_id": "244647486",
+      "group": "mover",
+      "category": "mover",
+      "whitelist": false,
+      "followers": 5220000,
+      "user_follows": false,
+      "reason": "Strategy founder, BTC maximalist; macro/BTC narratives and occasional viral meme phrases.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@brian_armstrong",
+      "user_id": "14379660",
+      "group": "mover",
+      "category": "mover",
+      "whitelist": false,
+      "followers": 3980000,
+      "user_follows": true,
+      "reason": "Coinbase CEO; listings, Base and on-chain-meme posts are immediate catalysts. User follows him.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@justinsuntron",
+      "user_id": "902839045356744704",
+      "group": "mover",
+      "category": "mover",
+      "whitelist": false,
+      "followers": 4300000,
+      "user_follows": false,
+      "reason": "TRON founder; pumps narratives/buys memecoins publicly, moves the market.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@toly",
+      "user_id": "2327407569",
+      "group": "mover",
+      "category": "mover",
+      "whitelist": false,
+      "followers": 2740000,
+      "user_follows": false,
+      "reason": "Solana co-founder (old handle @aeyakovenko no longer exists); posts frequently tokenized on Solana.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@rajgokal",
+      "user_id": "101833150",
+      "group": "mover",
+      "category": "mover",
+      "whitelist": false,
+      "followers": 2380000,
+      "user_follows": false,
+      "reason": "Solana co-founder; direct catalyst for Solana ecosystem narratives.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@CryptoHayes",
+      "user_id": "983993370048630785",
+      "group": "mover",
+      "category": "mover",
+      "whitelist": false,
+      "followers": 815000,
+      "user_follows": false,
+      "reason": "Arthur Hayes; macro essays and public buys move narratives (incl. memecoins).",
+      "in_x_list": true
+    },
+    {
+      "handle": "@blknoiz06",
+      "user_id": "973261472",
+      "group": "mover",
+      "category": "mover",
+      "whitelist": false,
+      "followers": 1445000,
+      "user_follows": false,
+      "reason": "Ansem; the most influential Solana memecoin KOL, a single call/thesis launches narratives.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@MustStopMurad",
+      "user_id": "844304603336232960",
+      "group": "mover",
+      "category": "mover",
+      "whitelist": false,
+      "followers": 727000,
+      "user_follows": false,
+      "reason": "Murad; father of the 'memecoin supercycle' narrative; caution: talks his own bags (SPX).",
+      "in_x_list": true
+    },
+    {
+      "handle": "@paoloardoino",
+      "user_id": "109404961",
+      "group": "mover",
+      "category": "mover",
+      "whitelist": false,
+      "followers": 367000,
+      "user_follows": true,
+      "reason": "Tether/Bitfinex CEO; USDT/stablecoin news and occasional memes. User follows him.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@theunipcs",
+      "user_id": "1755899659040555009",
+      "group": "signal",
+      "category": "whitelist KOL",
+      "whitelist": true,
+      "followers": 339000,
+      "user_follows": true,
+      "reason": "Unipcs 'Bonk Guy': tier-S KOL chosen by the user; real handle @theunipcs (@unipcs does not exist).",
+      "in_x_list": true
+    },
+    {
+      "handle": "@pointfarmcap",
+      "user_id": "15176635",
+      "group": "signal",
+      "category": "whitelist KOL",
+      "whitelist": true,
+      "followers": 44000,
+      "user_follows": false,
+      "reason": "Point Farm Capital: user-whitelisted active trader, Hyperliquid/points/memes, publicly-tracked wallet.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@frankdegods",
+      "user_id": "1441835930889818113",
+      "group": "signal",
+      "category": "whitelist KOL",
+      "whitelist": true,
+      "followers": 538000,
+      "user_follows": false,
+      "reason": "Frank (DeGods): user-whitelisted, high-volume memecoin trader with a positive 90d tracked PnL.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@orangie",
+      "user_id": "2758205289",
+      "group": "signal",
+      "category": "whitelist KOL",
+      "whitelist": true,
+      "followers": 438000,
+      "user_follows": false,
+      "reason": "orangie: user-whitelisted Solana trader/content creator, early on trench narratives.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@ether_monk",
+      "user_id": "1455806741631832069",
+      "group": "signal",
+      "category": "whitelist KOL",
+      "whitelist": true,
+      "followers": 42000,
+      "user_follows": false,
+      "reason": "Ethermonk: user-whitelisted, ~+$2M tracked PnL, explicitly no paid groups/calls.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@tvmx__",
+      "user_id": "1493321188847742977",
+      "group": "signal",
+      "category": "whitelist KOL",
+      "whitelist": true,
+      "followers": 460,
+      "user_follows": false,
+      "reason": "TVMX: user-whitelisted Fomo trader; old @tvmx is suspended, this is the self-declared new account (low reach).",
+      "in_x_list": true
+    },
+    {
+      "handle": "@RowdyCrypto",
+      "user_id": "1297084257215471621",
+      "group": "signal",
+      "category": "whitelist KOL",
+      "whitelist": true,
+      "followers": 51000,
+      "user_follows": false,
+      "reason": "ROWDY: user-whitelisted Solana trader (handle confirmed by user).",
+      "in_x_list": true
+    },
+    {
+      "handle": "@rasmr_eth",
+      "user_id": "423164349",
+      "group": "signal",
+      "category": "whitelist KOL",
+      "whitelist": true,
+      "followers": 162000,
+      "user_follows": false,
+      "reason": "rasmr: user-whitelisted streamer/trader (weight 0.75); @rasmr is an unrelated inactive account.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@HsakaTrades",
+      "user_id": "944686196331966464",
+      "group": "signal",
+      "category": "trader",
+      "whitelist": false,
+      "followers": 600000,
+      "user_follows": false,
+      "reason": "Hsaka: top-tier trader, reads positioning/flows; early on market-wide rotations.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@GCRClassic",
+      "user_id": "1484112393361891328",
+      "group": "signal",
+      "category": "trader",
+      "whitelist": false,
+      "followers": 391000,
+      "user_follows": false,
+      "reason": "GCR: legendary contrarian trader, rarely posts but every post is high-signal.",
+      "in_x_list": false
+    },
+    {
+      "handle": "@Cented7",
+      "user_id": "1048768598494199809",
+      "group": "signal",
+      "category": "trader",
+      "whitelist": false,
+      "followers": 824000,
+      "user_follows": false,
+      "reason": "Cented: one of the most-tracked Solana memecoin wallets/traders; trench activity.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@Cupseyy",
+      "user_id": "1168903946989010944",
+      "group": "signal",
+      "category": "trader",
+      "whitelist": false,
+      "followers": 237000,
+      "user_follows": false,
+      "reason": "Cupsey: very active Solana memecoin trader, much-copied wallet; real-time trench flow.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@Ga__ke",
+      "user_id": "86647812",
+      "group": "signal",
+      "category": "trader",
+      "whitelist": false,
+      "followers": 187000,
+      "user_follows": false,
+      "reason": "gake: experienced memecoin trader, states 'no token deals' in bio.",
+      "in_x_list": false
+    },
+    {
+      "handle": "@sibeleth",
+      "user_id": "2371575838",
+      "group": "signal",
+      "category": "trader",
+      "whitelist": false,
+      "followers": 175000,
+      "user_follows": false,
+      "reason": "Sibel: memecoin trader, frequent commentary on trench rotations.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@gainzy222",
+      "user_id": "4107711",
+      "group": "signal",
+      "category": "trader",
+      "whitelist": false,
+      "followers": 333000,
+      "user_follows": false,
+      "reason": "gainzy: veteran crypto trader/meme culture, early on cultural narratives.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@notthreadguy",
+      "user_id": "1426732252768182281",
+      "group": "signal",
+      "category": "narrative analyst",
+      "whitelist": false,
+      "followers": 413000,
+      "user_follows": false,
+      "reason": "threadguy: daily livestream on the trenches, aggregates emerging narratives.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@DefiIgnas",
+      "user_id": "831767219071754240",
+      "group": "signal",
+      "category": "narrative analyst",
+      "whitelist": false,
+      "followers": 164000,
+      "user_follows": false,
+      "reason": "Ignas: structured narrative/sector analysis (DeFi, AI, new metas).",
+      "in_x_list": true
+    },
+    {
+      "handle": "@Route2FI",
+      "user_id": "1084397942319054850",
+      "group": "signal",
+      "category": "narrative analyst",
+      "whitelist": false,
+      "followers": 302000,
+      "user_follows": false,
+      "reason": "Route 2 FI: trades news and narratives, explains new metas.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@0xSisyphus",
+      "user_id": "1366930865574584323",
+      "group": "signal",
+      "category": "narrative analyst",
+      "whitelist": false,
+      "followers": 155000,
+      "user_follows": false,
+      "reason": "Sisyphus: well-known trader/analyst of cycles and memes.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@inversebrah",
+      "user_id": "1051852534518824960",
+      "group": "signal",
+      "category": "narrative analyst",
+      "whitelist": false,
+      "followers": 709000,
+      "user_follows": false,
+      "reason": "smolting: crypto meme-culture barometer; very high volume, use as sentiment signal.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@lookonchain",
+      "user_id": "1462727797135216641",
+      "group": "signal",
+      "category": "narrative analyst",
+      "whitelist": false,
+      "followers": 712000,
+      "user_follows": false,
+      "reason": "Lookonchain: on-chain smart-money/whale moves, often before the narrative goes viral.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@bubblemaps",
+      "user_id": "1385312402795859968",
+      "group": "signal",
+      "category": "narrative analyst",
+      "whitelist": false,
+      "followers": 289000,
+      "user_follows": false,
+      "reason": "Bubblemaps: exposes cabals/bundles/insiders on tokens; useful negative filter.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@zachxbt",
+      "user_id": "3012852462",
+      "group": "signal",
+      "category": "narrative analyst",
+      "whitelist": false,
+      "followers": 1114000,
+      "user_follows": false,
+      "reason": "ZachXBT: scam/rug investigations; use as a red flag (narratives crashing).",
+      "in_x_list": true
+    },
+    {
+      "handle": "@mert",
+      "user_id": "1309886201944473600",
+      "group": "signal",
+      "category": "founder",
+      "whitelist": false,
+      "followers": 2330000,
+      "user_follows": false,
+      "reason": "Mert (Helius CEO): central Solana voice, very active, tracks the ecosystem's metas.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@weremeow",
+      "user_id": "17194296",
+      "group": "signal",
+      "category": "founder",
+      "whitelist": false,
+      "followers": 713000,
+      "user_follows": false,
+      "reason": "meow (Jupiter founder): Solana DEX/launchpad (Jup) narratives.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@a1lon9",
+      "user_id": "1470958472409792515",
+      "group": "signal",
+      "category": "founder",
+      "whitelist": false,
+      "followers": 433000,
+      "user_follows": false,
+      "reason": "alon: pump.fun co-founder; launchpad/meta changes in real time.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@kashdhanda",
+      "user_id": "1571226984",
+      "group": "signal",
+      "category": "founder",
+      "whitelist": false,
+      "followers": 53000,
+      "user_follows": false,
+      "reason": "kash: Jupiter/Superteam, insider on Solana ecosystem initiatives.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@Pumpfun",
+      "user_id": "1622243071806128131",
+      "group": "signal",
+      "category": "ecosystem",
+      "whitelist": false,
+      "followers": 744000,
+      "user_follows": false,
+      "reason": "Pump.fun official: features, livestreams and spotlighted tokens of the main launchpad.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@solana",
+      "user_id": "951329744804392960",
+      "group": "signal",
+      "category": "ecosystem",
+      "whitelist": false,
+      "followers": 4220000,
+      "user_follows": false,
+      "reason": "Solana official: ecosystem announcements (official narratives: AI agents, stocks, payments).",
+      "in_x_list": true
+    },
+    {
+      "handle": "@SolanaFloor",
+      "user_id": "1435897632581357572",
+      "group": "signal",
+      "category": "ecosystem",
+      "whitelist": false,
+      "followers": 135000,
+      "user_follows": false,
+      "reason": "SolanaFloor: fast Solana news (#1 news source) and on-chain data.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@dexscreener",
+      "user_id": "1452480311405727751",
+      "group": "signal",
+      "category": "ecosystem",
+      "whitelist": false,
+      "followers": 238000,
+      "user_follows": false,
+      "reason": "DEX Screener: trending/boosts; note that boosts are paid, use as context only.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@tier10k",
+      "user_id": "2361601055",
+      "group": "signal",
+      "category": "ecosystem",
+      "whitelist": false,
+      "followers": 1100000,
+      "user_follows": false,
+      "reason": "db (DB News): very fast breaking crypto headlines, often the trigger for news-memes.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@binance",
+      "user_id": "877807935493033984",
+      "group": "mover",
+      "category": "exchange",
+      "whitelist": false,
+      "followers": 16130000,
+      "user_follows": false,
+      "reason": "Largest exchange; listing/Alpha/Launchpool announcements move tokens instantly.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@coinbase",
+      "user_id": "574032254",
+      "group": "mover",
+      "category": "exchange",
+      "whitelist": false,
+      "followers": 7190000,
+      "user_follows": false,
+      "reason": "Coinbase listing roadmap and new-asset announcements trigger fast pumps, incl. Solana memes.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@Bybit_Official",
+      "user_id": "999947328621395968",
+      "group": "mover",
+      "category": "exchange",
+      "whitelist": false,
+      "followers": 4870000,
+      "user_follows": false,
+      "reason": "Spot/perp listing announcements from a top-3 derivatives exchange.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@okx",
+      "user_id": "867617849208037377",
+      "group": "mover",
+      "category": "exchange",
+      "whitelist": false,
+      "followers": 5570000,
+      "user_follows": false,
+      "reason": "OKX spot/perp listing announcements, often early on trending memecoins.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@bitget",
+      "user_id": "1098881129057112064",
+      "group": "mover",
+      "category": "exchange",
+      "whitelist": false,
+      "followers": 4310000,
+      "user_follows": false,
+      "reason": "Very fast to list hot memecoins; listing posts are a momentum signal.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@BinanceWallet",
+      "user_id": "1400391752368992260",
+      "group": "mover",
+      "category": "exchange",
+      "whitelist": false,
+      "followers": 2840000,
+      "user_follows": true,
+      "reason": "Binance Alpha/Wallet listings and TGEs: the main on-ramp for new memecoins into Binance.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@BNBCHAIN",
+      "user_id": "1052454006537314306",
+      "group": "mover",
+      "category": "ecosystem",
+      "whitelist": false,
+      "followers": 3890000,
+      "user_follows": false,
+      "reason": "BNB Chain campaigns and meme seasons, competing chain narratives to Solana.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@krakenfx",
+      "user_id": "1399148563",
+      "group": "mover",
+      "category": "exchange",
+      "whitelist": false,
+      "followers": 1750000,
+      "user_follows": false,
+      "reason": "Kraken listing announcements (has listed several Solana memes).",
+      "in_x_list": true
+    },
+    {
+      "handle": "@HyperliquidX",
+      "user_id": "1527020295059648513",
+      "group": "mover",
+      "category": "exchange",
+      "whitelist": false,
+      "followers": 437000,
+      "user_follows": false,
+      "reason": "New perp listings on Hyperliquid often mark/feed memecoin momentum.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@_RichardTeng",
+      "user_id": "1395261244769112065",
+      "group": "signal",
+      "category": "exchange CEO",
+      "whitelist": false,
+      "followers": 355000,
+      "user_follows": false,
+      "reason": "Binance Co-CEO (verified); hints on Binance strategy, listings and regulation.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@benbybit",
+      "user_id": "1100932506193260544",
+      "group": "signal",
+      "category": "exchange CEO",
+      "whitelist": false,
+      "followers": 273000,
+      "user_follows": false,
+      "reason": "Bybit co-founder & CEO; exchange-level news and market commentary.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@star_okx",
+      "user_id": "2985599460",
+      "group": "signal",
+      "category": "exchange CEO",
+      "whitelist": false,
+      "followers": 248000,
+      "user_follows": false,
+      "reason": "OKX founder & CEO; exchange news and occasional meme/narrative comments.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@GracyBitget",
+      "user_id": "723224444752158720",
+      "group": "signal",
+      "category": "exchange CEO",
+      "whitelist": false,
+      "followers": 296000,
+      "user_follows": false,
+      "reason": "Bitget CEO (verified); listings and exchange campaigns.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@SolanaFndn",
+      "user_id": "1407411848446611459",
+      "group": "signal",
+      "category": "ecosystem",
+      "whitelist": false,
+      "followers": 196000,
+      "user_follows": false,
+      "reason": "Solana Foundation: official ecosystem announcements, hackathons, upgrades.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@JupiterExchange",
+      "user_id": "1446489618208067586",
+      "group": "signal",
+      "category": "ecosystem",
+      "whitelist": false,
+      "followers": 615000,
+      "user_follows": false,
+      "reason": "Main Solana aggregator; token verification, launchpad (LFG) and ecosystem launches.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@phantom",
+      "user_id": "1379053041995890695",
+      "group": "signal",
+      "category": "ecosystem",
+      "whitelist": false,
+      "followers": 954000,
+      "user_follows": false,
+      "reason": "Top Solana wallet; trending tokens, new features and listings surfaced to retail.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@MagicEden",
+      "user_id": "1433121559057559555",
+      "group": "signal",
+      "category": "ecosystem",
+      "whitelist": false,
+      "followers": 777000,
+      "user_follows": false,
+      "reason": "Solana collectibles/NFT marketplace; NFT-to-token and culture narratives.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@Raydium",
+      "user_id": "1358454920299433985",
+      "group": "signal",
+      "category": "ecosystem",
+      "whitelist": false,
+      "followers": 463000,
+      "user_follows": false,
+      "reason": "Core Solana AMM and launchpad (LaunchLab); where many memes get liquidity.",
+      "in_x_list": true
+    },
+    {
+      "handle": "@MeteoraAG",
+      "user_id": "1384042881808166924",
+      "group": "signal",
+      "category": "ecosystem",
+      "whitelist": false,
+      "followers": 217000,
+      "user_follows": false,
+      "reason": "Solana dynamic pools/launch infra; used by many new token launches.",
+      "in_x_list": true
+    }
+  ],
+  "x_list_id": "2116263293392245243",
+  "x_list_url": "https://x.com/i/lists/2116263293392245243"
+}

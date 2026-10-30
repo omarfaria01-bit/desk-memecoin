@@ -1,0 +1,2 @@
+# Paper: nessuna dipendenza esterna (solo libreria standard Python 3.11+).
+# Per il LIVE (non ora): hyperliquid-python-sdk  eth-account

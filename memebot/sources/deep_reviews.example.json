@@ -1,0 +1,9 @@
+{
+  "MINT_ADDRESS_ESEMPIO": {
+    "score": 75,
+    "verdict": "buono",
+    "thesis": "sito funzionante con prodotto provabile, GitHub attivo, narrativa AI agent forte",
+    "risks": ["dominio di 3 settimane", "team anonimo"],
+    "ts": "2026-10-30T21:30:00+01:00"
+  }
+}

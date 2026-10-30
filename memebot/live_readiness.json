@@ -1,0 +1,82 @@
+{
+ "ts": "2026-10-30T21:33:38+01:00",
+ "ok": 10,
+ "total": 15,
+ "checks": [
+  {
+   "check": "modalita paper",
+   "ok": true,
+   "detail": "MODE=paper"
+  },
+  {
+   "check": "blocco DESK_PAPER_ONLY",
+   "ok": true,
+   "detail": "DESK_PAPER_ONLY=1 rifiuta dry/live"
+  },
+  {
+   "check": "Jupiter quote API",
+   "ok": true,
+   "detail": "https://lite-api.jup.ag/swap/v1 in 838 ms, SOL $94.98"
+  },
+  {
+   "check": "RPC Solana",
+   "ok": true,
+   "detail": "slot 463421169 in 242 ms"
+  },
+  {
+   "check": "RPC privato/veloce",
+   "ok": false,
+   "detail": "RPC pubblico: ok per paper, per il live serve un RPC dedicato (Helius/Triton/QuickNode free tier)"
+  },
+  {
+   "check": "priority fee dinamica",
+   "ok": true,
+   "detail": "normale 0.000105 SOL, urgente 0.000155 SOL"
+  },
+  {
+   "check": "libreria solders (firma)",
+   "ok": false,
+   "detail": "manca: pip install solders"
+  },
+  {
+   "check": "file .env presente",
+   "ok": false,
+   "detail": "contenuto non letto dal controllo"
+  },
+  {
+   "check": "kill switch STOP",
+   "ok": true,
+   "detail": "touch STOP vende tutto e blocca gli acquisti"
+  },
+  {
+   "check": "limite perdita giornaliera",
+   "ok": true,
+   "detail": "-10.0%"
+  },
+  {
+   "check": "limite perdita totale (HARD_STOP)",
+   "ok": true,
+   "detail": "-30.0%"
+  },
+  {
+   "check": "size minuscola per il primo live",
+   "ok": true,
+   "detail": "LIVE_MAX_TRADE_USD=$5.0"
+  },
+  {
+   "check": "Jito / invio protetto da MEV",
+   "ok": false,
+   "detail": "non implementato"
+  },
+  {
+   "check": "dry run riuscito",
+   "ok": false,
+   "detail": "da fare con MODE=dry e wallet dedicato"
+  },
+  {
+   "check": "simulazione realistica attiva",
+   "ok": true,
+   "detail": "preventivi Jupiter, latenza, fallimenti"
+  }
+ ]
+}
