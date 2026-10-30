@@ -21,3 +21,4 @@ gmgn_key*
 *secret*
 id.json
 keypair*
+!.env.example
