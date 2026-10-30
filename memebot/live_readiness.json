@@ -1,5 +1,5 @@
 {
- "ts": "2026-10-30T23:32:37+01:00",
+ "ts": "2026-10-30T23:49:32+01:00",
  "ok": 10,
  "total": 15,
  "checks": [
@@ -16,12 +16,12 @@
   {
    "check": "Jupiter quote API",
    "ok": true,
-   "detail": "https://lite-api.jup.ag/swap/v1 in 1444 ms, SOL $95.57"
+   "detail": "https://lite-api.jup.ag/swap/v1 in 1207 ms, SOL $95.67"
   },
   {
    "check": "RPC Solana",
    "ok": true,
-   "detail": "slot 463454424 in 106 ms"
+   "detail": "slot 463459168 in 110 ms"
   },
   {
    "check": "RPC privato/veloce",
@@ -31,7 +31,7 @@
   {
    "check": "priority fee dinamica",
    "ok": true,
-   "detail": "normale 0.000105 SOL, urgente 0.000155 SOL"
+   "detail": "normale 0.000105 SOL, urgente 0.000645 SOL"
   },
   {
    "check": "libreria solders (firma)",

@@ -277,9 +277,33 @@ rg = C.analyze(g)
 assert rg["level"] == "hard" and "MEXC" in rg["why"] and abs(rg["cexf_best"][0] - 11.14) < 0.01, rg
 rg2 = C.analyze([dict(x, ts=(x.get("ts") or 0) - 86400 * 3) if x.get("src") else x for x in g])  # fondi vecchi
 assert rg2["cexf_pct"] == 0 and rg2["level"] != "hard"
-# DESSA: tanti holder piccoli e scollegati = pulito
+# controllo pulito sintetico: tanti holder piccoli, scollegati, wallet vecchi = pulito (DESSA NON e piu un esempio pulito)
 dd = [{"o": f"d{i}", "pct": 0.1, "ntx": 100, "acq": {"ts": t0 + i * 977, "slot": i * 5000, "swap": True}} for i in range(150)]
 assert C.analyze(dd)["level"] == "none"
+# v8.4b: wallet nuovi (ntx controllato solo sui primi 60 di 150): 52 nuovi su 60 controllati (tipo DESSA, cattivo) = soft
+dn = [dict(x, ntx=(5 if i < 52 else 150) if i < 60 else None) for i, x in enumerate(dd)]
+rn = C.analyze(dn)
+assert rn["level"] == "soft" and "nuovi" in rn["why"] and rn["fresh_share"] >= C.CFG["FRESH_SOFT"], rn
+# controllo vincente HYPERCHAN (trade +6.4%, picco +46%): un funder per 59 wallet nuovi al 6.5% = soft, MAI hard
+hy = [{"o": f"h{i}", "pct": 6.5 / 59, "ntx": 5, "src": "HubX", "ts": t0 + i * 3000,
+       "acq": {"ts": t0 + i * 3000 + 7200 + i * 37, "slot": i * 9000, "swap": True}} for i in range(59)]
+hy += [{"o": f"z{i}", "pct": 0.05, "ntx": None, "acq": {"ts": t0 + 900000 + i * 977, "slot": 9e6 + i * 5000, "swap": True}}
+       for i in range(91)]
+rh = C.analyze(hy)
+assert rh["level"] == "soft", rh
+# regola combinata v8.4b (8% / 12%, prima 10% / 15%): tipo CATE piu debole = hard; sotto soglia = soft
+_cex = "5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhLEfqhAF"   # Binance (INFRA_FUNDERS)
+def _combo(each, ncex):
+    cb = [{"o": f"t{g}{j}", "pct": each, "ntx": 500, "src": f"Fund{g}", "ts": t0 + g * 9999 + j * 500}
+          for g in range(3) for j in range(3)]
+    return cb + [{"o": f"x{j}", "pct": 1.0, "ntx": 500, "src": _cex, "ts": t0 + 90000 + j * 700} for j in range(ncex)]
+_saved_infra = dict(C._infra_cache)
+C._infra_cache.update(t=9e12, d={_cex: "Binance"})   # lista exchange fissata per il test
+rcb = C.analyze(_combo(0.95, 13))      # collegati 8.55%, exchange/app 13%
+assert rcb["level"] == "hard" and "insieme" in rcb["why"], rcb
+assert C.analyze(_combo(0.95, 11))["level"] == "soft"     # exchange/app 11% < 12%
+assert C.analyze(_combo(0.80, 13))["level"] == "soft"     # collegati 7.2% < 8%
+C._infra_cache.clear(); C._infra_cache.update(_saved_infra)
 # multi-gruppo: 3 gruppi >= 2% che fanno >= 20% = hard
 mg = []
 for k, pc in enumerate((8.0, 7.0, 6.0)):
@@ -367,7 +391,10 @@ print("penalita eta OK")
 
 # ---- 17. lezioni
 ids = {x["id"]: x for x in D.LABEL_SEEDS}
-assert {"beast-2026-10-30", "dessa-2026-10-30", "pillsey-2026-10-30", "glitch-2026-10-30"} <= set(ids)
+assert {"beast-2026-10-30", "dessa-2026-10-30", "dessa-2026-10-30-cattivo", "pillsey-2026-10-30",
+        "glitch-2026-10-30"} <= set(ids)
+assert ids["dessa-2026-10-30-cattivo"]["label"] == "cluster" and "CATTIVO" in ids["dessa-2026-10-30-cattivo"]["note"]
+assert ids["dessa-2026-10-30-cattivo"]["pnl_pct"] is None
 assert ids["pillsey-2026-10-30"]["label"] == "cluster" and "SOSPETTO" in ids["glitch-2026-10-30"]["note"]
 print("lezioni OK")
 

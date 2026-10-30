@@ -1550,8 +1550,14 @@ LABEL_SEEDS = [
      "label": "cluster", "pnl_pct": None, "rug": False,
      "note": "comprata alle 20:14 (v6, prima che esistesse il controllo cluster); l'analisi v7 a posteriori "
              "la dava al limite (78% top holder nuovi, 2 reti). Ricontrollo v8.2 alle 22:22: 15.6k holder, "
-             "gruppo massimo 0.38%, nessuno sciame: oggi non e un cluster. Posizione tenuta con ricontrollo "
+             "gruppo massimo 0.38%, nessuno sciame (foto successiva, non prova di pulizia: vedi dessa-2026-10-30-cattivo). Posizione tenuta con ricontrollo "
              "ogni CLUSTER_HELD_RECHECK_MIN."},
+    {"id": "dessa-2026-10-30-cattivo", "mint": "npz2FhoufQ7pKqhGpaipYWacrAkidyW2yDpVWSvpump", "sym": "DESSA",
+     "label": "cluster", "pnl_pct": None, "rug": False,   # esito del trade (+1.92%) gia registrato: niente doppio conteggio
+     "note": "TOKEN CATTIVO (Kiwi, 30/10 23:38): confermata la lezione 'cluster': comprata alle 20:14 OLTRE il limite "
+             "cluster (v7: 78% top holder nuovi, 2 reti). Chiusa alle 23:15 per tempo massimo a +1.92% (picco +4.9%): "
+             "l'esito positivo NON la rende un buon token e non va usata come esempio 'deve restare pulito'. "
+             "v8.4b: wallet nuovi 87% dei controllati (soft), eta 4 g con vol 1h/liq 0.11 = scartata dalla regola eta."},
     {"id": "pillsey-2026-10-30", "mint": "J5jxG3PFaWpj6BLEQExyC6FSqSvaTKNdQ9G3sZwBpump", "sym": "PILLSEY",
      "label": "cluster", "pnl_pct": None, "rug": False,   # esito shadow gia registrato dal Learner
      "note": "solo shadow: chiusa a -13.7% alle 22:46, riaperta alle 22:56. Bubblemaps: 13+ cluster ~33% (87 wallet "

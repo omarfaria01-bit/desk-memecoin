@@ -731,3 +731,21 @@ CATE (95 g, vol/liq 0,02) viene scartato. `PF_MAX_AGE_H` del prefiltro resta 90 
 
 **Sync GitHub** – esclusi `.telegram*`, `telegram_state*`, `birdeye_usage*`, `trending_agg_state*`, `infra_funders*`;
 scansione segreti con pattern token bot Telegram, header/chiave Birdeye e ricerca letterale dei valori in env.
+
+## v8.4b — 30/10/2026 (23:50) – DESSA è un token cattivo: verifica delle regole senza il vincolo "DESSA pulito" (PAPER)
+
+Kiwi: DESSA (npz2Fh…pump) **non** è un buon token. Non è più usato come esempio "deve restare pulito".
+- **Lezione**: nuovo seed `dessa-2026-10-30-cattivo` (etichetta "cluster", confermata la lezione originale: comprata
+  alle 20:14 oltre il limite cluster, v7 78% nuovi + 2 reti; chiusa alle 23:15 per tempo massimo a +1,92%, esito
+  positivo ma token cattivo; `pnl_pct` None per non contare due volte il trade). Nota del seed originale corretta.
+- **Controlli puliti nuovi** (scansione Helius, ~1.156 crediti): HYPERCHAN (trade +6,4%, picco +46%: soft, collegati 6,5%,
+  59 wallet nuovi, stima 148 wallet al 14,3%) e Bonnie (percorso +50%: soft, collegati 5,9%). Jason: scansione incompleta.
+- **Wallet nuovi** (`cluster_v2.FRESH_SOFT` 0,5 → 0,3): il conteggio ntx copre solo i primi 60 holder su 150, quindi la
+  quota non superava mai 0,40 e la regola soft non scattava mai. 0,3 ≈ 75% dei controllati. DESSA (87% dei controllati) ora soft;
+  HYPERCHAN era già soft. Un "hard" sui wallet nuovi NON è stato aggiunto: HYPERCHAN (vincente) ha il 100% di wallet nuovi.
+- **Regola combinata** (`COMBO_LINKED_PCT` 10 → 8, `COMBO_INFRA_PCT` 15 → 12, extra 5 invariato): sugli eventi storici
+  colpisce solo CATE e GLITCH; HYPERCHAN, Bonnie, AgenC, PILLSEY (eventi) restano fuori.
+- **Età/attività**: invariata. Già scarta DESSA (4 g, vol 1h/liq 0,11); la variante più stretta taglierebbe 13 vincenti su 23 invece di 7.
+- **CEX-fresh, stima estesa, gruppo enorme**: invariate (non erano state ammorbidite per DESSA; abbassare BIG_GROUP/EST
+  colpirebbe HYPERCHAN, stima 14,3%).
+- Test: `tests/test_v84.py` (wallet nuovi tipo DESSA = soft, controllo HYPERCHAN = soft mai hard, combo 8/12, seed).

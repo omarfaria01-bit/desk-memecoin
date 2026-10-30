@@ -78,7 +78,9 @@ CFG = {
     "GROUP_SOFT_PCT": 8.0,       # SOFT: un gruppo vero >= 8%
     "LINKED_SOFT_PCT": 5.0,      # SOFT: collegati veri >= 5%
     "INFRA_SOFT_PCT": 10.0,      # SOFT: gruppo infra >= 10%
-    "FRESH_SOFT": 0.5,           # SOFT: >= 50% dei top holder nuovi
+    "FRESH_SOFT": 0.3,           # SOFT: wallet nuovi / holder letti >= 30% (v8.4b: il controllo ntx copre solo i primi
+                                 # WALLET_TOP_N=60 su 150, quindi 0.3 = ~75% dei controllati; prima 0.5 = mai raggiungibile.
+                                 # DESSA, token cattivo: 0.35-0.39)
     # v8.4 (caso PILLSEY: 13+ cluster medi su Bubblemaps, ~33% in tutto, da noi solo "soft")
     "MULTI_GROUP_MIN_PCT": 2.0,  # HARD: almeno MULTI_GROUP_N gruppi veri da >= 2% ciascuno...
     "MULTI_GROUP_N": 3,
@@ -98,12 +100,13 @@ CFG = {
     # con quote simili 1-5%: tipico di un solo operatore che ritira da CEX su tanti wallet
     "CEXF_MAX_DELAY_H": 6.0, "CEXF_EARLY_H": 3.0, "CEXF_MIN_PCT": 1.0, "CEXF_MAX_PCT": 5.0,
     "CEXF_MIN_N": 4, "CEXF_CV": 0.5,
-    "CEXF_HARD_PCT": 10.0,       # stesso exchange, >= 4 wallet, somma >= 10% = HARD (GLITCH 11.1%, DESSA 0%)
+    "CEXF_HARD_PCT": 10.0,       # stesso exchange, >= 4 wallet, somma >= 10% = HARD (GLITCH 11.1%; controlli HYPERCHAN/Bonnie 0%)
     "CEXF_SOFT_PCT": 6.0,        # tutti gli exchange insieme >= 6% = soft forte
     # v8.4: quota dei top holder che hanno ricevuto i token con un trasferimento (non comprati): proxy gratuito
     # dei "phishing/flagged wallet" di GMGN, segnale aggiuntivo
     # v8.4 (CATE): prove insieme: collegati veri >= 10% E gruppo con exchange/app >= 15% = HARD
-    "COMBO_LINKED_PCT": 10.0, "COMBO_INFRA_PCT": 15.0,
+    "COMBO_LINKED_PCT": 8.0, "COMBO_INFRA_PCT": 12.0,   # v8.4b (prima 10/15): CATE 10.6/15.7, controlli puliti
+                                                        # HYPERCHAN 6.5/6.5 e Bonnie 5.9/5.9 restano fuori
     "COMBO_INFRA_EXTRA_PCT": 5.0,  # ...di cui almeno 5 punti portati davvero da exchange/app (non lo stesso gruppo)
     "RECV_SOFT_PCT": 15.0,       # soft graduato sopra il 15%
     "RECV_HARD_PCT": 30.0,       # HARD sopra il 30%
