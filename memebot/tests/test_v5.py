@@ -1,5 +1,6 @@
 import json, os, time, asyncio, csv
 import desk as D
+D.CFG["CLUSTER_V2"] = False; D.CFG["HONEYPOT_CHECK"] = False  # v8.2: provati a parte in test_v82.py
 B = D.narrative_bonus
 def nar(**k):
     d = {"theme": "T", "tickers": ["AAA"], "mints": [], "keywords": ["robotics"], "strength": 0.5, "trend": "rising",

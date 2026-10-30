@@ -582,3 +582,74 @@ trailing da +30 con distanza 10. Tutto il nuovo è solo registrato (modo "shadow
    `price_paths/_post_exit_summary.jsonl` (massimo/minimo rispetto all'uscita, rimbalzo sopra l'entrata).
 7. **Test**: `tests/test_v81.py` (limiti override, crollo relativo, stop e TP dinamici con fallback null,
    colonne CSV, percorsi di prezzo). Patch: `dev/patch_v81.py`, `dev/patch_v81_tp.py`.
+
+## Aggiornamento 30/10/2026 (v8.2) – cluster su TUTTI i candidati, controllo honeypot, casi BEAST e DESSA
+
+**Perché**: BEAST non è mai stato controllato per i cluster: il controllo v7 partiva solo dopo i filtri
+momentum/punteggio, e BEAST era stato scartato prima (momentum, 21:47) e messo in shadow. DESSA era stata
+comprata (20:14) prima che il controllo cluster esistesse, e le posizioni aperte non venivano mai ricontrollate.
+
+1. **Cluster v2 (`sources/cluster_v2.py`) su ogni candidato che passa il Filter**, anche quelli che
+   diventano shadow. Parte in sottofondo subito dopo il Filter (max `CLUSTER2_MAX_QUEUE` in coda) e
+   l'Analyst lo aspetta al massimo `CLUSTER2_WAIT_SEC` (90 s).
+   - Legge i primi 150 holder e calcola la **% di supply** dei wallet collegati (stesso finanziatore,
+     stesso fee payer, stesso mittente dei token, stesso minuto/slot) e lo **sciame** di wallet con saldo identico.
+   - **Rifiuto rigido** se un solo gruppo ha ≥ `CLUSTER_GROUP_HARD_PCT` (20%, si può solo abbassare),
+     se c'è un gruppo grande (50+ wallet) o uno sciame enorme. Etichetta `bad_cluster` + shadow.
+   - **Errore o timeout = mai "ok"**: `CLUSTER_UNKNOWN_ACTION` "soft" (penalità 0.05 e size ×0.5) oppure "skip".
+2. **Falsi collegamenti**: i finanziatori di infrastruttura (exchange/CEX, fomo, pump.fun, Photon, ecc.)
+   non contano come insider; la loro quota è registrata a parte (`cluster_infra_pct`). Un wallet che manda
+   token a 3+ holder è un **distributore** e non è mai considerato infrastruttura.
+3. **Controllo honeypot (`sources/honeypot.py`) prima di ogni acquisto**:
+   - estensioni Token-2022 (transfer hook, commissione > 5%, permanent delegate, account congelati, ecc.),
+     mint authority e freeze authority → rifiuto rigido;
+   - **solo preventivo** Jupiter di vendita (mai uno swap) alla nostra size: nessun percorso o impatto > 25% → rifiuto rigido;
+   - RugCheck "rugged" → rifiuto. Se il preventivo non è disponibile (429) → `HONEYPOT_UNKNOWN_ACTION` "soft" (size ridotta).
+4. **Posizioni aperte ricontrollate** ogni `CLUSTER_HELD_RECHECK_MIN` (20 min): se il cluster diventa rigido → uscita.
+5. **Etichette e promozione a rug**: `bad_cluster`/`suspected_rug` diventano `rug` se il prezzo scende ≥ 50% dal
+   massimo o la liquidità cala ≥ 50%; vengono salvati quando, come (dump o rimozione LP) e il caso finisce in
+   `sources/rug_forensics_queue.jsonl` per vedere chi ha venduto.
+6. **Lezioni salvate**: `beast-2026-10-30` (sciame di 1997 wallet con saldo identico = 76% della supply, distributore
+   dedicato, nessun honeypot; dump coordinato alle 22:19 → promosso a `rug`) e `dessa-2026-10-30` (comprata senza controllo cluster;
+   oggi nessun cluster pericoloso).
+7. Test: `tests/test_v82.py` (BEAST deve uscire come rifiuto rigido). I test vecchi girano con v8.2 spenta.
+   Il bot resta **solo paper**.
+
+## v8.3 — Trending come fonte principale + prefiltro stile DexScreener (PAPER)
+
+Richiesta: "analizza token in trending come token principali da analizzare". La chiave GMGN (~100 €) non verra presa:
+DexScreener diventa la fonte trending principale, GeckoTerminal e pump.fun secondarie, GMGN resta nel codice ma spento.
+
+- **Nuovo `sources/trending_agg.py`** (aggregatore gratuito, senza chiavi). Tutte le chiamate passano da `http.get` del bot,
+  quindi i limiti di frequenza sono condivisi.
+  - DexScreener: token-boosts/top, token-boosts/latest, token-profiles/latest, ads (cache 110 s).
+  - GeckoTerminal trending_pools 5m / 1h / 6h (cache 300 s; se il dominio ha avuto un 429 negli ultimi 180 s usa solo la cache).
+  - pump.fun `coins/currently-live` (mcap >= 15k$, trade negli ultimi 15 min; pausa 15 min se errore). Gli altri endpoint
+    pump.fun (king-of-the-hill, top-runners, featured, advanced-api) oggi danno 404/530.
+  - GMGN solo con chiave personale: oggi inattivo.
+  - La pagina web trending di DexScreener e dietro Cloudflare (403): la classifica e ricostruita dai dati API.
+  - Unione per mint, arricchimento con `/tokens/v1` e `trending_score` (0-1) = numero fonti, posizione, volume, transazioni,
+    accelerazione di volume e transazioni (l'accelerazione conta solo se c'e volume vero). Flag `paid` = boost/profilo/ads.
+- **Priorita in watchlist**: ogni `TREND_SCOUT_SEC`=120 s i primi `TREND_WATCH_TOP`=60 token trending entrano con priorita alta
+  (non vengono mai espulsi dalle pool nuove; un token gia in lista viene promosso). Le pool nuove hanno un tetto
+  `WATCH_NEW_MAX`=1200. Il Filter analizza prima i prioritari, poi per trending_score, poi per eta.
+- **GeckoTerminal**: gap minimo 6 s tra chiamate (condiviso con il resto del bot); `scout_gecko` non chiama piu trending
+  (lo fa l'aggregatore). pump.fun gap 5 s.
+- **Prefiltro locale stile DexScreener** (`sources/dex_prefilter.py`), applicato dopo volume e liquidita e prima dei controlli
+  costosi (cluster RPC, RugCheck, honeypot). Soglie in config e override con limiti:
+  liquidita >= 8000$, vol 5m >= 500$, txns 5m >= 10, txns 1h >= 150, acquisti 5m >= 5 (DexScreener da il numero di acquisti,
+  non di acquirenti unici), rapporto buy/sell 1h >= 0.5 e 5m >= 0.3, eta pool 3 min - 2160 h, variazione 5m >= -25%,
+  1h tra -50% e +10000%, mcap/FDV 15k$ - 500M$, social e boost/profilo pagato non obbligatori (0).
+  Rifiuto con categoria `prefiltro <chiave>`, statistica `prefilter_reject`; ogni valutazione va in `prefilter_log.jsonl`
+  con l'elenco dei filtri falliti.
+- **Calibrazione** su 52 casi storici (22 vincenti, 30 perdenti): con i default liquidita, vol 5m ed eta non tagliano nessun
+  vincente; variazione 5m -25% e 1h -50% tagliano solo 1 perdente ciascuna. Alternative scartate perche tagliano vincenti:
+  liquidita 15k (2 vincenti), vol 5m 5000 (9 vincenti), eta min 30 min (8 vincenti), max var 1h 2000% (5 vincenti).
+  Transazioni, acquisti, buy/sell, mcap e social non sono calibrabili dalle candele: default prudenti.
+- **Learner del prefiltro** (`PF_LEARN`): ogni 10 min guarda i token valutati 1-3 ore prima; se una soglia scarta token poi
+  saliti la allenta, se lascia passare token poi crollati la stringe, un passo alla volta dentro i limiti (`learn_prefilter`).
+- **Bonus multi-fonte**: +0.02 (`TREND_MULTI_BONUS`, limiti 0-0.04) solo per token trending su 2 o piu famiglie di fonti,
+  sempre dentro il tetto 0.10. I filtri duri restano identici per tutti.
+- **Log**: `src` in tutti gli eventi (rifiuti, pass, segnali); tag `src:trending_agg`, `trend_score`, `trend_src` nei segnali;
+  `src`, `trending_score`, `trend_families`, `trend_sources`, `trend_paid` in entry_features.
+- Test: `tests/test_v83.py` + tutti i test precedenti passano. Live resta spento; wallet, chiavi e .env non toccati.

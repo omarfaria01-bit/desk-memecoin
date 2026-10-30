@@ -159,6 +159,26 @@ CFG = {
     "CLUSTER_FRESH_SOFT": 0.50,       # ...o >= 50% dei top holder wallet nuovi
     "CLUSTER_PENALTY": 0.08,          # penalita del segnale soft 'cluster' (piu forte degli altri)
     "CLUSTER_SIZE_MULT": 0.4,         # size x0.4
+    # v8.2: cluster v2 (sources/cluster_v2.py) su OGNI candidato che passa il Filter, prima della decisione
+    # (anche per gli shadow, cosi il Learner ha i dati). Fallimento o tempo scaduto = 'unknown', MAI 'ok'.
+    "CLUSTER_V2": True,
+    "CLUSTER2_WAIT_SEC": 90,          # attesa massima per un trade vero; oltre = 'unknown'
+    "CLUSTER2_BUDGET_SEC": 75,        # tempo massimo di una scansione (top 150 holder, ~450 chiamate RPC)
+    "CLUSTER2_MAX_QUEUE": 4,          # scansioni in background per gli shadow (quelle dei trade veri passano sempre)
+    "CLUSTER_GROUP_HARD_PCT": 20.0,   # un SOLO gruppo di wallet collegati >= 20% dell'offerta = scarto rigido
+    "CLUSTER_UNKNOWN_ACTION": "soft", # cluster non verificabile: 'soft' (penalita + size ridotta) o 'skip'
+    "CLUSTER_UNKNOWN_PENALTY": 0.05,
+    "CLUSTER_UNKNOWN_SIZE_MULT": 0.5,
+    "CLUSTER_HELD_RECHECK_MIN": 20,   # ricontrollo cluster delle posizioni aperte (es. DESSA)
+    "CLUSTER_HELD_ACTION": "exit",    # posizione aperta che diventa 'hard': 'exit' (vende) o 'alert' (solo avviso)
+    # v8.2: controllo honeypot prima di ogni ingresso (solo letture e preventivi, mai uno swap)
+    "HONEYPOT_CHECK": True,
+    "HONEYPOT_SELL_IMPACT_PCT": 25.0, # preventivo di vendita con impatto > 25% = scarto rigido
+    "HONEYPOT_MAX_FEE_BPS": 500,      # fee di trasferimento Token-2022 > 5% = scarto rigido
+    "HONEYPOT_UNKNOWN_ACTION": "soft",# controllo non riuscito: 'soft' (size ridotta) o 'skip'
+    # v8.2: etichette 'bad_cluster'/'suspected_rug' diventano 'rug' se il prezzo crolla dal massimo o la LP sparisce
+    "RUG_PROMOTE_DROP_PCT": 50.0,
+    "RUG_PROMOTE_LIQ_DROP_PCT": 50.0,
     # v7: LP sbloccata = segnale SOFT (penalita, size ridotta, tenuta massima piu corta). HARD solo se estremo.
     "LP_EXTREME_LOCKED_PCT": 5.0,     # HARD: LP bloccata/bruciata <= 5%...
     "LP_CREATOR_HOLD_PCT": 50.0,      # ...e almeno il 50% dei token LP in mano al creatore
@@ -198,6 +218,7 @@ CFG = {
     "LEARN_BONUS_EDGE": 2.0,          # +step solo se la media con il segnale supera quella senza di >= 2 punti
     # v7: casi etichettati: alla chiusura l'esito diventa un esempio per il Learner (chiave = etichetta)
     "LABELLED_CASES": {"npz2FhoufQ7pKqhGpaipYWacrAkidyW2yDpVWSvpump": "cluster"},
+    # v8.2: casi gia osservati, registrati una sola volta come esempi per il Learner (vedi LABEL_SEEDS)
     # v6: shadow trade (operazioni ipotetiche, nessun denaro) sui token scartati per un segnale soft o di poco
     "SHADOW_TRADES": True,
     "SHADOW_NEAR_SCORE": 0.05,        # anche i punteggi entro 0.05 sotto la soglia
@@ -318,8 +339,9 @@ for _k in ("RPC_URL", "JUP_BASE"):
 CFG["MODE"] = str(CFG["MODE"]).lower()
 TZ = ZoneInfo(CFG["TIMEZONE"])
 # (orig. geckoterminal 2.2 s, rugcheck 1.2 s)
-HOST_GAPS = {"api.dexscreener.com": 0.25, "api.geckoterminal.com": 3.0, "api.rugcheck.xyz": 2.5,
-             "lite-api.jup.ag": 1.1, "api.jup.ag": 1.1, "api.mainnet-beta.solana.com": 0.5}  # v6: Jupiter e RPC
+HOST_GAPS = {"api.dexscreener.com": 0.25, "api.geckoterminal.com": 6.0, "frontend-api-v3.pump.fun": 5.0, "api.rugcheck.xyz": 2.5,
+             "lite-api.jup.ag": 1.1, "api.jup.ag": 1.1, "api.mainnet-beta.solana.com": 0.5,
+             "solana-rpc.publicnode.com": 0.05}  # v6: Jupiter e RPC
 HARD_STOP_PATH = os.path.join(DATA_DIR, "HARD_STOP")
 # v7: moduli opzionali in sources/ (solo lettura). Se mancano il bot gira come prima, senza bonus.
 SRC = {}
@@ -329,6 +351,11 @@ try:
         momentum as _mom  # noqa: E402
     _kol.CALL_GAP = max(getattr(_kol, "CALL_GAP", 0.15), 0.5)   # RPC pubblica condivisa: piano
     SRC = {"fomo": _fomo, "kol": _kol, "theses": _theses, "mom": _mom}
+    try:  # v8.2
+        from sources import cluster_v2 as _cl2, honeypot as _hp  # noqa: E402
+        SRC["cluster2"], SRC["honeypot"] = _cl2, _hp
+    except Exception as _e2:  # noqa: BLE001
+        print(f"v8.2: cluster_v2/honeypot non caricati ({type(_e2).__name__}: {_e2})")
 except Exception as _e:  # noqa: BLE001
     SRC = {"error": f"{type(_e).__name__}: {_e}"[:160]}
 try:
@@ -341,6 +368,13 @@ try:
     SRC["proj"] = _proj
 except Exception:  # noqa: BLE001
     pass
+try:
+    from sources import trending_agg as _tagg, dex_prefilter as _pf  # noqa: E402  (v8.3)
+    SRC["tagg"], SRC["pf"] = _tagg, _pf
+except Exception:  # noqa: BLE001
+    pass
+TREND_INFO = {}   # v8.3: mint -> ultimo risultato dell'aggregatore trending (score, fonti, rank)
+LAST_SRC = {}     # v8.3: mint -> fonte che l'ha messo in watchlist (registrata negli scarti)
 
 
 def gmgn_personal_key():
@@ -463,6 +497,8 @@ class State:
         self.learner_bonus = {}    # v7: esiti per segnale/bonus + correzioni apprese
         self.labels = dict(CFG.get("LABELLED_CASES") or {})  # v7: casi etichettati (mint -> etichetta)
         self.post_exit = {}        # v8.1: token seguiti per POST_EXIT_MIN dopo l'uscita (rimbalzi dopo lo stop)
+        self.label_log = []        # v8.2: storia delle etichette (casi seminati, promozioni a 'rug')
+        self.label_watch = {}      # v8.2: massimo di prezzo/liquidita dei token etichettati sospetti
         # non salvati
         self.fomo_rank = {}
         self.watch = {}
@@ -472,6 +508,7 @@ class State:
         self.hot = deque(maxlen=3000)
         self.activity = deque(maxlen=10)
         self.sec_checked = {}
+        self.cl_checked = {}       # v8.2: ultimo ricontrollo cluster delle posizioni aperte
 
     def to_json(self):
         return {
@@ -487,6 +524,7 @@ class State:
             "total_start": self.total_start, "hard_tripped": self.hard_tripped,
             "learner_shadow": self.learner_shadow, "shadow_trades": self.shadow_trades,
             "learner_bonus": self.learner_bonus, "labels": self.labels, "post_exit": self.post_exit,
+            "label_log": self.label_log[-200:], "label_watch": self.label_watch,
         }
 
 
@@ -525,6 +563,10 @@ def load_state():
     lab = d.get("labels")
     if isinstance(lab, dict):
         st.labels.update(lab)
+    if isinstance(d.get("label_log"), list):
+        st.label_log = d["label_log"]
+    if isinstance(d.get("label_watch"), dict):
+        st.label_watch = d["label_watch"]
     if d.get("mode", "paper") != CFG["MODE"]:
         print(f"Modalita cambiata da {d.get('mode')} a {CFG['MODE']}: saldo e posizioni ripartono da zero, "
               f"quanto appreso resta.")
@@ -588,10 +630,11 @@ def reject(st, mint, sym, reason, agent="Filter", cat=None, quiet=False):
     st.reject_reasons[cat or reason] += 1
     st.stats["rejected"] += 1
     msg = f"{sym} scartato: {reason}"
+    ex = {"mint": mint, "src": LAST_SRC.get(mint)}   # v8.3: fonte del candidato
     if quiet:
-        write_event(agent, "reject", msg, {"mint": mint})
+        write_event(agent, "reject", msg, ex)
     else:
-        log(st, agent, "reject", msg, mint=mint)
+        log(st, agent, "reject", msg, **ex)
 
 
 def csv_migrate(path, fields):
@@ -907,16 +950,28 @@ def build_features(st, mint, m, sec, ch):
 
 
 # ======================================================================= Scout
-def add_watch(st, mint, sym, src):
-    if not mint or mint in SKIP_MINTS or mint in st.watch or mint in st.positions:
+def add_watch(st, mint, sym, src, prio=False):
+    """v8.3: prio=True (trending) -> analizzato per primo e mai sfrattato da una nuova pool. Le fonti secondarie
+    (nuove pool, pump.fun) hanno un limite (WATCH_NEW_MAX): oltre, esce la piu vecchia non prioritaria."""
+    if not mint or mint in SKIP_MINTS or mint in st.positions:
+        return
+    if mint in st.watch:
+        if prio and not st.watch[mint].get("prio"):
+            st.watch[mint]["prio"] = True   # gia osservato da un'altra fonte: ora e anche in trending
         return
     if mint in st.processed or st.cooldown.get(mint, 0) > time.time():
         return
-    if len(st.watch) >= CFG["WATCH_MAX"]:
-        oldest = min(st.watch, key=lambda k: st.watch[k]["seen"])
+    low = [k for k, v in st.watch.items() if not v.get("prio")]
+    if len(st.watch) >= CFG["WATCH_MAX"] or (not prio and len(low) >= CFG["WATCH_NEW_MAX"]):
+        pool = low or list(st.watch)
+        oldest = min(pool, key=lambda k: st.watch[k]["seen"])
         w = st.watch.pop(oldest)
         reject(st, oldest, w["sym"], "watchlist piena", agent="Scout", cat="watchlist piena", quiet=True)
-    st.watch[mint] = {"seen": time.time(), "sym": str(sym)[:12], "src": src}
+    st.watch[mint] = {"seen": time.time(), "sym": str(sym)[:12], "src": src, "prio": bool(prio)}
+    LAST_SRC[mint] = src
+    if len(LAST_SRC) > 20000:
+        for k in list(LAST_SRC)[:5000]:
+            LAST_SRC.pop(k, None)
     st.stats["seen"] += 1
 
 
@@ -962,6 +1017,97 @@ async def scout_fomo(st):
         await asyncio.sleep(max(120, CFG["FOMO_SCOUT_SEC"]))
 
 
+async def _gmgn_rows():
+    """v8.3: GMGN resta nel codice ma e INATTIVO senza chiave personale (oggi nessuna chiave)."""
+    key = gmgn_personal_key()
+    if not key or "gmgn" not in SRC:
+        return []
+    SRC["gmgn"]._key = (lambda k=key: (k, "personal"))
+    r = await SRC["gmgn"].aget_trending(25, allow_substitute=False)
+    if r.get("source") != "gmgn_trending":
+        return []
+    return [(t["mint"], int(t.get("rank") or i + 1), {"symbol": t.get("symbol")})
+            for i, t in enumerate(r.get("tokens") or []) if t.get("mint")]
+
+
+def pf_cfg(st):
+    """v8.3: soglie effettive del prefiltro = CFG (codice + override) + passi del Learner, nei limiti."""
+    d = (st.learner_bonus or {}).get("pf_d") or {}
+    out = {}
+    for k, (lo, hi) in SRC["pf"].LIMITS.items():
+        out[k] = clamp(fnum(CFG.get(k, SRC["pf"].DEFAULTS[k])) + fnum(d.get(k)), lo, hi)
+    return out
+
+
+async def pf_learn(st, http, done):
+    """v8.3: esito a 60 minuti di ogni valutazione del prefiltro (passati e scartati, prezzo DexScreener) e un passo
+    all'ora sulla soglia che sbaglia di piu (allenta se scarta token che poi salgono, stringe se scarta peggio)."""
+    lb = st.learner_bonus
+    hist = lb.setdefault("pf_hist", [])
+    pend = SRC["pf"].load_pending(done=done)[:150]
+    if pend:
+        market = await dex_batch(http, list({r["mint"] for r in pend}))
+        for r in pend:
+            done.add((r["mint"], r["t"]))
+            pairs = market.get(r["mint"])
+            px = summarize(pairs)["price"] if pairs else 0.0
+            ret = (px / r["m"]["price"] - 1) * 100 if px > 0 else -100.0
+            hist.append([r["fails"], round(max(-100.0, min(ret, 1000.0)), 2), r["t"]])
+        del hist[:-600]
+    now = time.time()
+    if CFG["PF_LEARN"] and now - fnum(lb.get("pf_last")) >= CFG["LEARN_STEP_SEC"]:
+        res = SRC["pf"].learn_step([(h[0], h[1]) for h in hist], pf_cfg(st))
+        for k, (old, new, ac, nc, ap, npass) in res.items():
+            dd = lb.setdefault("pf_d", {})
+            dd[k] = round(fnum(dd.get(k)) + new - old, 6)
+            lb["pf_last"] = now
+            msg = (f"prefiltro {k} {fmtv(old)} -> {fmtv(new)} (scartati solo da questa soglia {ac:+.1f}% a 60 min su "
+                   f"{nc}, passati {ap:+.1f}% su {npass})")
+            st.lessons.append(f"{datetime.now(TZ):%d/%m %H:%M} {msg}")
+            log(st, "Learner", "learn_prefilter", msg, key=k, old=old, new=new)
+
+
+async def scout_trending(st, http):
+    """v8.3: FONTE PRINCIPALE. Aggregatore gratuito (DexScreener principale; GeckoTerminal 5m/1h/6h e pump.fun
+    secondari; GMGN solo con chiave personale). I migliori TREND_WATCH_TOP per trending_score entrano in watchlist
+    con priorita alta. Nessun filtro viene saltato."""
+    agg = SRC["tagg"].TrendingAgg(gmgn_fetch=_gmgn_rows)
+    done, last_note, last_pf = set(), 0.0, 0.0
+    while True:
+        try:
+            toks = await agg.refresh(http.get, cooldown=lambda h: time.time() - fnum(http.last429.get(h)) < 180)
+            now = time.time()
+            gecko = set()
+            for t in toks:
+                TREND_INFO[t["mint"]] = {k: t[k] for k in ("trending_score", "families", "n_fam", "sources", "ranks",
+                                                           "paid", "boost", "t")}
+                if "gecko" in t["families"]:
+                    gecko.add(t["mint"])
+                br = [t["ranks"][s] for s in ("dex_boost_top", "dex_boost_latest") if s in t["ranks"]]
+                if br:   # continuita con il bonus appreso FOMO_SUB_BONUS (src:dex_boosts_substitute)
+                    st.fomo_rank[t["mint"]] = {"rank": min(br), "source": "dex_boosts_substitute", "t": now}
+            if gecko:
+                st.trending = gecko
+            for t in toks[: int(CFG["TREND_WATCH_TOP"])]:
+                add_watch(st, t["mint"], t["symbol"] or "?", "trending_agg", prio=True)
+            for k in [k for k, v in TREND_INFO.items() if now - v["t"] > 6 * 3600]:
+                TREND_INFO.pop(k, None)
+            for k in [k for k, v in st.fomo_rank.items() if now - v["t"] > 6 * 3600]:
+                st.fomo_rank.pop(k, None)
+            if now - last_note > 1800:
+                c = agg.last["counts"]
+                log(st, "Scout", "info", "trending aggregato: " + ", ".join(f"{k} {v}" for k, v in c.items())
+                    + f" -> {min(len(toks), int(CFG['TREND_WATCH_TOP']))} in watchlist con priorita",
+                    counts=c)
+                last_note = now
+            if "pf" in SRC and now - last_pf > 600:
+                last_pf = now
+                await pf_learn(st, http, done)
+        except Exception as e:  # noqa: BLE001
+            log(st, "Scout", "warn", f"trending aggregato: errore ({type(e).__name__})")
+        await asyncio.sleep(max(60, CFG["TREND_SCOUT_SEC"]))
+
+
 async def scout_pumpportal(st):
     url = "wss://pumpportal.fun/api/data"
     backoff = 5
@@ -998,7 +1144,7 @@ async def scout_gecko(st, http):
             first = False
         for mint, name in found:
             add_watch(st, mint, name, "nuova pool")
-        if tick % 5 == 0:  # tendenze ogni 5 minuti
+        if tick % 5 == 0 and "tagg" not in SRC:  # tendenze ogni 5 minuti (v8.3: se manca l'aggregatore)
             tdata = await http.get("https://api.geckoterminal.com/api/v2/networks/solana/trending_pools?page=1",
                                    headers=headers)
             tr = gecko_mints(tdata)
@@ -1026,6 +1172,13 @@ SOFT_FLAGS = {
     "cluster": {"label": "cluster di wallet collegati", "hard": None, "dir": 1, "step": 0.0, "lim": (0.0, 0.0),
                 "pen": "CLUSTER_PENALTY", "size": "CLUSTER_SIZE_MULT", "pen_lim": (0.04, 0.15),
                 "size_lim": (0.2, 0.7)},
+    # v8.2: cluster o honeypot NON verificabili (RPC lenta, tempo scaduto): mai 'ok', penalita e size ridotta
+    "cluster_unknown": {"label": "cluster non verificato", "hard": None, "dir": 1, "step": 0.0, "lim": (0.0, 0.0),
+                        "pen": "CLUSTER_UNKNOWN_PENALTY", "size": "CLUSTER_UNKNOWN_SIZE_MULT",
+                        "pen_lim": (0.03, 0.12), "size_lim": (0.3, 0.7)},
+    "honeypot_unknown": {"label": "honeypot non verificato", "hard": None, "dir": 1, "step": 0.0, "lim": (0.0, 0.0),
+                         "pen": "CLUSTER_UNKNOWN_PENALTY", "size": "CLUSTER_UNKNOWN_SIZE_MULT",
+                         "pen_lim": (0.03, 0.12), "size_lim": (0.3, 0.7)},
 }
 LEARN_PEN_LIM = (0.02, 0.10)    # penalita per segnale: il Learner resta tra 0.02 e 0.10
 LEARN_SIZE_LIM = (0.3, 0.8)     # moltiplicatore size per segnale: tra 0.3x e 0.8x
@@ -1249,6 +1402,292 @@ async def cluster_scan(st, http, mint, sec):
     return res
 
 
+# ----------------------------------------------------------------------- v8.2: cluster v2, honeypot, etichette
+ST_REF = [None]   # stato corrente (per path_tick -> label_watch_tick)
+CL2 = {"tasks": {}, "cache": {}, "sem_bg": None, "sem_rt": None}
+SUSPECT_LABELS = ("bad_cluster", "suspected_rug")
+# casi gia osservati: registrati UNA volta come esempi per il Learner (chiave 'cluster_hard' + etichetta)
+LABEL_SEEDS = [
+    {"id": "beast-2026-10-30", "mint": "HRJPbDu8h4cH2gT1rKcmzNcvzX1M7jHKogS7zRJkpump", "sym": "BEAST",
+     "label": "rug", "from_label": "suspected_rug", "pnl_pct": -98.9, "rug": True,
+     "note": "cluster sybil: 1997 wallet con saldo identico al 76.4% dell'offerta, distributore dedicato "
+             "9dxrgj..DKn3 (fee payer e mittente per 132 dei top 150); non un falso positivo fomo/CEX. "
+             "Honeypot NO (vendibile, impatto 1.9%). Shadow +375% al massimo (22:18), poi alle 22:19:07 "
+             "dump coordinato: 100 vendite nello stesso secondo, ~309 SOL tolti dal pool (top holder 2wpaTV "
+             "8.6% = 56 SOL; H8fEoy 50.7; FkH6xB 33.6; 8QzUkG 26.2); prezzo -99.7%, liquidita da $68.6k a $1.8k. "
+             "LP non rimossa: dump, non rug di liquidita."},
+    {"id": "dessa-2026-10-30", "mint": "npz2FhoufQ7pKqhGpaipYWacrAkidyW2yDpVWSvpump", "sym": "DESSA",
+     "label": "cluster", "pnl_pct": None, "rug": False,
+     "note": "comprata alle 20:14 (v6, prima che esistesse il controllo cluster); l'analisi v7 a posteriori "
+             "la dava al limite (78% top holder nuovi, 2 reti). Ricontrollo v8.2 alle 22:22: 15.6k holder, "
+             "gruppo massimo 0.38%, nessuno sciame: oggi non e un cluster. Posizione tenuta con ricontrollo "
+             "ogni CLUSTER_HELD_RECHECK_MIN."},
+]
+
+
+def apply_label_seeds(st):
+    done = {x.get("id") for x in st.label_log}
+    for sd in LABEL_SEEDS:
+        if sd["id"] in done:
+            continue
+        st.label_log.append(dict(sd, t=int(time.time()), kind="seed"))
+        if sd.get("pnl_pct") is not None:
+            record_outcome(st, ["cluster_hard", "label:" + sd["label"]], sd["pnl_pct"], sd["rug"], "label-seed")
+        st.lessons.append(f"{datetime.now(TZ):%d/%m %H:%M} caso '{sd['label']}' {sd['sym']}: {sd['note'][:150]}")
+        write_event("Learner", "label_seed", f"caso etichettato {sd['sym']} = '{sd['label']}'",
+                    {"mint": sd["mint"], "label": sd["label"], "note": sd["note"]})
+
+
+def label_watch_tick(st, mint, price, liq, now=None):
+    """'bad_cluster'/'suspected_rug' -> 'rug' se il prezzo scende >= RUG_PROMOTE_DROP_PCT dal massimo o la
+    liquidita >= RUG_PROMOTE_LIQ_DROP_PCT dal massimo. Registra quando e come (dump o rimozione LP)."""
+    lab = st.labels.get(mint)
+    if lab not in SUSPECT_LABELS:
+        return None
+    price, liq, now = fnum(price), fnum(liq), now or time.time()
+    if price <= 0:
+        return None
+    w = st.label_watch.setdefault(mint, {"label": lab, "t0": now, "pk": price, "pk_t": now, "lpk": liq,
+                                         "last": price, "last_l": liq, "last_t": now})
+    dp = (1 - price / w["pk"]) * 100 if w["pk"] > 0 else 0.0
+    dl = (1 - liq / w["lpk"]) * 100 if w["lpk"] > 0 and liq > 0 else 0.0
+    out = None
+    if dp >= CFG["RUG_PROMOTE_DROP_PCT"] or dl >= CFG["RUG_PROMOTE_LIQ_DROP_PCT"]:
+        how = "rimozione LP" if dl >= CFG["RUG_PROMOTE_LIQ_DROP_PCT"] and dp < 30 else "dump (vendite massicce)"
+        ev = {"id": f"promote-{mint[:6]}-{int(now)}", "mint": mint, "label": "rug", "from_label": lab,
+              "kind": "promote", "t": int(now), "how": how, "drop_from_peak_pct": round(dp, 1),
+              "liq_drop_pct": round(dl, 1), "peak": w["pk"], "peak_t": int(w["pk_t"]), "price": price, "liq": liq,
+              "last_ok_t": int(w["last_t"]), "window": [int(w["last_t"]), int(now)]}
+        st.labels[mint] = "rug"
+        st.label_log.append(ev)
+        st.label_watch.pop(mint, None)
+        when = datetime.fromtimestamp(now, TZ).strftime("%d/%m %H:%M")
+        st.lessons.append(f"{when} '{lab}' diventato 'rug' ({how}): -{dp:.0f}% dal massimo, liquidita -{dl:.0f}%")
+        log(st, "Learner", "label_promote", f"{mint[:6]}.. '{lab}' -> 'rug': {how}, -{dp:.0f}% dal massimo, "
+            f"liquidita -{dl:.0f}% (tra {datetime.fromtimestamp(w['last_t'], TZ):%H:%M:%S} e {when})",
+            **{k: v for k, v in ev.items() if k not in ("kind", "mint")}, mint=mint)
+        try:   # chi ha venduto o tolto la LP: analisi on-chain fatta dopo (coda, nessun costo qui)
+            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "sources",
+                                   "rug_forensics_queue.jsonl"), "a") as fh:
+                fh.write(json.dumps(ev) + "\n")
+        except Exception:  # noqa: BLE001
+            pass
+        out = ev
+    else:
+        if price > w["pk"]:
+            w["pk"], w["pk_t"] = price, now
+        w["lpk"] = max(w["lpk"], liq)
+        w["last"], w["last_l"], w["last_t"] = price, liq, now
+    if len(st.label_watch) > 200:
+        st.label_watch.pop(min(st.label_watch, key=lambda k: st.label_watch[k]["last_t"]), None)
+    return out
+
+
+def cluster2_on():
+    return bool(CFG.get("CLUSTER_V2") and SRC.get("cluster2"))
+
+
+def cluster2_brief(cl):
+    if not cl:
+        return None
+    keys = ("level", "why", "max_group_pct", "max_group_wallets", "linked_pct", "cluster_pct", "cluster_infra_pct",
+            "infra_group_pct", "infra_group_fresh", "swarm_pct", "swarm_wallets", "fresh_share", "scanned",
+            "holders_total", "calls", "sec")
+    return {k: cl.get(k) for k in keys if k in cl}
+
+
+def cluster2_signal(cl):
+    lv = (cl or {}).get("level", "unknown")
+    pct = fnum((cl or {}).get("cluster_pct"))
+    b = "0-5" if pct < 5 else "5-10" if pct < 10 else "10-20" if pct < 20 else "20+"
+    return f"cluster2:{lv}" + ("" if lv == "unknown" else f":{b}")
+
+
+async def _cl2_post(http, url, body):
+    """POST JSON-RPC senza il passo fisso di Http (la cadenza la decide cluster_v2); 429 = None."""
+    if not hasattr(http, "s") or not hasattr(http, "_wait"):
+        return await http.post(url, body)
+    await http._wait(url)
+    try:
+        async with http.s.post(url, json=body) as r:
+            if r.status != 200:
+                return None
+            return await r.json(content_type=None)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+async def _rc_sec(http, mint):
+    """Pool/curve/locker da escludere e programma del token, dal report RugCheck (per posizioni gia aperte)."""
+    r = await http.get(f"https://api.rugcheck.xyz/v1/tokens/{mint}/report")
+    if not isinstance(r, dict):
+        return None
+    ex = set()
+    for mk in r.get("markets") or []:
+        for v in list(mk.values()) + list((mk.get("lp") or {}).values()):
+            if isinstance(v, str):
+                ex.add(v)
+    for a, i in (r.get("knownAccounts") or {}).items():
+        if isinstance(i, dict) and str(i.get("type", "")).upper() in ("AMM", "LOCKER", "BURN", "PROGRAM"):
+            ex.add(a)
+    return {"exclude": sorted(ex), "token_program": r.get("tokenProgram")}
+
+
+async def cluster2_scan(st, http, mint, sec, sym="?", rt=False):
+    hit = CL2["cache"].get(mint)
+    if hit and time.time() - hit[0] < CFG["CLUSTER_CACHE_SEC"]:
+        return hit[1]
+    key = "sem_rt" if rt else "sem_bg"
+    if CL2[key] is None:
+        CL2[key] = asyncio.Semaphore(1)
+    async with CL2[key]:
+        hit = CL2["cache"].get(mint)
+        if hit and time.time() - hit[0] < CFG["CLUSTER_CACHE_SEC"]:
+            return hit[1]
+        cfg = {"BUDGET_SEC": CFG["CLUSTER2_BUDGET_SEC"],
+               "GROUP_HARD_PCT": min(20.0, fnum(CFG["CLUSTER_GROUP_HARD_PCT"], 20.0))}
+        try:
+            res = await SRC["cluster2"].scan(lambda u, b: _cl2_post(http, u, b), mint,
+                                             exclude=sec.get("exclude") or [], token_program=sec.get("token_program"),
+                                             cfg=cfg)
+        except Exception as e:  # noqa: BLE001
+            res = {"level": "unknown", "why": f"errore {type(e).__name__}"}
+    res = res or {"level": "unknown", "why": "nessun risultato"}
+    if res.get("level") != "unknown":   # un 'unknown' non resta in cache: al prossimo giro si riprova
+        CL2["cache"][mint] = (time.time(), res)
+    for k in [k for k, v in CL2["cache"].items() if time.time() - v[0] > CFG["CLUSTER_CACHE_SEC"]]:
+        CL2["cache"].pop(k, None)
+    br = cluster2_brief(res)
+    log(st, "Analyst", "cluster2", f"{sym} cluster v2 {res['level']}: {res.get('why') or 'nessun gruppo'} "
+        f"(gruppo {fnum(res.get('max_group_pct')):.1f}%, via exchange/app {fnum(res.get('cluster_infra_pct')):.1f}%, "
+        f"sciame {fnum(res.get('swarm_pct')):.1f}%)", mint=mint, **{k: v for k, v in br.items() if k != "why"})
+    sh = st.shadow_trades.get(mint)
+    if sh is not None:   # dati per il Learner anche sugli shadow (es. scarti per momentum come BEAST)
+        sh["cluster2"] = br
+        sig = cluster2_signal(res)
+        if sig not in (sh.get("signals") or []):
+            sh.setdefault("signals", []).append(sig)
+    if res["level"] == "hard":
+        st.labels.setdefault(mint, "bad_cluster")
+    return res
+
+
+def cluster2_start(st, http, mint, sec, sym="?", rt=False):
+    t = CL2["tasks"].get(mint)
+    if t is not None and not t.done():
+        return t
+    hit = CL2["cache"].get(mint)
+    if not rt and hit and time.time() - hit[0] < CFG["CLUSTER_CACHE_SEC"]:
+        return None
+    for k in [k for k, v in CL2["tasks"].items() if v.done()]:
+        CL2["tasks"].pop(k, None)
+    if not rt and len(CL2["tasks"]) >= int(CFG["CLUSTER2_MAX_QUEUE"]):
+        return None   # coda piena: lo shadow resta senza dati cluster (un trade vero lo rilancia con rt=True)
+    t = asyncio.ensure_future(cluster2_scan(st, http, mint, sec, sym, rt))
+    CL2["tasks"][mint] = t
+    return t
+
+
+async def cluster2_wait(st, http, mint, sec, task, sym="?"):
+    """Risultato per un trade vero: attende al massimo CLUSTER2_WAIT_SEC. Mai None: 'unknown' se non riesce."""
+    hit = CL2["cache"].get(mint)
+    if hit and time.time() - hit[0] < CFG["CLUSTER_CACHE_SEC"]:
+        return hit[1]
+    t = task
+    if t is not None and t.done() and (t.cancelled() or t.exception() is not None):
+        t = None
+    if t is None:
+        t = cluster2_start(st, http, mint, sec, sym, rt=True)
+    try:
+        res = await asyncio.wait_for(asyncio.shield(t), CFG["CLUSTER2_WAIT_SEC"])
+    except asyncio.TimeoutError:
+        res = {"level": "unknown", "why": f"tempo scaduto ({CFG['CLUSTER2_WAIT_SEC']:g}s)"}
+    except Exception as e:  # noqa: BLE001
+        res = {"level": "unknown", "why": f"errore {type(e).__name__}"}
+    return res if isinstance(res, dict) and res.get("level") else {"level": "unknown", "why": "nessun risultato"}
+
+
+async def cluster2_held(st, http, mint, p):
+    """Ricontrollo cluster di una posizione aperta: 'hard' -> uscita (o solo avviso) al prossimo giro del Risk."""
+    try:
+        sec = p.get("cl_sec") or await _rc_sec(http, mint)
+        if not sec:
+            return
+        p.setdefault("cl_sec", sec)
+        res = await cluster2_scan(st, http, mint, sec, p.get("symbol", "?"))
+        p["cluster2"] = cluster2_brief(res)
+        if res["level"] == "hard" and mint in st.positions:
+            p["cluster_exit"] = res.get("why") or "cluster rigido"
+            log(st, "Risk", "cluster_held", f"{p.get('symbol')}: cluster rigido sulla posizione aperta "
+                f"({res.get('why')}) -> {CFG['CLUSTER_HELD_ACTION']}", mint=mint)
+    except Exception as e:  # noqa: BLE001
+        log(st, "Risk", "warn", f"ricontrollo cluster non riuscito ({type(e).__name__})")
+
+
+async def _hp_quote(http, inp, out, amount, tries=4):
+    """v8.2: solo PREVENTIVO Jupiter (mai swap), con riprova su 429/rete."""
+    q, err = None, None
+    for i in range(tries):
+        q, err = await jup_quote(http, inp, out, amount)
+        if q is not None or err == "no_route" or not (str(err).startswith("http 429") or str(err).startswith("rete") or str(err).startswith("http 5")):
+            return q, err
+        await asyncio.sleep(1.5 * (i + 1))
+    return q, err
+
+
+async def honeypot_check(st, http, mint, size_usd, sec):
+    """Solo letture: account del mint (estensioni Token-2022 + authority), preventivo Jupiter di acquisto e di
+    VENDITA alla nostra size (mai uno swap), rischi RugCheck gia letti dal Filter.
+    Ritorna {level: ok|hard|unknown, why, ...}. 'unknown' non vale mai come ok."""
+    hp = SRC["honeypot"]
+    out = {"level": "ok", "why": ""}
+    hard, soft, miss = [], [], []
+    if http is None:
+        return {"level": "unknown", "why": "nessuna connessione"}
+    acc = None
+    for url in ("https://solana-rpc.publicnode.com", CFG["RPC_URL"]):
+        d = await _cl2_post(http, url, {"jsonrpc": "2.0", "id": 1, "method": "getAccountInfo",
+                                        "params": [mint, {"encoding": "jsonParsed"}]})
+        acc = ((d or {}).get("result") or {}).get("value") if isinstance(d, dict) else None
+        if acc:
+            break
+    parsed = ((acc or {}).get("data") or {}).get("parsed") if isinstance((acc or {}).get("data"), dict) else None
+    if parsed:
+        h, s_, info = hp.mint_flags(parsed, {"MAX_TRANSFER_FEE_BPS": CFG["HONEYPOT_MAX_FEE_BPS"]})
+        hard += h
+        soft += s_
+        out["extensions"] = info.get("extensions")
+        out["token_program"] = (acc or {}).get("owner")
+    else:
+        miss.append("account del mint non letto")
+    # RugCheck (gia letto dal Filter): rug segnalato o authority = rigido
+    if sec.get("rugged"):
+        hard.append("RugCheck: token segnalato come rug")
+    sol = sol_usd() if sol_known() else 0.0
+    lam = int((size_usd / sol if sol > 0 else 0.1) * 1e9)
+    q, err = await _hp_quote(http, WSOL, mint, lam)
+    if err == "no_route":
+        hard.append("nessun percorso d'acquisto su Jupiter")
+    elif not q:
+        miss.append(f"preventivo d'acquisto non disponibile ({err})")
+    else:
+        q2, err2 = await _hp_quote(http, mint, WSOL, int(q["outAmount"]))
+        why, info = hp.sell_verdict(q2, err2, lam, {"SELL_IMPACT_HARD_PCT": min(25.0, CFG["HONEYPOT_SELL_IMPACT_PCT"])})
+        out.update(info)
+        if why:
+            hard.append(why)
+        elif not q2:
+            miss.append(f"preventivo di vendita non disponibile ({err2})")
+    out["soft"] = soft
+    if hard:
+        out.update(level="hard", why="; ".join(hard))
+    elif miss:
+        out.update(level="unknown", why="; ".join(miss))
+    else:
+        out["why"] = "; ".join(soft)
+    return out
+
+
 # ----------------------------------------------------------------------- v8.1: stop dinamico e feature d'ingresso
 def crash_level(stop):
     """Uscita immediata per crollo relativa allo stop: CRASH_EXIT_PCT se lo stop e piu stretto, altrimenti
@@ -1383,6 +1822,10 @@ async def entry_features(st, http, mint, m, signals=None, candles=None, soft=Non
               # v8.1b: TP / trailing (base = usati davvero; dyn = solo registrati)
               "tp1_base": tpb[0], "trail_act_base": tpb[1], "trail_dist_base": tpb[2],
               "dyn_tp1": tpd[0], "dyn_trail_act": tpd[1], "dyn_trail_dist": tpd[2], "dyn_tp_mode": tp_mode}
+        ti = TREND_INFO.get(mint) or {}   # v8.3
+        fe.update({"src": m.get("src"), "trending_score": ti.get("trending_score"),
+                   "trend_families": ti.get("families"), "trend_sources": ti.get("sources"),
+                   "trend_paid": ti.get("paid")})
     except Exception as e:  # noqa: BLE001
         fe = dict(fe, error=type(e).__name__)
     return fe
@@ -1426,6 +1869,11 @@ def path_write(mint, rec):
 
 
 def path_tick(mint, kind, price, liq, pnl=None, now=None, ev=None):
+    if ST_REF[0] is not None and not ev:
+        try:
+            label_watch_tick(ST_REF[0], mint, price, liq, now)   # v8.2
+        except Exception:  # noqa: BLE001
+            pass
     rec = {"t": int(now or time.time()), "k": kind, "p": float(f"{fnum(price):.6g}"), "l": round(fnum(liq))}
     if pnl is not None:
         rec["pnl"] = round(fnum(pnl), 2)
@@ -1566,10 +2014,11 @@ def is_rug_event(reason, minutes):
 BONUS_KEYS = {"GMGN_TREND_BONUS": ("src:gmgn_trending", 0.01), "FOMO_TREND_BONUS": ("src:fomo_trending", 0.01), "FOMO_SUB_BONUS": ("src:dex_boosts_substitute", 0.01),
               "KOL_BONUS": ("kol:", 0.01), "KOL_THESIS_BONUS": ("kol_thesis:", 0.005),
               "MOMENTUM_YOUNG_BONUS": ("momentum_young:", 0.01),
-              "PROJECT_BONUS": ("proj_good:", 0.01)}  # v8
+              "PROJECT_BONUS": ("proj_good:", 0.01),  # v8
+              "TREND_MULTI_BONUS": ("trend_multi:", 0.005)}  # v8.3
 # v8: penalita apprese al contrario: se gli esiti CON il tag sono peggiori -> +passo, altrimenti -passo fino a 0
 PENALTY_KEYS = {"PROJECT_EMPTY_PENALTY": ("proj_empty", 0.005)}
-BONUS_LIMITS = {"PROJECT_BONUS": (0.0, 0.06), "PROJECT_EMPTY_PENALTY": (0.0, 0.03), "PROJECT_MIN_SCORE": (0.3, 0.8),
+BONUS_LIMITS = {"TREND_MULTI_BONUS": (0.0, 0.04), "PROJECT_BONUS": (0.0, 0.06), "PROJECT_EMPTY_PENALTY": (0.0, 0.03), "PROJECT_MIN_SCORE": (0.3, 0.8),
                 "GMGN_TREND_BONUS": (0.0, 0.08), "FOMO_TREND_BONUS": (0.0, 0.08), "FOMO_SUB_BONUS": (0.0, 0.03), "KOL_BONUS": (0.0, 0.08),
                 "KOL_THESIS_BONUS": (0.0, 0.06), "MOMENTUM_YOUNG_BONUS": (0.0, 0.08), "TOTAL_BONUS_CAP": (0.0, 0.10),
                 "KOL_SOLD_PENALTY": (0.0, 0.05), "KOL_MIN_SOL": (0.05, 1.0), "MOMENTUM_MIN_SCORE": (0.4, 0.8)}
@@ -1618,6 +2067,10 @@ async def compute_bonus(st, mint, m, sec=None):
             parts += cfgb["FOMO_TREND_BONUS"]
         elif fr["source"] == "dex_boosts_substitute":
             parts += cfgb["FOMO_SUB_BONUS"]
+    ti = TREND_INFO.get(mint)
+    if ti and ti.get("n_fam", 0) >= 2:   # v8.3: in trending su 2+ fonti indipendenti
+        tags.append(f"trend_multi:{ti['n_fam']}")
+        parts += cfgb["TREND_MULTI_BONUS"]
     if "mom" in SRC:
         mr = await SRC["mom"].amomentum(mint)
         b, t = SRC["mom"].momentum_bonus(mr or {}, cfgb)
@@ -1954,10 +2407,14 @@ async def filter_agent(st, http, q_out):
                        cat="volume insufficiente", quiet=True)
         if not st.watch:
             continue
-        market = await dex_batch(http, list(st.watch.keys()))
-        for mint, pairs in market.items():
+        order = sorted(st.watch, key=lambda k: (0 if st.watch[k].get("prio") else 1,
+                                                -fnum((TREND_INFO.get(k) or {}).get("trending_score")),
+                                                st.watch[k]["seen"]))
+        market = await dex_batch(http, order)
+        for mint in order:
+            pairs = market.get(mint)
             try:
-                if mint not in st.watch:
+                if mint not in st.watch or not pairs:
                     continue
                 m = summarize(pairs)
                 w = st.watch[mint]
@@ -1973,6 +2430,14 @@ async def filter_agent(st, http, q_out):
                 if m["price"] <= 0 or m["liq"] <= 0 or m["liq"] < CFG["MIN_LIQUIDITY_USD"]:
                     reject(st, mint, m["symbol"], f"liquidita ${m['liq']:,.0f} troppo bassa", cat="liquidita bassa")
                     continue
+                if CFG["PF_ENABLED"] and "pf" in SRC:   # v8.3: prefiltro economico stile DexScreener
+                    ti = TREND_INFO.get(mint) or {}
+                    fails, snap = SRC["pf"].evaluate(m, pf_cfg(st), paid=bool(ti.get("paid")))
+                    SRC["pf"].log_eval(mint, m["symbol"], m["src"], fails, snap)
+                    if fails:
+                        st.stats["prefilter_reject"] = st.stats.get("prefilter_reject", 0) + 1
+                        reject(st, mint, m["symbol"], "prefiltro: " + ", ".join(fails), cat="prefiltro " + fails[0])
+                        continue
                 ok, reason, cat, sec = await security_check(st, http, mint, m, cache)
                 if not ok:
                     reject(st, mint, m["symbol"], reason, cat=cat)
@@ -1982,7 +2447,7 @@ async def filter_agent(st, http, q_out):
                                          "shadow_only": reason, "shadow_keys": sec.get("shadow_keys")})
                     continue
                 st.stats["filter_pass"] += 1
-                log(st, "Filter", "pass", f"{m['symbol']} superato: {reason}", mint=mint)
+                log(st, "Filter", "pass", f"{m['symbol']} superato: {reason}", mint=mint, src=m["src"])
                 await q_out.put({"mint": mint, "m": m, "sec": sec, "filter_ok": True})
             except Exception as e:  # noqa: BLE001
                 log(st, "Filter", "error", f"errore su un token ({type(e).__name__}), continuo")
@@ -2167,6 +2632,9 @@ async def analyst_agent(st, http, q_in, q_out):
             if not c.get("filter_ok"):
                 log(st, "Analyst", "block", f"{m['symbol']} bloccato: non arriva dal Filter")
                 continue
+            # v8.2: scansione cluster v2 per OGNI candidato che passa il Filter (in background: i dati servono
+            # anche agli shadow); per un trade vero il risultato viene atteso prima della decisione
+            cl_task = cluster2_start(st, http, mint, c.get("sec") or {}, sym=m["symbol"]) if cluster2_on() else None
             why = []
             if CFG.get("MAX_CHANGE_H1_PCT") is not None and m["chg_h1"] > CFG["MAX_CHANGE_H1_PCT"]:
                 why.append(f"gia +{m['chg_h1']:.0f}% in 1h")
@@ -2254,6 +2722,12 @@ async def analyst_agent(st, http, q_in, q_out):
             fr = st.fomo_rank.get(mint)
             if fr and f"src:{fr['source']}" not in signals:
                 signals.append(f"src:{fr['source']}")   # in trending anche se scoperto da un'altra fonte
+            ti = TREND_INFO.get(mint)
+            if ti:   # v8.3
+                for tg in ("src:trending_agg", f"trend_score:{ti['trending_score']:.3f}",
+                           "trend_src:" + "+".join(ti["families"])):
+                    if tg not in signals:
+                        signals.append(tg)
             bonus = 0.0
             if CFG["SIGNALS_ENABLED"] and not so and score - pen >= st.threshold - bonus_eff(st, "TOTAL_BONUS_CAP"):
                 try:
@@ -2264,9 +2738,37 @@ async def analyst_agent(st, http, q_in, q_out):
             score += bonus
             score_raw = score
             score -= pen
-            # v7: controllo cluster on-chain (gratis, RPC pubblica) solo sui token che passerebbero
+            # v8.2: cluster v2 prima della decisione. 'unknown' (errore/tempo scaduto) non vale mai come 'ok'.
             cl = None
-            if CFG["CLUSTER_CHECK"] and not so and score >= st.threshold:
+            if cluster2_on() and not so and score >= st.threshold:
+                cl = await cluster2_wait(st, http, mint, c.get("sec") or {}, cl_task, m["symbol"])
+                signals.append(cluster2_signal(cl))
+                if cl["level"] == "hard":
+                    reason = f"cluster di wallet collegati: {cl['why']}"
+                    rej(reason, agent="Analyst", cat="cluster")
+                    st.labels.setdefault(mint, "bad_cluster")
+                    if CFG["SHADOW_TRADES"]:  # la soglia rigida non viene mai allentata: si misura soltanto
+                        spawn_shadow(st, http, mint, m, ["cluster_hard"], reason, score, flags + ["cluster"],
+                                     tag="cluster", signals=signals)
+                    continue
+                if cl["level"] == "unknown":
+                    if CFG["CLUSTER_UNKNOWN_ACTION"] == "skip":
+                        rej(f"cluster non verificabile: {cl.get('why')}", agent="Analyst", cat="cluster non verificato")
+                        if CFG["SHADOW_TRADES"]:
+                            spawn_shadow(st, http, mint, m, ["cluster_unknown"], "cluster non verificabile", score,
+                                         flags + ["cluster_unknown"], signals=signals)
+                        continue
+                    if "cluster_unknown" not in flags:
+                        flags.append("cluster_unknown")
+                        pen += soft_pen(st, "cluster_unknown")
+                        score -= soft_pen(st, "cluster_unknown")
+                        smult *= soft_size(st, "cluster_unknown")
+                if cl["level"] == "soft" and "cluster" not in flags:
+                    flags.append("cluster")
+                    pen += soft_pen(st, "cluster")
+                    score -= soft_pen(st, "cluster")
+                    smult *= soft_size(st, "cluster")
+            elif CFG["CLUSTER_CHECK"] and not so and score >= st.threshold:   # v7 (solo se cluster_v2 manca)
                 try:
                     cl = await cluster_scan(st, http, mint, c.get("sec") or {})
                 except Exception as e:  # noqa: BLE001
@@ -2280,15 +2782,16 @@ async def analyst_agent(st, http, q_in, q_out):
                 if cl and cl["level"] == "hard":
                     reason = f"cluster estremo di wallet collegati: {cl['why']}"
                     rej(reason, agent="Analyst", cat="cluster")
-                    if CFG["SHADOW_TRADES"]:  # la soglia estrema non viene mai allentata: si misura soltanto
+                    if CFG["SHADOW_TRADES"]:
                         spawn_shadow(st, http, mint, m, ["cluster_hard"], reason, score, flags + ["cluster"],
                                      tag="cluster", signals=signals)
                     continue
-                if cl and cl["level"] == "soft" and "cluster" not in flags:
-                    flags.append("cluster")
-                    pen += soft_pen(st, "cluster")
-                    score -= soft_pen(st, "cluster")
-                    smult *= soft_size(st, "cluster")
+                flag = "cluster" if cl and cl["level"] == "soft" else ("cluster_unknown" if not cl else None)
+                if flag and flag not in flags:   # v8.2: anche qui un fallimento non vale come 'ok'
+                    flags.append(flag)
+                    pen += soft_pen(st, flag)
+                    score -= soft_pen(st, flag)
+                    smult *= soft_size(st, flag)
             if bonus:
                 signals.append(f"bonus:{bonus:.3f}")
             detail = f"punteggio {score:.2f} (soglia {st.threshold:.2f})" + \
@@ -3007,6 +3510,26 @@ async def _execute_buy(st, broker, c, mint, m):
     if size < 1:
         reject(st, mint, m["symbol"], "liquidita del conto insufficiente", agent="Executor", cat="conto vuoto")
         return
+    # v8.2: honeypot (estensioni Token-2022, authority, preventivo di VENDITA, RugCheck) prima di ogni ingresso
+    if CFG["HONEYPOT_CHECK"] and SRC.get("honeypot"):
+        hp = await honeypot_check(st, getattr(broker, "http", None), mint, size, c.get("sec") or {})
+        log(st, "Executor", "honeypot", f"{m['symbol']} honeypot {hp['level']}: {hp['why'] or 'nessun problema'}",
+            mint=mint, **{k: v for k, v in hp.items() if k not in ("why",)})
+        if hp["level"] == "hard":
+            reject(st, mint, m["symbol"], f"honeypot: {hp['why']}", agent="Executor", cat="honeypot")
+            st.labels.setdefault(mint, "suspected_rug")
+            return
+        if hp["level"] == "unknown":
+            if CFG["HONEYPOT_UNKNOWN_ACTION"] == "skip":
+                reject(st, mint, m["symbol"], f"honeypot non verificabile: {hp['why']}", agent="Executor",
+                       cat="honeypot non verificato")
+                return
+            size *= soft_size(st, "honeypot_unknown")
+            c["soft"] = list(c.get("soft") or []) + ["honeypot_unknown"]
+            if size < 1:
+                reject(st, mint, m["symbol"], "size troppo piccola dopo honeypot non verificato", agent="Executor",
+                       cat="conto vuoto")
+                return
     # costi: scarta se 5 x costo stimato andata+ritorno supera il primo gradino di profitto
     rt = roundtrip_cost_pct(size, m["liq"])
     pre = None
@@ -3054,6 +3577,10 @@ async def _execute_buy(st, broker, c, mint, m):
         # v8.1
         "entry_features": fe, "stop_dyn": fe.get("dyn_stop_shadow"), "stop_dyn_on": fe.get("dyn_stop_shadow") if dyn_on else None,
         "trough_pct": 0.0, "dyn_hits": 0, "dyn_hit": None,
+        # v8.2: per il ricontrollo cluster della posizione
+        "cl_sec": {"exclude": (c.get("sec") or {}).get("exclude") or [],
+                   "token_program": (c.get("sec") or {}).get("token_program")},
+        "cluster2": cluster2_brief(c.get("cluster")),
     }
     st.stats["buys"] += 1
     path_tick(mint, "real", m["price"], m["liq"], 0.0, ev="entry")  # v8.1
@@ -3106,7 +3633,11 @@ OVR_GLOBAL_MAP = {"STOP_LOSS_PCT": "STOP_LOSS_PCT", "TRAIL_START_PCT": "TRAIL_AC
                                     "DYN_STOP_SIZE_SCALE", "DYN_TP_MODE", "DYN_TP1_ATR_MULT", "DYN_TP1_MIN",
                                     "DYN_TP1_MAX", "DYN_TRAIL_ACT_ATR_MULT", "DYN_TRAIL_ACT_MIN",
                                     "DYN_TRAIL_ACT_MAX", "DYN_TRAIL_DIST_ATR_MULT", "DYN_TRAIL_DIST_MIN",
-                                    "DYN_TRAIL_DIST_MAX")}}
+                                    "DYN_TRAIL_DIST_MAX",
+                                    # v8.2
+                                    "CLUSTER_GROUP_HARD_PCT", "CLUSTER2_WAIT_SEC", "CLUSTER_UNKNOWN_PENALTY",
+                                    "CLUSTER_UNKNOWN_SIZE_MULT", "CLUSTER_HELD_RECHECK_MIN", "HONEYPOT_SELL_IMPACT_PCT",
+                                    "CLUSTER_UNKNOWN_ACTION", "CLUSTER_HELD_ACTION", "HONEYPOT_UNKNOWN_ACTION")}}
 OVR_POS_MAP = {"stop_loss_pct": "STOP_LOSS_PCT", "take_profit_pct": "TAKE_PROFIT_PCT",
                "tp_sell_fraction": "TAKE_PROFIT_FRACTION", "trail_dist_pct": "TRAIL_DISTANCE_PCT"}
 OVR_ACTIONS = ("hold", "sell_all", "sell_half")
@@ -3138,14 +3669,35 @@ OVR_LIMITS = {"STOP_LOSS_PCT": (-30.0, -3.0), "TRAIL_DISTANCE_PCT": (3.0, 25.0),
               "DYN_TRAIL_ACT_ATR_MULT": (1.0, 20.0), "DYN_TRAIL_ACT_MIN": (3.0, 100.0),
               "DYN_TRAIL_ACT_MAX": (15.0, 200.0),
               "DYN_TRAIL_DIST_ATR_MULT": (0.5, 8.0), "DYN_TRAIL_DIST_MIN": (2.0, 15.0), "DYN_TRAIL_DIST_MAX": (5.0, 25.0),
+              # v8.2: le soglie rigide si possono solo STRINGERE (massimo = valore di partenza)
+              "CLUSTER_GROUP_HARD_PCT": (10.0, 20.0), "HONEYPOT_SELL_IMPACT_PCT": (10.0, 25.0),
+              "CLUSTER2_WAIT_SEC": (20.0, 180.0), "CLUSTER_UNKNOWN_PENALTY": (0.02, 0.15),
+              "CLUSTER_UNKNOWN_SIZE_MULT": (0.2, 1.0), "CLUSTER_HELD_RECHECK_MIN": (5.0, 120.0),
               **BONUS_LIMITS}
-OVR_STR_KEYS = {"DYN_STOP_MODE": ("off", "shadow", "on"), "DYN_TP_MODE": ("off", "shadow")}  # v8.1: valori testuali ammessi
+OVR_STR_KEYS = {"DYN_STOP_MODE": ("off", "shadow", "on"), "DYN_TP_MODE": ("off", "shadow"),
+                "CLUSTER_UNKNOWN_ACTION": ("soft", "skip"), "CLUSTER_HELD_ACTION": ("exit", "alert"),
+                "HONEYPOT_UNKNOWN_ACTION": ("soft", "skip")}  # v8.1: valori testuali ammessi
 OVR_BOOL_KEYS = {"DYN_STOP_SIZE_SCALE"}
 OVR_INT_KEYS = {"MAX_HOLD_MIN", "TIME_STOP_MIN", "SOFT_MAX_FLAGS", "BUNDLE_MAX_NETWORKS", "BUNDLE_NET_MIN_WALLETS",
                 "BUNDLE_MAX_INSIDER_WALLETS", "CLUSTER_SOFT_NETWORKS", "LP_SOFT_MAX_HOLD_MIN", "DEEP_HOLD_EXTRA_MIN",
-                "DYN_STOP_SIZE_SCALE"}
+                "DYN_STOP_SIZE_SCALE", "CLUSTER2_WAIT_SEC", "CLUSTER_HELD_RECHECK_MIN"}
 SL_WARN_REF = -10.0  # avviso se uno stop da override e piu largo di -10%
 # valori originali (codice + config.json): cancellare overrides.json riporta a questi
+# v8.3: trending come fonte principale + prefiltro DexScreener (soglie PF_* in sources/dex_prefilter.py)
+CFG.setdefault("TREND_SCOUT_SEC", 120)       # un giro dell'aggregatore ogni 2 minuti
+CFG.setdefault("TREND_WATCH_TOP", 60)        # quanti trending entrano in watchlist (priorita alta) per giro
+CFG.setdefault("WATCH_NEW_MAX", 1200)        # limite per le fonti secondarie (nuove pool, pump.fun)
+CFG.setdefault("TREND_MULTI_BONUS", 0.02)    # bonus solo se in trending su 2+ fonti (dentro TOTAL_BONUS_CAP)
+CFG.setdefault("PF_ENABLED", True)
+CFG.setdefault("PF_LEARN", True)
+if "pf" in SRC:
+    for _k, _v in SRC["pf"].DEFAULTS.items():
+        CFG.setdefault(_k, _v)
+    OVR_LIMITS.update(SRC["pf"].LIMITS)
+OVR_LIMITS.update({"TREND_WATCH_TOP": (10.0, 150.0), "WATCH_NEW_MAX": (200.0, 2000.0), "TREND_SCOUT_SEC": (60.0, 900.0)})
+OVR_INT_KEYS |= {"TREND_WATCH_TOP", "WATCH_NEW_MAX", "TREND_SCOUT_SEC"}
+OVR_GLOBAL_MAP.update({k: k for k in list(SRC["pf"].LIMITS if "pf" in SRC else []) + ["TREND_WATCH_TOP", "WATCH_NEW_MAX",
+                                                                                      "TREND_SCOUT_SEC", "TREND_MULTI_BONUS"]})
 OVR_DEFAULTS = {k: CFG[k] for k in list(OVR_LIMITS) + list(OVR_STR_KEYS)}
 
 
@@ -3607,11 +4159,17 @@ async def risk_agent(st, http, broker):
                             await sell_position(st, broker, mint, f"tempo massimo {mh:g} min" +
                                                 (" (LP sbloccata)" if mh < CFG["MAX_HOLD_MIN"] else "") +
                                                 (f" (deep review {dx['score']:.0f})" if mh > CFG["MAX_HOLD_MIN"] else ""))
+                        elif p.get("cluster_exit") and CFG["CLUSTER_HELD_ACTION"] == "exit":
+                            await sell_position(st, broker, mint, f"cluster rigido sulla posizione: {p['cluster_exit']}")
                         elif time.time() - st.sec_checked.get(mint, 0) > CFG["RECHECK_SECURITY_MIN"] * 60:
                             st.sec_checked[mint] = time.time()
                             why = await recheck_security(st, http, mint, p)
                             if why:
                                 await sell_position(st, broker, mint, why)
+                        if mint in st.positions and cluster2_on() and \
+                                time.time() - st.cl_checked.get(mint, 0) > CFG["CLUSTER_HELD_RECHECK_MIN"] * 60:
+                            st.cl_checked[mint] = time.time()   # v8.2: in background, nessuna attesa qui
+                            asyncio.ensure_future(cluster2_held(st, http, mint, p))
                     except Exception as e:  # noqa: BLE001
                         log(st, "Risk", "error", f"errore su {p.get('symbol')} ({type(e).__name__}), continuo")
             # v8.1: trade veri gia chiusi, seguiti per POST_EXIT_MIN: nella stessa chiamata delle posizioni aperte;
@@ -4126,6 +4684,8 @@ async def supervise(st, name, factory):
 
 async def main():
     st = load_state()
+    ST_REF[0] = st
+    apply_label_seeds(st)   # v8.2
     mode = CFG["MODE"]
     if mode not in ("paper", "dry", "live"):
         print(f"MODE '{mode}' non valido: usa paper, dry o live")
@@ -4155,7 +4715,7 @@ async def main():
         jobs = {
             "Scout pump.fun": lambda: scout_pumpportal(st),
             "Scout pool": lambda: scout_gecko(st, http),
-            "Scout trending": lambda: scout_fomo(st),
+            "Scout trending": (lambda: scout_trending(st, http)) if "tagg" in SRC else (lambda: scout_fomo(st)),
             "Filter": lambda: filter_agent(st, http, q_an),
             "Analyst": lambda: analyst_agent(st, http, q_an, q_ex),
             "Executor": lambda: executor_agent(st, broker, q_ex),

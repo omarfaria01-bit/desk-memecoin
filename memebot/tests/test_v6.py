@@ -1,5 +1,6 @@
 import asyncio, csv, json, os, time
 import desk as D
+D.CFG["CLUSTER_V2"] = False; D.CFG["HONEYPOT_CHECK"] = False  # v8.2: provati a parte in test_v82.py
 
 D.CFG.update({"SIM_LATENCY_MIN_SEC": 0.0, "SIM_LATENCY_MAX_SEC": 0.0, "SIM_FAIL_PROB_BUY": 0.0,
               "SIM_FAIL_PROB_SELL": 0.0, "SIM_FAIL_PROB_SELL_FAST": 0.0, "SIM_QUOTE_EXTRA_FEE_PCT": 0.0})

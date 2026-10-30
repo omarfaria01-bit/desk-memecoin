@@ -1,6 +1,7 @@
 """v6: segnali soft graduati, shadow trade e Learner sugli shadow. Offline (rete simulata)."""
 import asyncio, csv, json, os, time
 import desk as D
+D.CFG["CLUSTER_V2"] = False; D.CFG["HONEYPOT_CHECK"] = False  # v8.2: provati a parte in test_v82.py
 
 D.SOL_USD[0], D.SOL_USD[1] = 100.0, time.time()
 D.CFG["SIGNALS_ENABLED"] = False; D.CFG["CLUSTER_CHECK"] = False  # v7: test offline

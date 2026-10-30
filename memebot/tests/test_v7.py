@@ -1,6 +1,7 @@
 """v7: cluster graduato, LP sbloccata soft, shadow analyst_momentum, bonus dei segnali, casi etichettati. Offline."""
 import asyncio, csv, json, os, time, types
 import desk as D
+D.CFG["CLUSTER_V2"] = False; D.CFG["HONEYPOT_CHECK"] = False  # v8.2: provati a parte in test_v82.py
 
 D.SOL_USD[0], D.SOL_USD[1] = 100.0, time.time()
 D.CFG["SIGNALS_ENABLED"] = False
