@@ -18,7 +18,7 @@ Uso:
   python3 sl_bt.py --sample newpools    # campione newpools (solo cache scritta dal job exit_bt; nessun fetch)
   python3 sl_bt.py --no-fetch           # solo cache
 """
-import argparse, csv, hashlib, json, math, os, statistics, sys, time, urllib.request
+import argparse, csv, urllib.error, hashlib, json, math, os, statistics, sys, time, urllib.request
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -120,7 +120,27 @@ def load_ohlcv_sample(kind):
         out.append(dict(id=p["address"], bars=bars, i0=i0, e=bars[i0][1], liq=liq))
     return out
 
-def fetch_csv_trades(no_fetch):
+_gt = {"last": 0.0, "dead": False}
+def gentle_get(path, params, interval=6.0):
+    """GeckoTerminal: max 1 richiesta ogni ~6 s; su 429 backoff 15/30/60 s, poi rinuncia (e smette di chiedere)."""
+    if _gt["dead"]: return None
+    url = E.BASE + path + "?" + "&".join(f"{k}={v}" for k, v in params.items())
+    for back in (15, 30, 60, None):
+        w = interval - (time.time() - _gt["last"])
+        if w > 0: time.sleep(w)
+        _gt["last"] = time.time()
+        try:
+            req = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "paper-sl-backtest/1.0"})
+            return json.load(urllib.request.urlopen(req, timeout=30))
+        except urllib.error.HTTPError as ex:
+            if ex.code != 429: print("  HTTP", ex.code); return None
+            if back is None:
+                print("  429 persistenti: stop ai fetch, uso quello che ho"); _gt["dead"] = True; return None
+            print(f"  429, backoff {back}s"); time.sleep(back)
+        except Exception as ex:
+            print("  errore", type(ex).__name__); return None
+
+def fetch_csv_trades(no_fetch, refetch=False):
     """Trade reali (trades.csv) e shadow (shadow_trades.csv) del bot: ingresso e liquidita registrati dal bot."""
     rows = []
     try:
@@ -142,8 +162,11 @@ def fetch_csv_trades(no_fetch):
     out = []
     for r in rows:
         fn = os.path.join(CSV_DIR, r["mint"] + ".json")
-        if os.path.exists(fn): raw = json.load(open(fn))
-        elif no_fetch: continue
+        stale = os.path.exists(fn) and refetch and os.path.getmtime(fn) < r["t"] + (MAX_HOLD + 5) * 60
+        if os.path.exists(fn) and not stale: raw = json.load(open(fn))
+        elif no_fetch or _gt["dead"]:
+            if not os.path.exists(fn): continue
+            raw = json.load(open(fn))
         else:
             raw = []
             try:  # pool principale via DexScreener (gratuito), OHLCV via GeckoTerminal (limite 3.2 s)
@@ -152,19 +175,22 @@ def fetch_csv_trades(no_fetch):
                 pairs = json.load(urllib.request.urlopen(req, timeout=20))
                 pairs = sorted(pairs, key=lambda x: -float((x.get("liquidity") or {}).get("usd") or 0))
                 if pairs:
-                    d = E.get(f"/networks/solana/pools/{pairs[0]['pairAddress']}/ohlcv/minute",
-                              {"aggregate": 1, "limit": 1000, "currency": "usd", "token": "base"})
+                    d = gentle_get(f"/networks/solana/pools/{pairs[0]['pairAddress']}/ohlcv/minute",
+                                   {"aggregate": 1, "limit": 1000, "currency": "usd", "token": "base"})
                     raw = [[int(x[0])] + [float(v) for v in x[1:6]] for x in
                            ((d or {}).get("data", {}).get("attributes", {}).get("ohlcv_list", []))]
                     raw.sort()
             except Exception as ex:
                 print("  fetch fallito:", type(ex).__name__)
-            if raw: json.dump(raw, open(fn, "w"))  # niente cache se il fetch fallisce (429): si riprova al prossimo giro
+            if raw: json.dump(raw, open(fn, "w"))
+            elif os.path.exists(fn): raw = json.load(open(fn))  # niente cache se il fetch fallisce (429): si riprova al prossimo giro
         bars = E.fill_minutes(raw)
         idx = [k for k, b in enumerate(bars) if b[0] >= r["t"] - 59]
-        if not bars or not idx or idx[0] < 10: continue
+        if not bars or not idx: print("  trade senza candele utili:", r["src"]); continue
         i0 = idx[0]; e = r["price"] or bars[i0][1]
-        out.append(dict(id=r["mint"], bars=bars, i0=i0, e=e, liq=r["liq"] or 10000, src=r["src"], sig=r["sig"]))
+        post = min(len(bars) - i0, MAX_HOLD)
+        out.append(dict(id=r["mint"] + str(int(r["t"])), bars=bars, i0=i0, e=e, liq=r["liq"] or 10000, src=r["src"],
+                        sig=r["sig"], post_min=post, pre_min=i0))
     return out
 
 # ---------------- configurazioni ----------------
@@ -200,9 +226,9 @@ def half(t): return int(hashlib.md5(t["id"].encode()).hexdigest(), 16) % 2
 
 # ---------------- stop dinamico ----------------
 def features(t):
-    b = t["bars"]; i = t["i0"]; pre = b[max(0, i - 10):i]
+    b = t["bars"]; i = t["i0"]; pre = b[max(0, i - 10):i] or b[i:i + 1]
     atr = statistics.mean((x[2] - x[3]) / x[4] for x in pre if x[4] > 0) * 100 if pre else 5.0
-    ret5 = (b[i - 1][4] / b[i - 6][4] - 1) * 100 if i >= 6 and b[i - 6][4] > 0 else 0.0
+    ret5 = (b[i - 1][4] / b[max(0, i - 6)][4] - 1) * 100 if i >= 1 and b[max(0, i - 6)][4] > 0 else 0.0
     return atr, ret5
 
 def dyn_stop(k, w, med_ret5):
@@ -220,22 +246,33 @@ def fmt(name, s):
 HDR = ["| Config | Trade | Win | Expectancy/trade | Mediana | Somma | MaxDD (somma) | Compost. 10% | DD compost. | Stop scattati / poi rimbalzati sopra ingresso |",
        "|---|---|---|---|---|---|---|---|---|---|"]
 
+def table(trades, cfgs, title, split=True):
+    md = ["", f"## {title} ({len(trades)} trade)", ""] + HDR; out = {}
+    ins = [t for t in trades if t["half"] == 0]; oos = [t for t in trades if t["half"] == 1]
+    sp = ["", "| Config | IS n | IS exp | OOS n | OOS exp | OOS win | OOS MaxDD | OOS stop/rimbalzi |", "|---|---|---|---|---|---|---|---|"]
+    for name, f, conf, scaled, nosl in cfgs:
+        s = stats(run_cfg(trades, f, conf, scaled, nosl)); out[name] = dict(all=s); md.append(fmt(name, s))
+        if split:
+            si = stats(run_cfg(ins, f, conf, scaled, nosl)); so = stats(run_cfg(oos, f, conf, scaled, nosl))
+            out[name].update(ins=si, oos=so)
+            if si.get("n") and so.get("n"):
+                sp.append(f"| {name} | {si['n']} | {si['exp']*100:+.2f}% | {so['n']} | {so['exp']*100:+.2f}% | "
+                          f"{so['win']*100:.0f}% | {so['mdd']*100:.0f}% | {so['stops']}/{so['rebound']} |")
+    return md + (sp if split else []), out
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sample", choices=["survivor", "newpools"], default="survivor")
     ap.add_argument("--no-fetch", action="store_true")
+    ap.add_argument("--refetch", action="store_true", help="riscarica (gentile, 6 s) le candele dei trade del bot incomplete")
     a = ap.parse_args()
     os.makedirs(CSV_DIR, exist_ok=True)
     trades = load_ohlcv_sample(a.sample)
-    bot = fetch_csv_trades(a.no_fetch)
-    print(f"campione {a.sample}: {len(trades)} ingressi; trade del bot con OHLCV: {len(bot)} "
+    bot = fetch_csv_trades(a.no_fetch, a.refetch)
+    for t in trades + bot: t["half"] = half(t)
+    ins = [t for t in trades if t["half"] == 0]
+    print(f"campione {a.sample}: {len(trades)} ingressi; trade del bot usabili: {len(bot)} "
           f"(con 'signals': {sum(1 for t in bot if t.get('sig'))})")
-    for t in trades: t["half"] = half(t)
-    ins = [t for t in trades if t["half"] == 0]; oos = [t for t in trades if t["half"] == 1]
-    md = [f"# Backtest stop loss ({a.sample}) - {datetime.now(TZ).strftime('%Y-%m-%d %H:%M')} Europe/Rome",
-          f"ingressi: {len(trades)} (in-sample {len(ins)}, out-of-sample {len(oos)}); size base ${BASE_SIZE:.0f}; "
-          "rendimenti in % della size base", ""] + HDR
-    out = {}
     cfgs = []
     for sl in SLS:
         for scaled in (False, True):
@@ -244,7 +281,8 @@ def main():
                 continue
             for conf in (1, 2, 3):
                 cfgs.append((f"SL {sl} conf{conf} {'size scalata' if scaled else 'size fissa'}", (lambda t, s=sl: s), conf, scaled, False))
-    # stop dinamico: parametri scelti SOLO sulla meta' in-sample (expectancy), size scalata, conferma 2
+    out = {}
+    # stop dinamico: k scelto SOLO sulla meta' in-sample del campione OHLCV (mai sui trade del bot)
     med_r5 = statistics.median([features(t)[1] for t in ins]) if ins else 0.0
     best = None
     for k in (1.0, 1.5, 2.0, 2.5, 3.0, 4.0):
@@ -252,31 +290,21 @@ def main():
             s = stats(run_cfg(ins, dyn_stop(k, w, med_r5), 2, True))
             if s.get("n") and (best is None or s["exp"] > best[0]): best = (s["exp"], k, w)
     if best:
-        cfgs.append((f"DINAMICO k={best[1]}xATR10 {'+-'+str(best[2]) if best[2] else ''} [8..30] conf2 size scalata",
+        cfgs.append((f"DINAMICO {best[1]}xATR10 {'+-'+str(best[2]) if best[2] else ''}[8..30] conf2 size scalata",
                      dyn_stop(best[1], best[2], med_r5), 2, True, False))
-        sls = [dyn_stop(best[1], best[2], med_r5)(t) for t in trades]
-        out["dynamic_params"] = dict(k=best[1], w=best[2], med_ret5=med_r5,
-                                     stop_median=statistics.median(sls), stop_min=min(sls), stop_max=max(sls))
-    rows_all, rows_split = [], ["", "## Split per hash della pool: in-sample | out-of-sample", "",
-                                "| Config | IS n | IS exp | IS win | OOS n | OOS exp | OOS win | OOS MaxDD | OOS stop/rimbalzi |",
-                                "|---|---|---|---|---|---|---|---|---|"]
-    for name, f, conf, scaled, nosl in cfgs:
-        s = stats(run_cfg(trades, f, conf, scaled, nosl)); si = stats(run_cfg(ins, f, conf, scaled, nosl))
-        so = stats(run_cfg(oos, f, conf, scaled, nosl))
-        out[name] = dict(all=s, ins=si, oos=so)
-        rows_all.append(fmt(name, s))
-        if so.get("n") and si.get("n"):
-            rows_split.append(f"| {name} | {si['n']} | {si['exp']*100:+.2f}% | {si['win']*100:.0f}% | {so['n']} | "
-                              f"{so['exp']*100:+.2f}% | {so['win']*100:.0f}% | {so['mdd']*100:.0f}% | {so['stops']}/{so['rebound']} |")
-    md += rows_all + rows_split
+        out["dynamic_params"] = dict(k=best[1], w=best[2], med_ret5=med_r5)
+        if bot: out["dynamic_stops_bot"] = [round(dyn_stop(best[1], best[2], med_r5)(t), 1) for t in bot]
+    md = [f"# Backtest stop loss - {datetime.now(TZ).strftime('%Y-%m-%d %H:%M')} Europe/Rome",
+          f"size base ${BASE_SIZE:.0f}; rendimenti in % della size base; split per hash (IS=meta' 0, OOS=meta' 1)"]
+    m, o = table(trades, cfgs, f"Campione {a.sample}"); md += m; out[a.sample] = o
     if bot:
-        md += ["", f"## Trade reali/shadow del bot ({len(bot)}, solo controllo di coerenza: troppo pochi)", ""] + HDR
-        for name, f, conf, scaled, nosl in cfgs:
-            if "size fissa" in name and ("conf2" in name or "noSL" in name):
-                s = stats(run_cfg(bot, f, conf, scaled, nosl)); out["bot/" + name] = s; md.append(fmt(name, s))
+        md += ["", "Trade del bot: minuti di storia prima/dopo l'ingresso: " +
+               ", ".join(f"{t['src']} {t['pre_min']}/{t['post_min']}" for t in bot)]
+        m, o = table(bot, cfgs, "Solo trade reali/shadow del bot", split=False); md += m; out["bot"] = o
+        m, o = table(trades + bot, cfgs, f"Combinato {a.sample} + bot"); md += m; out["combined"] = o
     md += ["", "Note: liquidita' nel tempo = proxy a prodotto costante (liq*sqrt(p/p0)); per SL oltre -15 il crollo immediato "
            "e' spostato a 1.5xSL (nel codice CRASH_EXIT_PCT=-15 scatterebbe prima); survivor: liquidita' d'ingresso = "
-           "liquidita' attuale (look-ahead)."]
+           "liquidita' attuale (look-ahead); trade del bot con hold troncato se i dati finiscono prima di 180 min."]
     txt = "\n".join(md); print(txt)
     suf = "" if a.sample == "survivor" else "_newpools"
     open(os.path.join(HERE, f"results_sl{suf}.md"), "w").write(txt + "\n")

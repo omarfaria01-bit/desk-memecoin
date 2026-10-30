@@ -68,7 +68,34 @@ CFG = {
     "COST_GATE_MULT": 5.0,            # nuovo: scarta se 5 x costo stimato andata+ritorno > TP1_PCT
     # uscite
     "STOP_LOSS_PCT": -10.0,           # (orig. -8.0) confermato su due controlli di fila
-    "CRASH_EXIT_PCT": -15.0,          # uscita immediata
+    "CRASH_EXIT_PCT": -15.0,          # uscita immediata (v8.1: con stop piu largo di -15 scatta a 1.5 x stop)
+    # v8.1: stop dinamico = DYN_STOP_ATR_MULT x ATR (candele 1m prima dell'ingresso), tra DYN_STOP_MIN e DYN_STOP_MAX.
+    # "off" = niente; "shadow" = calcolato e registrato, le uscite usano ancora STOP_LOSS_PCT; "on" = usato davvero.
+    "DYN_STOP_MODE": "shadow",
+    "DYN_STOP_ATR_MULT": 3.0,
+    "DYN_STOP_MIN": -8.0,             # lato stretto
+    "DYN_STOP_MAX": -30.0,            # lato largo
+    "DYN_STOP_SIZE_SCALE": True,      # size x |stop base| / |stop dinamico| (perdita in $ allo stop uguale; mai > 1)
+    # v8.1b: TP1 e trailing dinamici dall'ATR. "off" = niente; "shadow" = calcolati e registrati a ogni ingresso
+    # (reale e shadow), le uscite restano TP1_PCT / TRAIL_ACTIVATE_PCT / TRAIL_DISTANCE_PCT. Nessun modo "on" per ora.
+    "DYN_TP_MODE": "shadow",
+    "DYN_TP1_ATR_MULT": 6.0,          # TP1 = 6 x ATR, tra +15 e +100
+    "DYN_TP1_MIN": 15.0,
+    "DYN_TP1_MAX": 100.0,
+    "DYN_TRAIL_ACT_ATR_MULT": 6.0,    # attivazione trailing = 6 x ATR, tra +15 e +100
+    "DYN_TRAIL_ACT_MIN": 15.0,
+    "DYN_TRAIL_ACT_MAX": 100.0,
+    "DYN_TRAIL_DIST_ATR_MULT": 2.0,   # distanza trailing = 2 x ATR, tra 5 e 25
+    "DYN_TRAIL_DIST_MIN": 5.0,
+    "DYN_TRAIL_DIST_MAX": 25.0,
+    "DYN_ATR_BARS": 10,               # candele per l'ATR (fallback: quelle disponibili se >= DYN_ATR_MIN_BARS)
+    "DYN_ATR_MIN_BARS": 3,
+    "DYN_ATR_EXTRA_PER_MIN": 2,       # al massimo 2 richieste OHLCV in piu al minuto (solo shadow senza candele)
+    "PRICE_PATHS": True,              # prezzo e liquidita a ogni controllo in price_paths/<mint>.jsonl
+    "POST_EXIT_MIN": 180,             # dopo l'uscita il prezzo si segue ancora per 180 min
+    "PRICE_PATH_MAX_BYTES": 300000,   # oltre: il file ruota in <mint>.jsonl.1 (una sola copia)
+    "PRICE_PATH_MAX_FILES": 3000,     # file piu vecchi cancellati oltre questo numero
+    "POST_EXIT_MAX": 150,             # token seguiti dopo l'uscita al massimo insieme
     # SCALA DI PRESE DI PROFITTO (frazioni della quantita iniziale), poi trailing sul resto
     "TP1_PCT": 30.0,                  # (v4 40) primo gradino a +30%...
     "TP1_FRACTION": 0.30,             # (v4 0.25) ...vende il 30%...
@@ -435,6 +462,7 @@ class State:
         self.shadow_trades = {}    # v6: operazioni ipotetiche aperte (nessun denaro)
         self.learner_bonus = {}    # v7: esiti per segnale/bonus + correzioni apprese
         self.labels = dict(CFG.get("LABELLED_CASES") or {})  # v7: casi etichettati (mint -> etichetta)
+        self.post_exit = {}        # v8.1: token seguiti per POST_EXIT_MIN dopo l'uscita (rimbalzi dopo lo stop)
         # non salvati
         self.fomo_rank = {}
         self.watch = {}
@@ -458,7 +486,7 @@ class State:
             "blacklist": sorted(self.blacklist), "equity_hist": list(self.equity_hist)[-1000:],
             "total_start": self.total_start, "hard_tripped": self.hard_tripped,
             "learner_shadow": self.learner_shadow, "shadow_trades": self.shadow_trades,
-            "learner_bonus": self.learner_bonus, "labels": self.labels,
+            "learner_bonus": self.learner_bonus, "labels": self.labels, "post_exit": self.post_exit,
         }
 
 
@@ -492,6 +520,8 @@ def load_state():
             st.learner_shadow[new] = st.learner_shadow.pop(old)
     lb = d.get("learner_bonus")
     st.learner_bonus = lb if isinstance(lb, dict) else {}
+    pe = d.get("post_exit")
+    st.post_exit = pe if isinstance(pe, dict) else {}
     lab = d.get("labels")
     if isinstance(lab, dict):
         st.labels.update(lab)
@@ -564,14 +594,34 @@ def reject(st, mint, sym, reason, agent="Filter", cat=None, quiet=False):
         log(st, agent, "reject", msg, mint=mint)
 
 
+def csv_migrate(path, fields):
+    """v8.1: se l'intestazione e diversa ma tutte le colonne vecchie esistono ancora, riscrive il file con le colonne
+    nuove (celle vuote nelle righe vecchie): il CSV resta uno e leggibile. Altrimenti il vecchio va messo da parte."""
+    if not os.path.exists(path):
+        return
+    with open(path, newline="") as f:
+        rows = list(csv.reader(f))
+    head = rows[0] if rows else []
+    if head == fields:
+        return
+    if head and set(head) <= set(fields):
+        tmp = path + ".tmp"
+        with open(tmp, "w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(fields)
+            for r in rows[1:]:
+                d = dict(zip(head, r))
+                w.writerow([d.get(k, "") for k in fields])
+        os.replace(tmp, path)
+    else:
+        base, ext = os.path.splitext(path)
+        os.replace(path, f"{base}_old_{int(time.time())}{ext}")
+
+
 def write_trade(t):
     path = os.path.join(DATA_DIR, "trades.csv")
     fields = list(t.keys())
-    if os.path.exists(path):  # intestazione diversa (versione vecchia): il file vecchio viene messo da parte
-        with open(path, newline="") as f:
-            head = next(csv.reader(f), [])
-        if head != fields:
-            os.replace(path, os.path.join(DATA_DIR, f"trades_old_{int(time.time())}.csv"))
+    csv_migrate(path, fields)  # v8.1 (prima: rotazione in trades_old_*.csv)
     new = not os.path.exists(path)
     with open(path, "a", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fields)
@@ -588,6 +638,7 @@ class Http:
         self.s = session
         self.locks = {}
         self.last = {}
+        self.last429 = {}   # v8.1: host -> ora dell'ultimo 429
 
     async def _wait(self, url):
         host = urlparse(url).netloc
@@ -604,6 +655,7 @@ class Http:
         try:
             async with self.s.get(url, headers=headers) as r:
                 if r.status == 429:
+                    self.last429[urlparse(url).netloc] = time.time()
                     await asyncio.sleep(20)
                     return None
                 if r.status != 200:
@@ -641,7 +693,31 @@ async def dex_batch(http, mints):
                 base = (pair.get("baseToken") or {}).get("address")
                 if base in chunk:
                     out.setdefault(base, []).append(pair)
+    try:
+        tick_record(out)
+    except Exception:  # noqa: BLE001
+        pass
     return out
+
+
+# ----------------------------------------------------------------------- v8.1: tick e candele in cache
+TICKS = {}          # mint -> deque[(ts, prezzo, liquidita)] dai controlli gia fatti (watch, Risk, shadow)
+CANDLE_CACHE = {}   # pool -> (ts, righe) ultime candele 1m lette (anche se meno di 30)
+OHLCV_EXTRA = deque(maxlen=20)  # orari delle richieste OHLCV in piu (shadow senza candele)
+
+
+def tick_record(market, now=None):
+    now = now or time.time()
+    for mint, pairs in market.items():
+        main = max(pairs, key=lambda p: fnum((p.get("liquidity") or {}).get("usd")))
+        px, lq = fnum(main.get("priceUsd")), fnum((main.get("liquidity") or {}).get("usd"))
+        if px > 0:
+            dq = TICKS.setdefault(mint, deque(maxlen=40))
+            if not dq or now - dq[-1][0] >= 5:
+                dq.append((now, px, lq))
+    if len(TICKS) > 4000:
+        for k in sorted(TICKS, key=lambda k: TICKS[k][-1][0] if TICKS[k] else 0)[:1000]:
+            TICKS.pop(k, None)
 
 
 def summarize(pairs):
@@ -707,7 +783,32 @@ async def fetch_candles(http, pool):
         return None
     rows = [tuple(fnum(v) for v in x[:6]) for x in lst if isinstance(x, (list, tuple)) and len(x) >= 6]
     rows.sort(key=lambda r: r[0])
+    CANDLE_CACHE[pool] = (time.time(), rows)  # v8.1: anche poche candele servono per l'ATR di fallback
+    if len(CANDLE_CACHE) > 500:
+        for k in sorted(CANDLE_CACHE, key=lambda k: CANDLE_CACHE[k][0])[:100]:
+            CANDLE_CACHE.pop(k, None)
     return rows if len(rows) >= 30 else None
+
+
+def cached_candles(pool, max_age=120):
+    e = CANDLE_CACHE.get(pool or "")
+    return e[1] if e and time.time() - e[0] <= max_age else None
+
+
+async def candles_for_entry(http, pool):
+    """v8.1: candele per le feature d'ingresso. Prima la cache (nessuna chiamata); poi al massimo
+    DYN_ATR_EXTRA_PER_MIN richieste in piu al minuto, mai se GeckoTerminal ha dato 429 negli ultimi 3 minuti."""
+    rows = cached_candles(pool)
+    if rows is not None or http is None or not pool:
+        return rows
+    now = time.time()
+    if now - fnum(getattr(http, "last429", {}).get("api.geckoterminal.com")) < 180:
+        return None
+    if sum(1 for t in OHLCV_EXTRA if now - t < 60) >= int(CFG["DYN_ATR_EXTRA_PER_MIN"]):
+        return None
+    OHLCV_EXTRA.append(now)
+    await fetch_candles(http, pool)
+    return cached_candles(pool)
 
 
 # ======================================================================= indicatori
@@ -1148,6 +1249,226 @@ async def cluster_scan(st, http, mint, sec):
     return res
 
 
+# ----------------------------------------------------------------------- v8.1: stop dinamico e feature d'ingresso
+def crash_level(stop):
+    """Uscita immediata per crollo relativa allo stop: CRASH_EXIT_PCT se lo stop e piu stretto, altrimenti
+    1.5 x stop (come nel backtest di Mark). Con stop -12 resta -15 (identico a v8)."""
+    stop = fnum(stop, CFG["STOP_LOSS_PCT"])
+    return CFG["CRASH_EXIT_PCT"] if stop > CFG["CRASH_EXIT_PCT"] else round(1.5 * stop, 2)
+
+
+def _std(xs):
+    if len(xs) < 2:
+        return None
+    mu = sum(xs) / len(xs)
+    return math.sqrt(sum((x - mu) ** 2 for x in xs) / (len(xs) - 1))
+
+
+def vol_from_candles(rows, now=None, nbars=None):
+    """ATR% (media di (high-low)/close, come sl_bt.py) sulle ultime nbars candele CHIUSE prima di now.
+    Con meno candele usa quelle disponibili se >= DYN_ATR_MIN_BARS. Ritorna dict o None."""
+    now = now or time.time()
+    nbars = int(nbars or CFG["DYN_ATR_BARS"])
+    cur = int(now // 60) * 60
+    done = [r for r in (rows or []) if r[0] < cur and r[4] > 0]
+    pre = done[-nbars:]
+    if len(pre) < int(CFG["DYN_ATR_MIN_BARS"]):
+        return None
+    atr = sum((r[2] - r[3]) / r[4] for r in pre) / len(pre) * 100
+    closes = [r[4] for r in done]
+    r1 = [(closes[i] / closes[i - 1] - 1) * 100 for i in range(max(1, len(closes) - 10), len(closes))]
+    c5 = closes[::-1][::5][::-1]  # una chiusura ogni 5 minuti, fino all'ultima
+    r5 = [(c5[i] / c5[i - 1] - 1) * 100 for i in range(max(1, len(c5) - 12), len(c5))]
+    ret5 = (closes[-1] / closes[-6] - 1) * 100 if len(closes) >= 6 and closes[-6] > 0 else None
+    return {"atr": round(atr, 3), "bars": len(pre), "src": "candles_1m" if len(pre) >= nbars else "candles_partial",
+            "std1": None if _std(r1) is None else round(_std(r1), 3),
+            "std5": None if _std(r5) is None else round(_std(r5), 3),
+            "ret5": None if ret5 is None else round(ret5, 3)}
+
+
+def vol_from_ticks(ticks, now=None):
+    """Fallback senza candele: dai prezzi dei controlli gia fatti (ultimi 15 min). Ogni minuto -> (max-min)/ultimo;
+    se c'e un solo prezzo al minuto, |rendimento| tra prezzi consecutivi riportato a 1 minuto."""
+    now = now or time.time()
+    pts = [(t, p) for t, p, *_ in (ticks or []) if now - t <= 900 and p > 0]
+    if len(pts) < 3:
+        return None
+    by_min = {}
+    for t, p in pts:
+        by_min.setdefault(int(t // 60), []).append(p)
+    rng = [(max(v) - min(v)) / v[-1] * 100 for v in by_min.values() if len(v) >= 2]
+    rets = [abs(pts[i][1] / pts[i - 1][1] - 1) * 100 / math.sqrt(max(1.0, (pts[i][0] - pts[i - 1][0]) / 60))
+            for i in range(1, len(pts))]
+    atr = sum(rng) / len(rng) if len(rng) >= 2 else sum(rets) / len(rets)
+    return {"atr": round(atr, 3), "bars": len(pts), "src": "ticks", "std1": None if _std(rets) is None else round(_std(rets), 3),
+            "std5": None, "ret5": None}
+
+
+def dyn_stop_calc(atr, base_stop=None):
+    """(stop dinamico, size_mult). atr None -> stop base e size 1. Stop = -clamp(k x atr, |MIN|, |MAX|)."""
+    base = fnum(base_stop, CFG["STOP_LOSS_PCT"])
+    if atr is None or not math.isfinite(fnum(atr, float("nan"))) or fnum(atr) <= 0:
+        return base, 1.0
+    lo, hi = abs(CFG["DYN_STOP_MIN"]), abs(CFG["DYN_STOP_MAX"])
+    stop = -min(max(lo, hi), max(min(lo, hi), CFG["DYN_STOP_ATR_MULT"] * fnum(atr)))
+    mult = 1.0
+    if CFG["DYN_STOP_SIZE_SCALE"]:
+        mult = clamp(abs(base) / abs(stop), 0.05, 1.0)  # mai maggiorata (regola dell'Executor)
+    return round(stop, 2), round(mult, 4)
+
+
+def dyn_tp_calc(atr, tp1_base=None, act_base=None, dist_base=None):
+    """v8.1b: (tp1, trail_act, trail_dist) dinamici; atr None -> valori base (quelli usati davvero)."""
+    b = (fnum(tp1_base, CFG["TP1_PCT"]), fnum(act_base, CFG["TRAIL_ACTIVATE_PCT"]),
+         fnum(dist_base, CFG["TRAIL_DISTANCE_PCT"]))
+    if atr is None or not math.isfinite(fnum(atr, float("nan"))) or fnum(atr) <= 0:
+        return b
+    a = fnum(atr)
+    f = lambda k, lo, hi: round(clamp(CFG[k] * a, min(CFG[lo], CFG[hi]), max(CFG[lo], CFG[hi])), 2)
+    return (f("DYN_TP1_ATR_MULT", "DYN_TP1_MIN", "DYN_TP1_MAX"),
+            f("DYN_TRAIL_ACT_ATR_MULT", "DYN_TRAIL_ACT_MIN", "DYN_TRAIL_ACT_MAX"),
+            f("DYN_TRAIL_DIST_ATR_MULT", "DYN_TRAIL_DIST_MIN", "DYN_TRAIL_DIST_MAX"))
+
+
+def _tag_val(tags, pref):
+    for t in tags:
+        if t.startswith(pref):
+            try:
+                return float(t.split(":")[-1])
+            except ValueError:
+                return None
+    return None
+
+
+async def entry_features(st, http, mint, m, signals=None, candles=None, soft=None, narr=None, accel=None,
+                         size_mult=1.0, base_stop=None, allow_fetch=True):
+    """v8.1: feature d'ingresso (trade veri e shadow) + stop dinamico. Mai eccezioni, valori mancanti = None."""
+    fe = {}
+    try:
+        tags = [t for t in (signals.split("|") if isinstance(signals, str) else (signals or [])) if t]
+        rows = candles or cached_candles(m.get("pair"))
+        if rows is None and allow_fetch:
+            rows = await candles_for_entry(http, m.get("pair"))
+        v = vol_from_candles(rows) if rows else None
+        if v is None:
+            v = vol_from_ticks(TICKS.get(mint))
+        base = fnum(base_stop, CFG["STOP_LOSS_PCT"])
+        dyn, dmult = dyn_stop_calc(v["atr"] if v else None, base)
+        mode = str(CFG["DYN_STOP_MODE"])
+        tp_mode = str(CFG["DYN_TP_MODE"])
+        tpb = (fnum(CFG["TP1_PCT"]), fnum(CFG["TRAIL_ACTIVATE_PCT"]), fnum(CFG["TRAIL_DISTANCE_PCT"]))
+        tpd = dyn_tp_calc(v["atr"] if v else None, *tpb) if tp_mode != "off" else (None, None, None)
+        if accel is None and rows:
+            w5 = window5(rows)
+            if w5:
+                accel = round(safe_div(w5["vol_now"], w5["vol_prev"], 99.0 if w5["vol_now"] > 0 else 0.0), 2)
+        if accel is None:
+            accel = round(safe_div(m.get("vol_m5", 0.0), fnum(m.get("vol_h1_main")) / 12, 0.0), 2)
+        ks = [t for t in tags if t.startswith("kol:")]
+        pr = PROJ_LAST.get(mint) or {}
+        fe = {"atr_1m_10": v["atr"] if v else None, "atr_bars_used": v["bars"] if v else 0,
+              "atr_src": v["src"] if v else "none",
+              "std_ret_1m": v["std1"] if v else None, "std_ret_5m": v["std5"] if v else None,
+              "ret_5m": v["ret5"] if v and v["ret5"] is not None else round(fnum(m.get("chg_m5")), 3),
+              "vol_accel": accel, "liq_entry": round(fnum(m.get("liq")), 0),
+              "narrative": round(fnum(narr), 4) if narr is not None else 0.0,
+              "gmgn_trend": _tag_val(tags, "gmgn_rank:") if any(t.startswith("src:gmgn_trending") for t in tags) else None,
+              "kol_count": len(ks), "kol_thesis": sum(1 for t in tags if t.startswith("kol_thesis:")),
+              "project_score": _tag_val(tags, "proj_score:") if _tag_val(tags, "proj_score:") is not None
+              else pr.get("score"),
+              "deep_review": deep_effect(mint)["score"], "soft_flags": list(soft or []),
+              "stop_base": base, "dyn_stop_shadow": dyn, "dyn_size_mult": dmult,
+              "dyn_mode": mode, "stop_applied": dyn if mode == "on" else base,
+              "size_mult": round(fnum(size_mult, 1.0) * (dmult if mode == "on" else 1.0), 4),
+              # v8.1b: TP / trailing (base = usati davvero; dyn = solo registrati)
+              "tp1_base": tpb[0], "trail_act_base": tpb[1], "trail_dist_base": tpb[2],
+              "dyn_tp1": tpd[0], "dyn_trail_act": tpd[1], "dyn_trail_dist": tpd[2], "dyn_tp_mode": tp_mode}
+    except Exception as e:  # noqa: BLE001
+        fe = dict(fe, error=type(e).__name__)
+    return fe
+
+
+def fe_columns(fe):
+    """Colonne CSV v8.1 (piatte + JSON completo)."""
+    fe = fe or {}
+    return {"atr_1m_10": fe.get("atr_1m_10"), "stop_applied": fe.get("stop_applied"),
+            "dyn_stop_shadow": fe.get("dyn_stop_shadow"), "size_mult": fe.get("size_mult"),
+            "dyn_tp1": fe.get("dyn_tp1"), "dyn_trail_act": fe.get("dyn_trail_act"),
+            "dyn_trail_dist": fe.get("dyn_trail_dist"),
+            "entry_features": json.dumps(fe, ensure_ascii=False, separators=(",", ":")) if fe else ""}
+
+
+# ----------------------------------------------------------------------- v8.1: price paths (nessuna chiamata in piu)
+PATH_DIR = os.path.join(DATA_DIR, "price_paths")
+_PATH_PRUNE = [0.0, 0.0]  # ultima pulizia, ultimo batch post-uscita senza posizioni
+
+
+def path_write(mint, rec):
+    if not CFG["PRICE_PATHS"]:
+        return
+    try:
+        os.makedirs(PATH_DIR, exist_ok=True)
+        fp = os.path.join(PATH_DIR, f"{mint}.jsonl")
+        try:
+            if os.path.getsize(fp) > CFG["PRICE_PATH_MAX_BYTES"]:
+                os.replace(fp, fp + ".1")
+        except OSError:
+            pass
+        with open(fp, "a") as f:
+            f.write(json.dumps(rec, separators=(",", ":")) + "\n")
+        if time.time() - _PATH_PRUNE[0] > 3600:
+            _PATH_PRUNE[0] = time.time()
+            fs = sorted((os.path.join(PATH_DIR, x) for x in os.listdir(PATH_DIR)), key=os.path.getmtime)
+            for x in fs[:max(0, len(fs) - int(CFG["PRICE_PATH_MAX_FILES"]))]:
+                os.remove(x)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def path_tick(mint, kind, price, liq, pnl=None, now=None, ev=None):
+    rec = {"t": int(now or time.time()), "k": kind, "p": float(f"{fnum(price):.6g}"), "l": round(fnum(liq))}
+    if pnl is not None:
+        rec["pnl"] = round(fnum(pnl), 2)
+    if ev:
+        rec["ev"] = ev
+    path_write(mint, rec)
+
+
+def post_exit_start(st, mint, kind, sym, entry_price, exit_price, reason, stop_applied=None, dyn_stop=None, now=None):
+    """Dopo l'uscita il token resta seguito POST_EXIT_MIN minuti (prezzi gia presi con i dex_batch esistenti)."""
+    if not CFG["PRICE_PATHS"] or CFG["POST_EXIT_MIN"] <= 0:
+        return
+    now = now or time.time()
+    path_tick(mint, kind, exit_price, 0, now=now, ev="exit:" + str(reason)[:60])
+    if len(st.post_exit) >= CFG["POST_EXIT_MAX"]:
+        st.post_exit.pop(min(st.post_exit, key=lambda k: st.post_exit[k]["t"]), None)
+    st.post_exit[mint] = {"t": now, "until": now + CFG["POST_EXIT_MIN"] * 60, "kind": kind, "sym": sym,
+                          "entry": entry_price, "exit": exit_price, "reason": str(reason)[:80], "max": exit_price,
+                          "min": exit_price, "stop": stop_applied, "dyn": dyn_stop, "last": exit_price}
+
+
+def post_exit_update(st, market, now=None):
+    """Aggiorna i token gia usciti con i prezzi di un dex_batch gia fatto; chiude quelli scaduti con un riepilogo."""
+    now = now or time.time()
+    for mint, e in list(st.post_exit.items()):
+        if mint in market:
+            m = summarize(market[mint])
+            if m["price"] > 0:
+                e["max"], e["min"], e["last"] = max(e["max"], m["price"]), min(e["min"], m["price"]), m["price"]
+                path_tick(mint, e["kind"] + "_post", m["price"], m["liq"], now=now)
+        if now >= e["until"]:
+            st.post_exit.pop(mint, None)
+            ent, ex = fnum(e.get("entry")), fnum(e.get("exit"))
+            summ = {"mint": mint, "sym": e.get("sym"), "kind": e["kind"], "reason": e.get("reason"),
+                    "exit_ts": int(e["t"]), "minutes": round((now - e["t"]) / 60),
+                    "max_vs_exit_pct": round((e["max"] / ex - 1) * 100, 2) if ex > 0 else None,
+                    "min_vs_exit_pct": round((e["min"] / ex - 1) * 100, 2) if ex > 0 else None,
+                    "max_vs_entry_pct": round((e["max"] / ent - 1) * 100, 2) if ent > 0 else None,
+                    "last_vs_exit_pct": round((e["last"] / ex - 1) * 100, 2) if ex > 0 else None,
+                    "rebound_above_entry": bool(ent > 0 and e["max"] > ent), "stop": e.get("stop"), "dyn": e.get("dyn")}
+            path_write("_post_exit_summary", summ)
+
+
 def pos_max_hold(p, mint=None):
     """v7: tenuta massima della posizione (piu corta con LP sbloccata), mai oltre MAX_HOLD_MIN.
     v8: con voto deep review >= DEEP_HOLD_MIN_SCORE +DEEP_HOLD_EXTRA_MIN (non per LP sbloccata), max 720 min."""
@@ -1399,6 +1720,7 @@ def analyst_shadow(st, http, mint, m, c, why):
     flags = list((c.get("sec") or {}).get("soft") or [])
     spawn_shadow(st, http, mint, m, ["analyst_momentum"], f"Analyst: {why}", 0.0, flags, tag="analyst_momentum",
                  signals=[f"src:{m.get('src') or '?'}", "reason:analyst_momentum"])
+
 
 
 def shadow_stats(hist):
@@ -1992,7 +2314,7 @@ async def analyst_agent(st, http, q_in, q_out):
                       "soft": flags, "size_mult": round(smult, 4), "score_raw": round(score_raw, 4),
                       "signals": "|".join(signals), "cluster": cl,
                       "narr_themes": [t for t, _, _ in nhits], "bs5": round(bs5, 2), "accel": round(accel, 2),
-                      "vwap_gap": vwap_gap,
+                      "vwap_gap": vwap_gap, "candles": candles,  # v8.1: per le feature d'ingresso
                       "thesis": f"{detail}, {rsi_txt}, acq/vend {m['buys_h1']}/{m['sells_h1']}, "
                                 f"vol ${m['vol_h1']:,.0f}, segnali: {', '.join(tags) or 'nessuno forte'}"})
             log(st, "Analyst", "approve", f"{m['symbol']} approvato: {c['thesis']}", mint=mint)
@@ -2669,6 +2991,16 @@ async def _execute_buy(st, broker, c, mint, m):
                  CFG["MIN_TRADE_PCT"], CFG["MAX_TRADE_PCT"])
     size = min(eq * frac, m["liq"] * CFG["MAX_POOL_SHARE_PCT"] / 100, cash, room)
     size *= clamp(fnum(c.get("size_mult"), 1.0), 0.05, 1.0)  # v6: segnali soft -> size ridotta (mai maggiorata)
+    # v8.1: feature d'ingresso + stop dinamico ("shadow": solo registrato; "on": stop e size dinamici)
+    fe = {}
+    if CFG["DYN_STOP_MODE"] != "off" or CFG["PRICE_PATHS"]:
+        fe = await entry_features(st, getattr(broker, "http", None), mint, m, c.get("signals", ""),
+                                  candles=c.get("candles"), soft=c.get("soft"), narr=c.get("narr_bonus"),
+                                  accel=c.get("accel"), size_mult=c.get("size_mult", 1.0),
+                                  base_stop=CFG["STOP_LOSS_PCT"])
+    dyn_on = CFG["DYN_STOP_MODE"] == "on" and fe.get("atr_1m_10") is not None
+    if dyn_on:
+        size *= clamp(fnum(fe.get("dyn_size_mult"), 1.0), 0.05, 1.0)
     if getattr(broker, "realistic", False):  # v6: come in live, mai oltre MAX_SOL_PER_TRADE
         size = min(size, CFG["MAX_SOL_PER_TRADE"] * sol_usd())
     pct = safe_div(size, eq)
@@ -2719,8 +3051,12 @@ async def _execute_buy(st, broker, c, mint, m):
         "signals": c.get("signals", ""),  # v7
         "max_hold_min": CFG["LP_SOFT_MAX_HOLD_MIN"] if "lp_unlocked" in (c.get("soft") or []) else None,
         "links": m.get("links") or {},  # v8
+        # v8.1
+        "entry_features": fe, "stop_dyn": fe.get("dyn_stop_shadow"), "stop_dyn_on": fe.get("dyn_stop_shadow") if dyn_on else None,
+        "trough_pct": 0.0, "dyn_hits": 0, "dyn_hit": None,
     }
     st.stats["buys"] += 1
+    path_tick(mint, "real", m["price"], m["liq"], 0.0, ev="entry")  # v8.1
     deep_queue_add(mint, m["symbol"], m.get("links"), "opened", m.get("url", ""), c.get("score"))  # v8
     extra = f", tx {res['sig'][:10]}" if res.get("sig") else (f", {res['note']}" if res.get("note") else "")
     log(st, "Executor", "buy",
@@ -2764,12 +3100,19 @@ OVR_GLOBAL_MAP = {"STOP_LOSS_PCT": "STOP_LOSS_PCT", "TRAIL_START_PCT": "TRAIL_AC
                                     # v8: progetto e analisi approfondite
                                     "PROJECT_BONUS", "PROJECT_EMPTY_PENALTY", "PROJECT_MIN_SCORE",
                                     "DEEP_QUEUE_PEAK_PCT", "DEEP_HOLD_MIN_SCORE", "DEEP_HOLD_EXTRA_MIN",
-                                    "DEEP_LOW_SCORE", "DEEP_TRAIL_TIGHTEN_PCT")}}
+                                    "DEEP_LOW_SCORE", "DEEP_TRAIL_TIGHTEN_PCT",
+                                    # v8.1
+                                    "DYN_STOP_MODE", "DYN_STOP_ATR_MULT", "DYN_STOP_MIN", "DYN_STOP_MAX",
+                                    "DYN_STOP_SIZE_SCALE", "DYN_TP_MODE", "DYN_TP1_ATR_MULT", "DYN_TP1_MIN",
+                                    "DYN_TP1_MAX", "DYN_TRAIL_ACT_ATR_MULT", "DYN_TRAIL_ACT_MIN",
+                                    "DYN_TRAIL_ACT_MAX", "DYN_TRAIL_DIST_ATR_MULT", "DYN_TRAIL_DIST_MIN",
+                                    "DYN_TRAIL_DIST_MAX")}}
 OVR_POS_MAP = {"stop_loss_pct": "STOP_LOSS_PCT", "take_profit_pct": "TAKE_PROFIT_PCT",
                "tp_sell_fraction": "TAKE_PROFIT_FRACTION", "trail_dist_pct": "TRAIL_DISTANCE_PCT"}
 OVR_ACTIONS = ("hold", "sell_all", "sell_half")
 # limiti di sicurezza fissi (min, max) sui valori di CFG
-OVR_LIMITS = {"STOP_LOSS_PCT": (-15.0, -3.0), "TRAIL_DISTANCE_PCT": (3.0, 15.0), "TRAIL_ACTIVATE_PCT": (3.0, 100.0),
+# v8.1: STOP_LOSS_PCT fino a -30 (prima -15); con stop piu largo di -15 il crollo scatta a 1.5 x stop
+OVR_LIMITS = {"STOP_LOSS_PCT": (-30.0, -3.0), "TRAIL_DISTANCE_PCT": (3.0, 25.0), "TRAIL_ACTIVATE_PCT": (3.0, 100.0),
               "TAKE_PROFIT_FRACTION": (0.1, 1.0), "TAKE_PROFIT_PCT": (5.0, 500.0), "MAX_HOLD_MIN": (5.0, 720.0),
               "TP1_PCT": (5.0, 200.0), "TP1_FRACTION": (0.05, 0.6), "BREAKEVEN_PCT": (-5.0, 15.0),
               "TIME_STOP_MIN": (5.0, 240.0), "TIME_STOP_MIN_PCT": (-10.0, 30.0),
@@ -2787,17 +3130,38 @@ OVR_LIMITS = {"STOP_LOSS_PCT": (-15.0, -3.0), "TRAIL_DISTANCE_PCT": (3.0, 15.0),
               # v8
               "DEEP_QUEUE_PEAK_PCT": (20.0, 200.0), "DEEP_HOLD_MIN_SCORE": (50.0, 95.0),
               "DEEP_HOLD_EXTRA_MIN": (0.0, 180.0), "DEEP_LOW_SCORE": (0.0, 50.0), "DEEP_TRAIL_TIGHTEN_PCT": (0.0, 8.0),
+              # v8.1: stop dinamico (lato stretto e lato largo; mai oltre -30)
+              "DYN_STOP_ATR_MULT": (1.0, 6.0), "DYN_STOP_MIN": (-15.0, -3.0), "DYN_STOP_MAX": (-30.0, -8.0),
+              "DYN_STOP_SIZE_SCALE": (0.0, 1.0),
+              # v8.1b: TP1 / trailing dinamici (solo shadow)
+              "DYN_TP1_ATR_MULT": (1.0, 20.0), "DYN_TP1_MIN": (5.0, 100.0), "DYN_TP1_MAX": (15.0, 200.0),
+              "DYN_TRAIL_ACT_ATR_MULT": (1.0, 20.0), "DYN_TRAIL_ACT_MIN": (3.0, 100.0),
+              "DYN_TRAIL_ACT_MAX": (15.0, 200.0),
+              "DYN_TRAIL_DIST_ATR_MULT": (0.5, 8.0), "DYN_TRAIL_DIST_MIN": (2.0, 15.0), "DYN_TRAIL_DIST_MAX": (5.0, 25.0),
               **BONUS_LIMITS}
+OVR_STR_KEYS = {"DYN_STOP_MODE": ("off", "shadow", "on"), "DYN_TP_MODE": ("off", "shadow")}  # v8.1: valori testuali ammessi
+OVR_BOOL_KEYS = {"DYN_STOP_SIZE_SCALE"}
 OVR_INT_KEYS = {"MAX_HOLD_MIN", "TIME_STOP_MIN", "SOFT_MAX_FLAGS", "BUNDLE_MAX_NETWORKS", "BUNDLE_NET_MIN_WALLETS",
-                "BUNDLE_MAX_INSIDER_WALLETS", "CLUSTER_SOFT_NETWORKS", "LP_SOFT_MAX_HOLD_MIN", "DEEP_HOLD_EXTRA_MIN"}
+                "BUNDLE_MAX_INSIDER_WALLETS", "CLUSTER_SOFT_NETWORKS", "LP_SOFT_MAX_HOLD_MIN", "DEEP_HOLD_EXTRA_MIN",
+                "DYN_STOP_SIZE_SCALE"}
 SL_WARN_REF = -10.0  # avviso se uno stop da override e piu largo di -10%
 # valori originali (codice + config.json): cancellare overrides.json riporta a questi
-OVR_DEFAULTS = {k: CFG[k] for k in OVR_LIMITS}
+OVR_DEFAULTS = {k: CFG[k] for k in list(OVR_LIMITS) + list(OVR_STR_KEYS)}
+
+
+def fmtv(v):
+    return f"{v:g}" if isinstance(v, (int, float)) and not isinstance(v, bool) else str(v)
 
 
 def ovr_value(cfg_key, raw, where):
     """Valida e limita un valore. Ritorna (valore o None se da ignorare, lista di note)."""
     notes = []
+    if cfg_key in OVR_STR_KEYS:  # v8.1
+        if isinstance(raw, str) and raw.strip().lower() in OVR_STR_KEYS[cfg_key]:
+            return raw.strip().lower(), notes
+        return None, [f"{where}: valore {raw!r} non valido (ammessi {'/'.join(OVR_STR_KEYS[cfg_key])}), ignorato"]
+    if cfg_key in OVR_BOOL_KEYS and isinstance(raw, bool):
+        raw = int(raw)
     if isinstance(raw, bool) or not isinstance(raw, (int, float)) or not math.isfinite(float(raw)):
         return None, [f"{where}: valore {raw!r} non numerico, ignorato"]
     v = float(raw)
@@ -2806,6 +3170,8 @@ def ovr_value(cfg_key, raw, where):
         v = -v
     lo, hi = OVR_LIMITS[cfg_key]
     c = clamp(v, lo, hi)
+    if cfg_key in ("DYN_STOP_MIN", "DYN_STOP_MAX") and v > 0:
+        c = clamp(-v, lo, hi)
     if c != v:
         notes.append(f"{where}: {v:g} fuori dai limiti [{lo:g}, {hi:g}], limitato a {c:g}")
     if cfg_key == "STOP_LOSS_PCT" and c < SL_WARN_REF:  # (v4: confronto con l'originale -8)
@@ -2847,7 +3213,7 @@ def parse_overrides(text, prev_globals, prev_positions, held):
                 continue  # campo assente: resta l'ultimo valore valido
             if g[fk] is None:
                 out["globals"][ck] = OVR_DEFAULTS[ck]
-                notes.append(("info", f"global.{fk}=null: torna al default {OVR_DEFAULTS[ck]:g}"))
+                notes.append(("info", f"global.{fk}=null: torna al default {fmtv(OVR_DEFAULTS[ck])}"))
                 continue
             v, n = ovr_value(ck, g[fk], f"global.{fk}")
             notes += [("clamp", x) for x in n]
@@ -2905,13 +3271,13 @@ class Overrides:
         self.err = None
 
     def values(self):
-        return {k: CFG[k] for k in OVR_LIMITS}
+        return {k: CFG[k] for k in list(OVR_LIMITS) + list(OVR_STR_KEYS)}
 
     def eff(self, mint, cfg_key):
         return self.positions.get(mint, {}).get(cfg_key, CFG[cfg_key])
 
     def _revert(self, st, why):
-        changed = [f"{k} {CFG[k]:g}->{OVR_DEFAULTS[k]:g}" for k in OVR_LIMITS if CFG[k] != OVR_DEFAULTS[k]]
+        changed = [f"{k} {fmtv(CFG[k])}->{fmtv(OVR_DEFAULTS[k])}" for k in OVR_DEFAULTS if CFG[k] != OVR_DEFAULTS[k]]
         for k, v in OVR_DEFAULTS.items():
             CFG[k] = v
         n = len(self.positions)
@@ -2955,7 +3321,7 @@ class Overrides:
         changes = []
         for k, v in res["globals"].items():
             if CFG[k] != v:
-                changes.append(f"{k} {CFG[k]:g}->{v:g}")
+                changes.append(f"{k} {fmtv(CFG[k])}->{fmtv(v)}")
                 CFG[k] = v
         self.loaded = True
         if changes:
@@ -3081,9 +3447,15 @@ async def _sell_position(st, broker, mint, reason, fraction=1.0, zero=False, mar
          "soft_flags": "|".join(p.get("soft") or []), "size_mult": p.get("size_mult", 1.0),
          "signals": p.get("signals", "")}
     t.update({f"f_{k}": (p.get("features") or {}).get(k) for k in FEATURES})
+    fe = dict(p.get("entry_features") or {})  # v8.1 (posizioni aperte prima della v8.1: vuoto)
+    if fe:
+        fe.update({"trough_pct": round(fnum(p.get("trough_pct")), 2), "dyn_stop_hit": p.get("dyn_hit")})
+    t.update(fe_columns(fe))
     st.closed.append(t)
     write_trade(t)
     st.cooldown[mint] = time.time() + CFG["COOLDOWN_MIN"] * 60
+    post_exit_start(st, mint, "real", p["symbol"], p.get("quote_price") or p.get("entry_mark"), p.get("last_price"),
+                    reason, (fe or {}).get("stop_applied"), (fe or {}).get("dyn_stop_shadow"))
     log(st, "Risk", "sell", f"CHIUDE {p['symbol']} {t['pnl_pct']:+.1f}% (${pnl:+.2f}): {reason}", mint=mint,
         pnl=t["pnl"], quote_src=res.get("src", "formula"), quote_impact=res.get("quote_impact"),
         latency_slip=res.get("latency_slip"), prio_fee_sol=res.get("prio_fee_sol"), fill_failed=res.get("fill_failed", 0))
@@ -3131,9 +3503,19 @@ async def risk_agent(st, http, broker):
                 OVR.prune(set(st.positions))
             except Exception as e:  # noqa: BLE001
                 log(st, "Risk", "warn", f"override non applicati ({type(e).__name__}), tengo gli ultimi valori")
+            market = {}
             if st.positions:
-                market = await dex_batch(http, list(st.positions.keys()))
+                pe_r = [k for k, v in st.post_exit.items() if v.get("kind") == "real" and k not in st.positions]
+                market = await dex_batch(http, list(st.positions.keys()) + pe_r)
                 for mint, p in list(st.positions.items()):
+                    if mint in market:  # v8.1: price path (stessi dati, nessuna chiamata in piu)
+                        try:
+                            _m = summarize(market[mint])
+                            if _m["price"] > 0:
+                                path_tick(mint, "real", _m["price"], _m["liq"],
+                                          (_m["price"] / fnum(p.get("quote_price") or p.get("entry_mark"), _m["price"]) - 1) * 100)
+                        except Exception:  # noqa: BLE001
+                            pass
                     try:
                         if mint in market:
                             m = summarize(market[mint])
@@ -3147,6 +3529,16 @@ async def risk_agent(st, http, broker):
                         pnl = mark_pnl_pct(p)
                         p["peak_pct"] = max(p["peak_pct"], pnl)
                         sl, tp = OVR.eff(mint, "STOP_LOSS_PCT"), OVR.eff(mint, "TAKE_PROFIT_PCT")
+                        # v8.1: stop dinamico solo con DYN_STOP_MODE "on" (e mai sopra un override per posizione)
+                        if CFG["DYN_STOP_MODE"] == "on" and p.get("stop_dyn_on") is not None and \
+                                "STOP_LOSS_PCT" not in OVR.positions.get(mint, {}):
+                            sl = fnum(p["stop_dyn_on"], sl)
+                        crash_eff = crash_level(sl)
+                        p["trough_pct"] = min(fnum(p.get("trough_pct")), pnl)
+                        if p.get("stop_dyn") is not None:  # in shadow: lo stop dinamico sarebbe scattato?
+                            p["dyn_hits"] = p.get("dyn_hits", 0) + 1 if pnl <= p["stop_dyn"] else 0
+                            if p["dyn_hits"] >= 2 and not p.get("dyn_hit"):
+                                p["dyn_hit"] = {"pnl": round(pnl, 2), "min": round((time.time() - p["opened"]) / 60, 1)}
                         tpf, tdist = OVR.eff(mint, "TAKE_PROFIT_FRACTION"), OVR.eff(mint, "TRAIL_DISTANCE_PCT")
                         stage = int(p.get("tp_stage", 1 if p.get("tp_done") else 0))
                         tp1 = min(CFG["TP1_PCT"], tp)  # il primo gradino non supera mai il secondo (anche con override)
@@ -3164,7 +3556,8 @@ async def risk_agent(st, http, broker):
                                     "tp1_frac": CFG["TP1_FRACTION"], "tp_stage": stage,
                                     "trail_start": CFG["TRAIL_ACTIVATE_PCT"], "trail_dist": tdist_eff,
                                     "max_hold": pos_max_hold(p, mint), "time_stop": time_stop_eff,
-                                    "deep_score": dx["score"]}
+                                    "deep_score": dx["score"], "crash": crash_eff, "stop_dyn": p.get("stop_dyn"),
+                                    "dyn_mode": CFG["DYN_STOP_MODE"]}
                         p["stop_hits"] = p["stop_hits"] + 1 if pnl <= stop_eff else 0
                         p["mark_net"], p["pnl_net"] = round(mark_value(p), 4), round(pnl, 3)  # per la dashboard
                         held = (time.time() - p["opened"]) / 60
@@ -3188,7 +3581,7 @@ async def risk_agent(st, http, broker):
                         elif p["liq_entry"] > 0 and p["liq"] < p["liq_entry"] * (1 - CFG["LIQ_DROP_EXIT_PCT"] / 100):
                             drop = (1 - p["liq"] / p["liq_entry"]) * 100
                             await sell_position(st, broker, mint, f"liquidita crollata del {drop:.0f}%")
-                        elif pnl <= CFG["CRASH_EXIT_PCT"]:
+                        elif pnl <= crash_eff:
                             await sell_position(st, broker, mint, f"crollo a {pnl:.1f}%")
                         elif p["stop_hits"] >= 2:
                             await sell_position(st, broker, mint, (f"stop a pareggio +{stop_eff:g}% dopo TP1, ora "
@@ -3221,6 +3614,18 @@ async def risk_agent(st, http, broker):
                                 await sell_position(st, broker, mint, why)
                     except Exception as e:  # noqa: BLE001
                         log(st, "Risk", "error", f"errore su {p.get('symbol')} ({type(e).__name__}), continuo")
+            # v8.1: trade veri gia chiusi, seguiti per POST_EXIT_MIN: nella stessa chiamata delle posizioni aperte;
+            # senza posizioni aperte una chiamata al minuto
+            pe = [k for k, v in st.post_exit.items() if v.get("kind") == "real" and k not in st.positions]
+            if pe and http is not None:
+                try:
+                    if st.positions:
+                        post_exit_update(st, {k: v for k, v in market.items() if k in pe})
+                    elif time.time() - _PATH_PRUNE[1] >= 60:
+                        _PATH_PRUNE[1] = time.time()
+                        post_exit_update(st, await dex_batch(http, pe))
+                except Exception:  # noqa: BLE001
+                    pass
             if http is not None:
                 try:
                     await refresh_sol_usd(http)
@@ -3310,28 +3715,25 @@ async def shadow_agent(st, http):
 SHADOW_CSV = os.path.join(DATA_DIR, "shadow_trades.csv")
 SHADOW_FIELDS = ["aperto", "chiuso", "symbol", "mint", "motivo_scarto", "chiavi", "segnali_soft", "score", "soglia",
                  "prezzo_entrata", "liq_entrata", "rt_cost_pct", "quote_src", "pnl_pct", "peak_pct", "minuti", "uscita",
-                 "rug", "tag", "signals"]
+                 "rug", "tag", "signals",
+                 # v8.1
+                 "atr_1m_10", "stop_applied", "dyn_stop_shadow", "size_mult",
+                 "dyn_tp1", "dyn_trail_act", "dyn_trail_dist", "entry_features"]
 
 
 def ensure_shadow_csv():
-    """v7: shadow_trades.csv con l'intestazione gia all'avvio (anche prima della prima chiusura)."""
+    """v7: shadow_trades.csv con l'intestazione gia all'avvio (anche prima della prima chiusura).
+    v8.1: colonne nuove aggiunte senza perdere le righe vecchie."""
     if os.path.exists(SHADOW_CSV):
-        with open(SHADOW_CSV, newline="") as f:
-            head = next(csv.reader(f), [])
-        if head == SHADOW_FIELDS:
-            return
-        os.replace(SHADOW_CSV, SHADOW_CSV.replace(".csv", f"_old_{int(time.time())}.csv"))
+        csv_migrate(SHADOW_CSV, SHADOW_FIELDS)
+        return
     with open(SHADOW_CSV, "w", newline="") as f:
         csv.writer(f).writerow(SHADOW_FIELDS)
 
 
 def write_csv_row(path, row):
     fields = list(row.keys())
-    if os.path.exists(path):
-        with open(path, newline="") as f:
-            head = next(csv.reader(f), [])
-        if head != fields:
-            os.replace(path, path.replace(".csv", f"_old_{int(time.time())}.csv"))
+    csv_migrate(path, fields)
     new = not os.path.exists(path)
     with open(path, "a", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fields)
@@ -3366,7 +3768,14 @@ def _close_shadow_row(st, mint, sh, pnl, rug, why, now=None):
            "rt_cost_pct": sh["rt"], "quote_src": sh.get("src", "formula"), "pnl_pct": round(pnl, 2),
            "peak_pct": round(sh.get("peak_pct", 0.0), 2), "minuti": int((now - sh["t"]) / 60), "uscita": why,
            "rug": int(bool(rug or pnl <= -50)), "tag": sh.get("tag", ""), "signals": "|".join(sh.get("signals") or [])}
+    fe = dict(sh.get("fe") or {})  # v8.1
+    if fe:
+        fe.update({"trough_pct": round(fnum(sh.get("trough_pct")), 2), "dyn_stop_hit": sh.get("dyn_hit")})
+    row.update(fe_columns(fe))
     write_csv_row(SHADOW_CSV, row)
+    if sh.get("last_price"):
+        post_exit_start(st, mint, "shadow", sh["sym"], sh.get("price"), sh.get("last_price"), why,
+                        fe.get("stop_applied"), fe.get("dyn_stop_shadow"), now)
     st.stats["shadow_closed"] += 1
     record_outcome(st, sh["keys"], pnl, rug, "shadow", now)
     record_signals(st, mint, row["signals"], pnl, rug, shadow=True)
@@ -3418,7 +3827,17 @@ async def open_shadow(st, http, mint, m, keys, reason, score, flags, now=None, t
           "tokens_entry": tokens, "entry_mark": size / tokens, "realized": 0.0, "tp_stage": 0, "peak_pct": 0.0,
           "stop_hits": 0, "rt": round(rt, 2), "src": src, "dec": dec, "tag": tag, "signals": signals,
           "max_hold": max_hold, "links": m.get("links") or {}, "url": m.get("url", "")}
+    try:  # v8.1: feature d'ingresso e stop dinamico anche per gli shadow
+        fe = await entry_features(st, http, mint, m, signals, soft=flags, accel=None, base_stop=CFG["STOP_LOSS_PCT"])
+    except Exception:  # noqa: BLE001
+        fe = {}
+    sh.update({"fe": fe, "stop_dyn": fe.get("dyn_stop_shadow"), "trough_pct": 0.0, "dyn_hits": 0, "dyn_hit": None,
+               "stop_dyn_on": fe.get("dyn_stop_shadow") if CFG["DYN_STOP_MODE"] == "on" and fe.get("atr_1m_10") is not None
+               else None})
+    if mint in st.shadow_trades or mint in st.positions:
+        return None
     st.shadow_trades[mint] = sh
+    path_tick(mint, "shadow", m["price"], m["liq"], 0.0, now=now, ev="entry")
     st.stats["shadow_open"] += 1
     write_event("Learner", "shadow_open", f"shadow {m['symbol']} aperto ({'|'.join(keys)}): {reason[:120]}",
                 {"mint": mint, "keys": list(keys), "score": round(score, 4), "rt_cost_pct": round(rt, 2), "tag": tag})
@@ -3431,6 +3850,14 @@ def shadow_decide(sh, now=None):
     pnl = mark_pnl_pct(sh)
     sh["peak_pct"] = max(sh["peak_pct"], pnl)
     sl, tp, tpf, tdist = CFG["STOP_LOSS_PCT"], CFG["TAKE_PROFIT_PCT"], CFG["TAKE_PROFIT_FRACTION"], CFG["TRAIL_DISTANCE_PCT"]
+    if CFG["DYN_STOP_MODE"] == "on" and sh.get("stop_dyn_on") is not None:  # v8.1
+        sl = fnum(sh["stop_dyn_on"], sl)
+    crash_eff = crash_level(sl)
+    sh["trough_pct"] = min(fnum(sh.get("trough_pct")), pnl)
+    if sh.get("stop_dyn") is not None:
+        sh["dyn_hits"] = sh.get("dyn_hits", 0) + 1 if pnl <= sh["stop_dyn"] else 0
+        if sh["dyn_hits"] >= 2 and not sh.get("dyn_hit"):
+            sh["dyn_hit"] = {"pnl": round(pnl, 2), "min": round((now - sh["t"]) / 60, 1)}
     stage = int(sh.get("tp_stage", 0))
     tp1 = min(CFG["TP1_PCT"], tp)
     rung_pct, rung_frac = (tp1, CFG["TP1_FRACTION"]) if stage == 0 else (tp, tpf)
@@ -3444,7 +3871,7 @@ def shadow_decide(sh, now=None):
         drop = (1 - sh["liq"] / sh["liq_entry"]) * 100
         why = f"liquidita crollata del {drop:.0f}%"
         return why, 1.0, False, is_rug_event(why, held)
-    if pnl <= CFG["CRASH_EXIT_PCT"]:
+    if pnl <= crash_eff:
         return f"crollo a {pnl:.1f}%", 1.0, False, False
     if sh["stop_hits"] >= 2:
         return ("stop a pareggio dopo TP1, ora " if stage >= 1 else "stop loss a ") + f"{pnl:.1f}%", 1.0, False, False
@@ -3486,16 +3913,20 @@ async def shadow_apply(st, http, mint, sh, dec, now=None):
 async def shadow_trade_agent(st, http):
     while True:
         await asyncio.sleep(CFG["SHADOW_CHECK_SEC"])
-        if not st.shadow_trades:
+        pe = [k for k, v in st.post_exit.items() if v.get("kind") == "shadow" and k not in st.shadow_trades]
+        if not st.shadow_trades and not pe:
             continue
         try:
-            market = await dex_batch(http, list(st.shadow_trades.keys()))
+            # v8.1: gli shadow gia chiusi (seguiti 180 min) viaggiano nella stessa chiamata (30 token per chiamata)
+            market = await dex_batch(http, list(st.shadow_trades.keys()) + pe)
             now = time.time()
+            post_exit_update(st, {k: v for k, v in market.items() if k in pe}, now)
             for mint, sh in list(st.shadow_trades.items()):
                 if mint in market:
                     m = summarize(market[mint])
                     if m["price"] > 0:
                         sh["last_price"], sh["liq"], sh["last_ok"] = m["price"], max(m["liq"], 1.0), now
+                        path_tick(mint, "shadow", m["price"], m["liq"], mark_pnl_pct(sh), now=now)
                 dec = shadow_decide(sh, now)
                 deep_queue_peak(mint, sh["sym"], sh.get("peak_pct", 0.0), sh.get("links"), sh.get("url", ""), "shadow")
                 await shadow_apply(st, http, mint, sh, dec, now)

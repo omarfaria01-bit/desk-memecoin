@@ -548,3 +548,37 @@ Risk. Passano anche tutti i test precedenti (eseguiti su una copia della cartell
   picchi ripristinati: cassa di nuovo $953.70), tolte dalla coda deep review le due voci `real_peak` finte, aggiunto
   un evento di correzione in events.jsonl. Log del periodo col bug: `run_v8_bug.log`.
 - Test nuovo in `tests/test_v8.py` (`test_v8b_no_quote_mark_without_real_sol_price`).
+
+## Aggiornamento 30/10/2026 (v8.1) – stop/TP dinamici in shadow, feature d'ingresso, percorsi di prezzo
+
+Il live resta disattivato (`DESK_PAPER_ONLY=1`). **Le uscite reali non cambiano**: stop -12 (override), TP1 +30,
+trailing da +30 con distanza 10. Tutto il nuovo è solo registrato (modo "shadow").
+
+1. **Limiti override**: `STOP_LOSS_PCT` ora fra -30 e -3 (prima -15). `TRAIL_DISTANCE_PCT` fino a 25 (prima 15).
+2. **Crollo relativo allo stop**: `crash_level(stop)` = `CRASH_EXIT_PCT` (-15) se lo stop è più stretto di -15,
+   altrimenti 1.5 x stop (regola `crash_for` del backtest di Mark). Con stop -12 resta -15, identico a prima;
+   con -20 diventa -30. (La formula letterale min(-15, 1.5 x stop) avrebbe dato -18 con lo stop attuale.)
+3. **Stop dinamico** (`DYN_STOP_MODE` off|shadow|on, default **shadow**; `DYN_STOP_ATR_MULT` 3, `DYN_STOP_MIN` -8,
+   `DYN_STOP_MAX` -30, `DYN_STOP_SIZE_SCALE` sì): stop = -clamp(3 x ATR, 8, 30); size_mult = |stop base| / |stop dyn|,
+   **mai sopra 1** (regola dell'Executor "mai maggiorata"). In shadow viene calcolato a ogni ingresso (reale e
+   shadow) ma si esce con lo stop attuale; "on" lo userebbe davvero (NON attivato).
+   - ATR: media (max-min)/chiusura x 100 sulle ultime 10 candele 1m **chiuse** (GeckoTerminal, con cache e pausa
+     di 180 s dopo un 429; al massimo 2 richieste extra al minuto).
+   - Fallback (Mark): candele disponibili se almeno 3 (`atr_src` candles_partial), altrimenti volatilità dai tick
+     dei controlli già fatti prima dell'ingresso (`ticks`), altrimenti `none` -> ATR null e stop dinamico = stop base.
+     `atr_bars_used` registra quante candele sono state usate. DexScreener non ha OHLCV pubblico: i tick vengono
+     dalle chiamate DexScreener già esistenti (nessuna chiamata in più).
+4. **TP1 e trailing dinamici** (`DYN_TP_MODE` off|shadow, default shadow): TP1 = 6 x ATR (+15…+100), attivazione
+   trailing = 6 x ATR (+15…+100), distanza trailing = 2 x ATR (5…25). Multipli e limiti modificabili da override
+   (`DYN_TP1_*`, `DYN_TRAIL_ACT_*`, `DYN_TRAIL_DIST_*`). Senza ATR = valori attuali. Solo registrati.
+5. **Feature d'ingresso** in `trades.csv` e `shadow_trades.csv`: colonne `atr_1m_10`, `stop_applied`,
+   `dyn_stop_shadow`, `size_mult`, `dyn_tp1`, `dyn_trail_act`, `dyn_trail_dist` e `entry_features` (JSON con
+   atr_bars_used, atr_src, std dei rendimenti 1m e 5m, ret_5m, accelerazione volume, liquidità, narrativa,
+   gmgn_trend, kol_count, kol_thesis, project_score, deep_review, segnali soft, valori base e dinamici, trough).
+   I CSV vecchi vengono migrati sul posto (colonne nuove vuote per le righe vecchie).
+6. **Percorsi di prezzo**: `price_paths/<mint>.jsonl` con prezzo, liquidità e pnl a ogni controllo (Risk 15 s,
+   shadow 30 s), ruotati oltre 300 KB, massimo 3000 file. Dopo l'uscita il prezzo viene seguito per 180 minuti
+   (stessa chiamata batch; senza posizioni aperte una al minuto) e il riassunto finisce in
+   `price_paths/_post_exit_summary.jsonl` (massimo/minimo rispetto all'uscita, rimbalzo sopra l'entrata).
+7. **Test**: `tests/test_v81.py` (limiti override, crollo relativo, stop e TP dinamici con fallback null,
+   colonne CSV, percorsi di prezzo). Patch: `dev/patch_v81.py`, `dev/patch_v81_tp.py`.

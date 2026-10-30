@@ -8,9 +8,9 @@ r = P("{not json", base, {}, H); assert not r["ok"] and r["globals"] == base and
 r = P("[1,2]", base, {}, H); assert not r["ok"]
 r = P("", base, {}, H); assert not r["ok"]
 # clamps
-r = P(json.dumps({"global": {"STOP_LOSS_PCT": -30, "TRAIL_DIST_PCT": 1, "TRAIL_START_PCT": 500, "TP_PCT": 1,
+r = P(json.dumps({"global": {"STOP_LOSS_PCT": -40, "TRAIL_DIST_PCT": 1, "TRAIL_START_PCT": 500, "TP_PCT": 1,
       "TP_SELL_FRACTION": 2, "MAX_HOLD_MIN": 10000}}), base, {}, H)
-g = r["globals"]; assert g["STOP_LOSS_PCT"] == -15 and g["TRAIL_DISTANCE_PCT"] == 3 and g["TRAIL_ACTIVATE_PCT"] == 100
+g = r["globals"]; assert g["STOP_LOSS_PCT"] == -30 and g["TRAIL_DISTANCE_PCT"] == 3 and g["TRAIL_ACTIVATE_PCT"] == 100
 assert g["TAKE_PROFIT_PCT"] == 5 and g["TAKE_PROFIT_FRACTION"] == 1.0 and g["MAX_HOLD_MIN"] == 720
 assert any("piu largo" in n for _, n in r["notes"])
 r = P(json.dumps({"global": {"STOP_LOSS_PCT": -1}}), base, {}, H); assert r["globals"]["STOP_LOSS_PCT"] == -3
@@ -26,7 +26,7 @@ assert r["globals"] == prev
 # positions
 r = P(json.dumps({"positions": {"MINTA": {"stop_loss_pct": -4, "trail_dist_pct": 50, "action": "sell_half", "reason": "r"},
       "OTHER": {"action": "sell_all"}}}), base, {}, H)
-pa = r["positions"]["MINTA"]; assert pa["STOP_LOSS_PCT"] == -4 and pa["TRAIL_DISTANCE_PCT"] == 15 and pa["action"] == "sell_half"
+pa = r["positions"]["MINTA"]; assert pa["STOP_LOSS_PCT"] == -4 and pa["TRAIL_DISTANCE_PCT"] == 25 and pa["action"] == "sell_half"
 assert "OTHER" not in r["positions"]
 r = P(json.dumps({"positions": {"MINTA": {"action": "dump"}}}), base, {}, H); assert r["positions"]["MINTA"]["action"] == "hold"
 # new keys + clamps; SL warning now vs -10

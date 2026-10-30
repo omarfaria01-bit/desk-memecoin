@@ -1,5 +1,7 @@
-# Backtest stop loss (survivor) - 2026-10-30 21:52 Europe/Rome
-ingressi: 43 (in-sample 25, out-of-sample 18); size base $30; rendimenti in % della size base
+# Backtest stop loss - 2026-10-30 21:57 Europe/Rome
+size base $30; rendimenti in % della size base; split per hash (IS=meta' 0, OOS=meta' 1)
+
+## Campione survivor (43 trade)
 
 | Config | Trade | Win | Expectancy/trade | Mediana | Somma | MaxDD (somma) | Compost. 10% | DD compost. | Stop scattati / poi rimbalzati sopra ingresso |
 |---|---|---|---|---|---|---|---|---|---|
@@ -41,62 +43,180 @@ ingressi: 43 (in-sample 25, out-of-sample 18); size base $30; rendimenti in % de
 | SL -30 conf3 size scalata | 43 | 63% | +2.02% | +4.14% | +87% | -98% | +8.7% | -9.4% | 10 / 6 |
 | noSL (liq-30% proxy) size fissa | 43 | 65% | +3.73% | +12.39% | +160% | -325% | +13.8% | -28.4% | 9 / 3 |
 | noSL (liq-30% proxy) size scalata | 43 | 56% | -0.13% | +1.88% | -6% | -82% | -0.7% | -7.9% | 9 / 3 |
-| DINAMICO k=3.0xATR10  [8..30] conf2 size scalata | 43 | 65% | +6.87% | +9.99% | +295% | -114% | +32.1% | -10.9% | 14 / 8 |
+| DINAMICO 3.0xATR10 [8..30] conf2 size scalata | 43 | 65% | +6.87% | +9.99% | +295% | -114% | +32.1% | -10.9% | 14 / 8 |
 
-## Split per hash della pool: in-sample | out-of-sample
+| Config | IS n | IS exp | OOS n | OOS exp | OOS win | OOS MaxDD | OOS stop/rimbalzi |
+|---|---|---|---|---|---|---|---|
+| SL -8 conf1 size fissa | 25 | -1.76% | 18 | +4.61% | 50% | -29% | 9/8 |
+| SL -8 conf2 size fissa | 25 | -3.15% | 18 | +6.31% | 56% | -33% | 8/6 |
+| SL -8 conf3 size fissa | 25 | -3.15% | 18 | +6.31% | 56% | -33% | 8/6 |
+| SL -8 conf1 size scalata | 25 | -3.18% | 18 | +4.62% | 44% | -62% | 10/9 |
+| SL -8 conf2 size scalata | 25 | -4.54% | 18 | +9.62% | 56% | -51% | 8/6 |
+| SL -8 conf3 size scalata | 25 | -4.54% | 18 | +9.62% | 56% | -51% | 8/6 |
+| SL -12 conf1 size fissa | 25 | -3.44% | 18 | +3.32% | 56% | -84% | 7/5 |
+| SL -12 conf2 size fissa | 25 | -3.39% | 18 | +3.00% | 56% | -84% | 7/5 |
+| SL -12 conf3 size fissa | 25 | -3.39% | 18 | +3.00% | 56% | -84% | 7/5 |
+| SL -12 conf1 size scalata | 25 | -3.44% | 18 | +3.32% | 56% | -84% | 7/5 |
+| SL -12 conf2 size scalata | 25 | -3.39% | 18 | +3.00% | 56% | -84% | 7/5 |
+| SL -12 conf3 size scalata | 25 | -3.39% | 18 | +3.00% | 56% | -84% | 7/5 |
+| SL -15 conf1 size fissa | 25 | -4.44% | 18 | +2.99% | 56% | -84% | 6/5 |
+| SL -15 conf2 size fissa | 25 | -4.07% | 18 | +5.27% | 61% | -87% | 5/4 |
+| SL -15 conf3 size fissa | 25 | -4.07% | 18 | +5.27% | 61% | -87% | 5/4 |
+| SL -15 conf1 size scalata | 25 | -3.63% | 18 | +2.21% | 56% | -68% | 6/5 |
+| SL -15 conf2 size scalata | 25 | -3.35% | 18 | +4.02% | 61% | -70% | 5/4 |
+| SL -15 conf3 size scalata | 25 | -3.35% | 18 | +4.02% | 61% | -70% | 5/4 |
+| SL -20 conf1 size fissa | 25 | -4.28% | 18 | +4.51% | 61% | -87% | 5/4 |
+| SL -20 conf2 size fissa | 25 | -1.31% | 18 | +7.81% | 67% | -65% | 4/3 |
+| SL -20 conf3 size fissa | 25 | -1.31% | 18 | +7.81% | 67% | -65% | 4/3 |
+| SL -20 conf1 size scalata | 25 | -2.35% | 18 | +2.26% | 61% | -53% | 5/4 |
+| SL -20 conf2 size scalata | 25 | -2.52% | 18 | +4.22% | 67% | -39% | 4/3 |
+| SL -20 conf3 size scalata | 25 | -2.52% | 18 | +4.22% | 67% | -39% | 4/3 |
+| SL -25 conf1 size fissa | 25 | +0.19% | 18 | +7.73% | 67% | -65% | 4/3 |
+| SL -25 conf2 size fissa | 25 | +0.19% | 18 | +11.71% | 72% | -65% | 3/2 |
+| SL -25 conf3 size fissa | 25 | +0.19% | 18 | +11.71% | 72% | -65% | 3/2 |
+| SL -25 conf1 size scalata | 25 | -0.48% | 18 | +3.09% | 67% | -32% | 4/3 |
+| SL -25 conf2 size scalata | 25 | -0.44% | 18 | +3.26% | 67% | -32% | 4/3 |
+| SL -25 conf3 size scalata | 25 | -0.44% | 18 | +3.26% | 67% | -32% | 4/3 |
+| SL -30 conf1 size fissa | 25 | +0.23% | 18 | +16.63% | 78% | -65% | 2/1 |
+| SL -30 conf2 size fissa | 25 | +0.37% | 18 | +15.52% | 78% | -65% | 2/1 |
+| SL -30 conf3 size fissa | 25 | +0.37% | 18 | +15.52% | 78% | -65% | 2/1 |
+| SL -30 conf1 size scalata | 25 | -0.58% | 18 | +6.09% | 78% | -26% | 2/1 |
+| SL -30 conf2 size scalata | 25 | -0.59% | 18 | +5.64% | 78% | -26% | 2/1 |
+| SL -30 conf3 size scalata | 25 | -0.59% | 18 | +5.64% | 78% | -26% | 2/1 |
+| noSL (liq-30% proxy) size fissa | 25 | -4.37% | 18 | +14.98% | 78% | -72% | 2/1 |
+| noSL (liq-30% proxy) size scalata | 25 | -2.04% | 18 | +2.53% | 72% | -18% | 2/1 |
+| DINAMICO 3.0xATR10 [8..30] conf2 size scalata | 25 | +5.90% | 18 | +8.22% | 78% | -62% | 4/2 |
 
-| Config | IS n | IS exp | IS win | OOS n | OOS exp | OOS win | OOS MaxDD | OOS stop/rimbalzi |
-|---|---|---|---|---|---|---|---|---|
-| SL -8 conf1 size fissa | 25 | -1.76% | 40% | 18 | +4.61% | 50% | -29% | 9/8 |
-| SL -8 conf2 size fissa | 25 | -3.15% | 40% | 18 | +6.31% | 56% | -33% | 8/6 |
-| SL -8 conf3 size fissa | 25 | -3.15% | 40% | 18 | +6.31% | 56% | -33% | 8/6 |
-| SL -8 conf1 size scalata | 25 | -3.18% | 40% | 18 | +4.62% | 44% | -62% | 10/9 |
-| SL -8 conf2 size scalata | 25 | -4.54% | 40% | 18 | +9.62% | 56% | -51% | 8/6 |
-| SL -8 conf3 size scalata | 25 | -4.54% | 40% | 18 | +9.62% | 56% | -51% | 8/6 |
-| SL -12 conf1 size fissa | 25 | -3.44% | 40% | 18 | +3.32% | 56% | -84% | 7/5 |
-| SL -12 conf2 size fissa | 25 | -3.39% | 40% | 18 | +3.00% | 56% | -84% | 7/5 |
-| SL -12 conf3 size fissa | 25 | -3.39% | 40% | 18 | +3.00% | 56% | -84% | 7/5 |
-| SL -12 conf1 size scalata | 25 | -3.44% | 40% | 18 | +3.32% | 56% | -84% | 7/5 |
-| SL -12 conf2 size scalata | 25 | -3.39% | 40% | 18 | +3.00% | 56% | -84% | 7/5 |
-| SL -12 conf3 size scalata | 25 | -3.39% | 40% | 18 | +3.00% | 56% | -84% | 7/5 |
-| SL -15 conf1 size fissa | 25 | -4.44% | 40% | 18 | +2.99% | 56% | -84% | 6/5 |
-| SL -15 conf2 size fissa | 25 | -4.07% | 44% | 18 | +5.27% | 61% | -87% | 5/4 |
-| SL -15 conf3 size fissa | 25 | -4.07% | 44% | 18 | +5.27% | 61% | -87% | 5/4 |
-| SL -15 conf1 size scalata | 25 | -3.63% | 36% | 18 | +2.21% | 56% | -68% | 6/5 |
-| SL -15 conf2 size scalata | 25 | -3.35% | 40% | 18 | +4.02% | 61% | -70% | 5/4 |
-| SL -15 conf3 size scalata | 25 | -3.35% | 40% | 18 | +4.02% | 61% | -70% | 5/4 |
-| SL -20 conf1 size fissa | 25 | -4.28% | 44% | 18 | +4.51% | 61% | -87% | 5/4 |
-| SL -20 conf2 size fissa | 25 | -1.31% | 52% | 18 | +7.81% | 67% | -65% | 4/3 |
-| SL -20 conf3 size fissa | 25 | -1.31% | 52% | 18 | +7.81% | 67% | -65% | 4/3 |
-| SL -20 conf1 size scalata | 25 | -2.35% | 40% | 18 | +2.26% | 61% | -53% | 5/4 |
-| SL -20 conf2 size scalata | 25 | -2.52% | 44% | 18 | +4.22% | 67% | -39% | 4/3 |
-| SL -20 conf3 size scalata | 25 | -2.52% | 44% | 18 | +4.22% | 67% | -39% | 4/3 |
-| SL -25 conf1 size fissa | 25 | +0.19% | 56% | 18 | +7.73% | 67% | -65% | 4/3 |
-| SL -25 conf2 size fissa | 25 | +0.19% | 56% | 18 | +11.71% | 72% | -65% | 3/2 |
-| SL -25 conf3 size fissa | 25 | +0.19% | 56% | 18 | +11.71% | 72% | -65% | 3/2 |
-| SL -25 conf1 size scalata | 25 | -0.48% | 52% | 18 | +3.09% | 67% | -32% | 4/3 |
-| SL -25 conf2 size scalata | 25 | -0.44% | 52% | 18 | +3.26% | 67% | -32% | 4/3 |
-| SL -25 conf3 size scalata | 25 | -0.44% | 52% | 18 | +3.26% | 67% | -32% | 4/3 |
-| SL -30 conf1 size fissa | 25 | +0.23% | 56% | 18 | +16.63% | 78% | -65% | 2/1 |
-| SL -30 conf2 size fissa | 25 | +0.37% | 56% | 18 | +15.52% | 78% | -65% | 2/1 |
-| SL -30 conf3 size fissa | 25 | +0.37% | 56% | 18 | +15.52% | 78% | -65% | 2/1 |
-| SL -30 conf1 size scalata | 25 | -0.58% | 52% | 18 | +6.09% | 78% | -26% | 2/1 |
-| SL -30 conf2 size scalata | 25 | -0.59% | 52% | 18 | +5.64% | 78% | -26% | 2/1 |
-| SL -30 conf3 size scalata | 25 | -0.59% | 52% | 18 | +5.64% | 78% | -26% | 2/1 |
-| noSL (liq-30% proxy) size fissa | 25 | -4.37% | 56% | 18 | +14.98% | 78% | -72% | 2/1 |
-| noSL (liq-30% proxy) size scalata | 25 | -2.04% | 44% | 18 | +2.53% | 72% | -18% | 2/1 |
-| DINAMICO k=3.0xATR10  [8..30] conf2 size scalata | 25 | +5.90% | 56% | 18 | +8.22% | 78% | -62% | 4/2 |
+Trade del bot: minuti di storia prima/dopo l'ingresso: reale 897/103, shadow 1/24, shadow 3/23
 
-## Trade reali/shadow del bot (1, solo controllo di coerenza: troppo pochi)
+## Solo trade reali/shadow del bot (3 trade)
 
 | Config | Trade | Win | Expectancy/trade | Mediana | Somma | MaxDD (somma) | Compost. 10% | DD compost. | Stop scattati / poi rimbalzati sopra ingresso |
 |---|---|---|---|---|---|---|---|---|---|
-| SL -8 conf2 size fissa | 1 | 0% | -26.03% | -26.03% | -26% | -26% | -2.6% | -2.6% | 1 / 1 |
-| SL -12 conf2 size fissa | 1 | 0% | -26.03% | -26.03% | -26% | -26% | -2.6% | -2.6% | 1 / 1 |
-| SL -15 conf2 size fissa | 1 | 0% | -26.03% | -26.03% | -26% | -26% | -2.6% | -2.6% | 1 / 1 |
-| SL -20 conf2 size fissa | 1 | 100% | +12.74% | +12.74% | +13% | 0% | +1.3% | 0.0% | 0 / 0 |
-| SL -25 conf2 size fissa | 1 | 100% | +12.74% | +12.74% | +13% | 0% | +1.3% | 0.0% | 0 / 0 |
-| SL -30 conf2 size fissa | 1 | 100% | +12.74% | +12.74% | +13% | 0% | +1.3% | 0.0% | 0 / 0 |
-| noSL (liq-30% proxy) size fissa | 1 | 100% | +12.74% | +12.74% | +13% | 0% | +1.3% | 0.0% | 0 / 0 |
+| SL -8 conf1 size fissa | 3 | 0% | -36.51% | -33.80% | -110% | -110% | -10.6% | -10.6% | 3 / 2 |
+| SL -8 conf2 size fissa | 3 | 0% | -36.51% | -33.80% | -110% | -110% | -10.6% | -10.6% | 3 / 2 |
+| SL -8 conf3 size fissa | 3 | 0% | -36.51% | -33.80% | -110% | -110% | -10.6% | -10.6% | 3 / 2 |
+| SL -8 conf1 size scalata | 3 | 0% | -54.61% | -50.60% | -164% | -164% | -15.5% | -15.5% | 3 / 2 |
+| SL -8 conf2 size scalata | 3 | 0% | -54.61% | -50.60% | -164% | -164% | -15.5% | -15.5% | 3 / 2 |
+| SL -8 conf3 size scalata | 3 | 0% | -54.61% | -50.60% | -164% | -164% | -15.5% | -15.5% | 3 / 2 |
+| SL -12 conf1 size fissa | 3 | 0% | -36.51% | -33.80% | -110% | -110% | -10.6% | -10.6% | 3 / 2 |
+| SL -12 conf2 size fissa | 3 | 0% | -36.51% | -33.80% | -110% | -110% | -10.6% | -10.6% | 3 / 2 |
+| SL -12 conf3 size fissa | 3 | 0% | -36.51% | -33.80% | -110% | -110% | -10.6% | -10.6% | 3 / 2 |
+| SL -12 conf1 size scalata | 3 | 0% | -36.51% | -33.80% | -110% | -110% | -10.6% | -10.6% | 3 / 2 |
+| SL -12 conf2 size scalata | 3 | 0% | -36.51% | -33.80% | -110% | -110% | -10.6% | -10.6% | 3 / 2 |
+| SL -12 conf3 size scalata | 3 | 0% | -36.51% | -33.80% | -110% | -110% | -10.6% | -10.6% | 3 / 2 |
+| SL -15 conf1 size fissa | 3 | 0% | -36.51% | -33.80% | -110% | -110% | -10.6% | -10.6% | 3 / 2 |
+| SL -15 conf2 size fissa | 3 | 0% | -36.51% | -33.80% | -110% | -110% | -10.6% | -10.6% | 3 / 2 |
+| SL -15 conf3 size fissa | 3 | 0% | -36.51% | -33.80% | -110% | -110% | -10.6% | -10.6% | 3 / 2 |
+| SL -15 conf1 size scalata | 3 | 0% | -29.33% | -27.16% | -88% | -88% | -8.6% | -8.6% | 3 / 2 |
+| SL -15 conf2 size scalata | 3 | 0% | -29.33% | -27.16% | -88% | -88% | -8.6% | -8.6% | 3 / 2 |
+| SL -15 conf3 size scalata | 3 | 0% | -29.33% | -27.16% | -88% | -88% | -8.6% | -8.6% | 3 / 2 |
+| SL -20 conf1 size fissa | 3 | 0% | -36.51% | -33.80% | -110% | -110% | -10.6% | -10.6% | 3 / 2 |
+| SL -20 conf2 size fissa | 3 | 33% | -23.59% | -33.80% | -71% | -83% | -7.0% | -8.2% | 2 / 1 |
+| SL -20 conf3 size fissa | 3 | 33% | -23.59% | -33.80% | -71% | -83% | -7.0% | -8.2% | 2 / 1 |
+| SL -20 conf1 size scalata | 3 | 0% | -22.20% | -20.57% | -67% | -67% | -6.5% | -6.5% | 3 / 2 |
+| SL -20 conf2 size scalata | 3 | 33% | -14.56% | -20.57% | -44% | -51% | -4.3% | -5.0% | 2 / 1 |
+| SL -20 conf3 size scalata | 3 | 33% | -14.56% | -20.57% | -44% | -51% | -4.3% | -5.0% | 2 / 1 |
+| SL -25 conf1 size fissa | 3 | 0% | -36.51% | -33.80% | -110% | -110% | -10.6% | -10.6% | 3 / 2 |
+| SL -25 conf2 size fissa | 3 | 33% | -20.70% | -25.14% | -62% | -75% | -6.2% | -7.4% | 2 / 1 |
+| SL -25 conf3 size fissa | 3 | 33% | -20.70% | -25.14% | -62% | -75% | -6.2% | -7.4% | 2 / 1 |
+| SL -25 conf1 size scalata | 3 | 0% | -17.94% | -16.64% | -54% | -54% | -5.3% | -5.3% | 3 / 2 |
+| SL -25 conf2 size scalata | 3 | 33% | -10.51% | -12.48% | -32% | -37% | -3.1% | -3.6% | 2 / 1 |
+| SL -25 conf3 size scalata | 3 | 33% | -10.51% | -12.48% | -32% | -37% | -3.1% | -3.6% | 2 / 1 |
+| SL -30 conf1 size fissa | 3 | 33% | -23.59% | -33.80% | -71% | -83% | -7.0% | -8.2% | 2 / 1 |
+| SL -30 conf2 size fissa | 3 | 33% | -23.71% | -34.17% | -71% | -84% | -7.0% | -8.2% | 2 / 1 |
+| SL -30 conf3 size fissa | 3 | 33% | -23.71% | -34.17% | -71% | -84% | -7.0% | -8.2% | 2 / 1 |
+| SL -30 conf1 size scalata | 3 | 33% | -10.11% | -14.02% | -30% | -34% | -3.0% | -3.4% | 2 / 1 |
+| SL -30 conf2 size scalata | 3 | 33% | -10.16% | -14.17% | -30% | -34% | -3.0% | -3.4% | 2 / 1 |
+| SL -30 conf3 size scalata | 3 | 33% | -10.16% | -14.17% | -30% | -34% | -3.0% | -3.4% | 2 / 1 |
+| noSL (liq-30% proxy) size fissa | 3 | 33% | -38.63% | -62.90% | -116% | -129% | -11.3% | -12.5% | 2 / 1 |
+| noSL (liq-30% proxy) size scalata | 3 | 33% | -9.22% | -15.42% | -28% | -31% | -2.8% | -3.1% | 2 / 1 |
+| DINAMICO 3.0xATR10 [8..30] conf2 size scalata | 3 | 33% | -10.16% | -14.17% | -30% | -34% | -3.0% | -3.4% | 2 / 1 |
 
-Note: liquidita' nel tempo = proxy a prodotto costante (liq*sqrt(p/p0)); per SL oltre -15 il crollo immediato e' spostato a 1.5xSL (nel codice CRASH_EXIT_PCT=-15 scatterebbe prima); survivor: liquidita' d'ingresso = liquidita' attuale (look-ahead).
+## Combinato survivor + bot (46 trade)
+
+| Config | Trade | Win | Expectancy/trade | Mediana | Somma | MaxDD (somma) | Compost. 10% | DD compost. | Stop scattati / poi rimbalzati sopra ingresso |
+|---|---|---|---|---|---|---|---|---|---|
+| SL -8 conf1 size fissa | 46 | 41% | -1.53% | -8.80% | -71% | -239% | -8.2% | -22.0% | 26 / 20 |
+| SL -8 conf2 size fissa | 46 | 43% | -1.62% | -9.22% | -75% | -264% | -8.6% | -23.9% | 25 / 18 |
+| SL -8 conf3 size fissa | 46 | 43% | -1.62% | -9.22% | -75% | -264% | -8.6% | -23.9% | 25 / 18 |
+| SL -8 conf1 size scalata | 46 | 39% | -3.48% | -13.82% | -160% | -402% | -17.6% | -34.5% | 27 / 21 |
+| SL -8 conf2 size scalata | 46 | 43% | -2.26% | -13.66% | -104% | -394% | -13.1% | -34.1% | 25 / 18 |
+| SL -8 conf3 size scalata | 46 | 43% | -2.26% | -13.66% | -104% | -394% | -13.1% | -34.1% | 25 / 18 |
+| SL -12 conf1 size fissa | 46 | 43% | -2.95% | -13.01% | -136% | -272% | -14.3% | -24.6% | 24 / 17 |
+| SL -12 conf2 size fissa | 46 | 43% | -3.05% | -12.14% | -140% | -274% | -14.6% | -24.7% | 24 / 17 |
+| SL -12 conf3 size fissa | 46 | 43% | -3.05% | -12.14% | -140% | -274% | -14.6% | -24.7% | 24 / 17 |
+| SL -12 conf1 size scalata | 46 | 43% | -2.95% | -13.01% | -136% | -272% | -14.3% | -24.6% | 24 / 17 |
+| SL -12 conf2 size scalata | 46 | 43% | -3.05% | -12.14% | -140% | -274% | -14.6% | -24.7% | 24 / 17 |
+| SL -12 conf3 size scalata | 46 | 43% | -3.05% | -12.14% | -140% | -274% | -14.6% | -24.7% | 24 / 17 |
+| SL -15 conf1 size fissa | 46 | 43% | -3.62% | -13.90% | -167% | -300% | -16.9% | -26.7% | 23 / 17 |
+| SL -15 conf2 size fissa | 46 | 48% | -2.53% | -4.65% | -117% | -262% | -12.8% | -23.9% | 21 / 15 |
+| SL -15 conf3 size fissa | 46 | 48% | -2.53% | -4.65% | -117% | -262% | -12.8% | -23.9% | 21 / 15 |
+| SL -15 conf1 size scalata | 46 | 41% | -3.02% | -11.23% | -139% | -244% | -14.0% | -22.2% | 23 / 17 |
+| SL -15 conf2 size scalata | 46 | 46% | -2.16% | -3.83% | -99% | -214% | -10.6% | -19.9% | 21 / 15 |
+| SL -15 conf3 size scalata | 46 | 46% | -2.16% | -3.83% | -99% | -214% | -10.6% | -19.9% | 21 / 15 |
+| SL -20 conf1 size fissa | 46 | 48% | -2.94% | -4.65% | -135% | -276% | -14.5% | -25.0% | 20 / 15 |
+| SL -20 conf2 size fissa | 46 | 57% | +0.80% | +2.70% | +37% | -224% | +1.5% | -21.1% | 16 / 11 |
+| SL -20 conf3 size fissa | 46 | 57% | +0.80% | +2.70% | +37% | -224% | +1.5% | -21.1% | 16 / 11 |
+| SL -20 conf1 size scalata | 46 | 46% | -1.84% | -3.08% | -85% | -176% | -8.8% | -16.5% | 20 / 15 |
+| SL -20 conf2 size scalata | 46 | 52% | -0.67% | +0.96% | -31% | -151% | -3.8% | -14.4% | 17 / 12 |
+| SL -20 conf3 size scalata | 46 | 52% | -0.67% | +0.96% | -31% | -151% | -3.8% | -14.4% | 17 / 12 |
+| SL -25 conf1 size fissa | 46 | 57% | +0.75% | +2.70% | +34% | -227% | +1.1% | -21.4% | 16 / 11 |
+| SL -25 conf2 size fissa | 46 | 61% | +3.33% | +10.04% | +153% | -216% | +13.9% | -19.7% | 14 / 9 |
+| SL -25 conf3 size fissa | 46 | 61% | +3.33% | +10.04% | +153% | -216% | +13.9% | -19.7% | 14 / 9 |
+| SL -25 conf1 size scalata | 46 | 54% | -0.22% | +0.63% | -10% | -125% | -1.5% | -12.1% | 16 / 11 |
+| SL -25 conf2 size scalata | 46 | 57% | +0.35% | +2.24% | +16% | -107% | +1.1% | -10.2% | 15 / 10 |
+| SL -25 conf3 size scalata | 46 | 57% | +0.35% | +2.24% | +16% | -107% | +1.1% | -10.2% | 15 / 10 |
+| SL -30 conf1 size fissa | 46 | 63% | +5.10% | +11.51% | +234% | -216% | +23.2% | -19.8% | 12 / 7 |
+| SL -30 conf2 size fissa | 46 | 63% | +4.73% | +11.51% | +217% | -235% | +21.1% | -21.3% | 12 / 7 |
+| SL -30 conf3 size fissa | 46 | 63% | +4.73% | +11.51% | +217% | -235% | +21.1% | -21.3% | 12 / 7 |
+| SL -30 conf1 size scalata | 46 | 61% | +1.41% | +3.69% | +65% | -89% | +6.3% | -8.5% | 12 / 7 |
+| SL -30 conf2 size scalata | 46 | 61% | +1.22% | +3.69% | +56% | -98% | +5.4% | -9.4% | 12 / 7 |
+| SL -30 conf3 size scalata | 46 | 61% | +1.22% | +3.69% | +56% | -98% | +5.4% | -9.4% | 12 / 7 |
+| noSL (liq-30% proxy) size fissa | 46 | 63% | +0.97% | +11.51% | +44% | -325% | +0.9% | -28.4% | 11 / 4 |
+| noSL (liq-30% proxy) size scalata | 46 | 54% | -0.72% | +1.67% | -33% | -82% | -3.4% | -7.9% | 11 / 4 |
+| DINAMICO 3.0xATR10 [8..30] conf2 size scalata | 46 | 63% | +5.76% | +8.19% | +265% | -114% | +28.1% | -10.9% | 16 / 9 |
+
+| Config | IS n | IS exp | OOS n | OOS exp | OOS win | OOS MaxDD | OOS stop/rimbalzi |
+|---|---|---|---|---|---|---|---|
+| SL -8 conf1 size fissa | 26 | -2.70% | 20 | -0.02% | 45% | -83% | 11/9 |
+| SL -8 conf2 size fissa | 26 | -4.03% | 20 | +1.51% | 50% | -83% | 10/7 |
+| SL -8 conf3 size fissa | 26 | -4.03% | 20 | +1.51% | 50% | -83% | 10/7 |
+| SL -8 conf1 size scalata | 26 | -4.54% | 20 | -2.11% | 40% | -134% | 12/10 |
+| SL -8 conf2 size scalata | 26 | -5.85% | 20 | +2.40% | 50% | -125% | 10/7 |
+| SL -8 conf3 size scalata | 26 | -5.85% | 20 | +2.40% | 50% | -125% | 10/7 |
+| SL -12 conf1 size fissa | 26 | -4.31% | 20 | -1.18% | 50% | -84% | 9/6 |
+| SL -12 conf2 size fissa | 26 | -4.26% | 20 | -1.47% | 50% | -84% | 9/6 |
+| SL -12 conf3 size fissa | 26 | -4.26% | 20 | -1.47% | 50% | -84% | 9/6 |
+| SL -12 conf1 size scalata | 26 | -4.31% | 20 | -1.18% | 50% | -84% | 9/6 |
+| SL -12 conf2 size scalata | 26 | -4.26% | 20 | -1.47% | 50% | -84% | 9/6 |
+| SL -12 conf3 size scalata | 26 | -4.26% | 20 | -1.47% | 50% | -84% | 9/6 |
+| SL -15 conf1 size fissa | 26 | -5.27% | 20 | -1.48% | 50% | -84% | 8/6 |
+| SL -15 conf2 size fissa | 26 | -4.92% | 20 | +0.57% | 55% | -87% | 7/5 |
+| SL -15 conf3 size fissa | 26 | -4.92% | 20 | +0.57% | 55% | -87% | 7/5 |
+| SL -15 conf1 size scalata | 26 | -4.30% | 20 | -1.36% | 50% | -68% | 8/6 |
+| SL -15 conf2 size scalata | 26 | -4.03% | 20 | +0.27% | 55% | -70% | 7/5 |
+| SL -15 conf3 size scalata | 26 | -4.03% | 20 | +0.27% | 55% | -70% | 7/5 |
+| SL -20 conf1 size fissa | 26 | -5.12% | 20 | -0.12% | 55% | -87% | 7/5 |
+| SL -20 conf2 size fissa | 26 | -0.77% | 20 | +2.85% | 60% | -83% | 6/4 |
+| SL -20 conf3 size fissa | 26 | -0.77% | 20 | +2.85% | 60% | -83% | 6/4 |
+| SL -20 conf1 size scalata | 26 | -2.87% | 20 | -0.49% | 55% | -54% | 7/5 |
+| SL -20 conf2 size scalata | 26 | -2.16% | 20 | +1.27% | 60% | -53% | 6/4 |
+| SL -20 conf3 size scalata | 26 | -2.16% | 20 | +1.27% | 60% | -53% | 6/4 |
+| SL -25 conf1 size fissa | 26 | -0.81% | 20 | +2.78% | 60% | -83% | 6/4 |
+| SL -25 conf2 size fissa | 26 | +0.67% | 20 | +6.79% | 65% | -75% | 5/3 |
+| SL -25 conf3 size fissa | 26 | +0.67% | 20 | +6.79% | 65% | -75% | 5/3 |
+| SL -25 conf1 size scalata | 26 | -0.97% | 20 | +0.75% | 60% | -46% | 6/4 |
+| SL -25 conf2 size scalata | 26 | -0.23% | 20 | +1.11% | 60% | -39% | 6/4 |
+| SL -25 conf3 size scalata | 26 | -0.23% | 20 | +1.11% | 60% | -39% | 6/4 |
+| SL -30 conf1 size fissa | 26 | +0.71% | 20 | +10.79% | 70% | -83% | 4/2 |
+| SL -30 conf2 size fissa | 26 | +0.85% | 20 | +9.77% | 70% | -84% | 4/2 |
+| SL -30 conf3 size fissa | 26 | +0.85% | 20 | +9.77% | 70% | -84% | 4/2 |
+| SL -30 conf1 size scalata | 26 | -0.41% | 20 | +3.76% | 70% | -34% | 4/2 |
+| SL -30 conf2 size scalata | 26 | -0.41% | 20 | +3.35% | 70% | -34% | 4/2 |
+| SL -30 conf3 size scalata | 26 | -0.41% | 20 | +3.35% | 70% | -34% | 4/2 |
+| noSL (liq-30% proxy) size fissa | 26 | -3.71% | 20 | +7.05% | 70% | -129% | 4/2 |
+| noSL (liq-30% proxy) size scalata | 26 | -1.81% | 20 | +0.70% | 65% | -31% | 4/2 |
+| DINAMICO 3.0xATR10 [8..30] conf2 size scalata | 26 | +5.82% | 20 | +5.68% | 70% | -62% | 6/3 |
+
+Note: liquidita' nel tempo = proxy a prodotto costante (liq*sqrt(p/p0)); per SL oltre -15 il crollo immediato e' spostato a 1.5xSL (nel codice CRASH_EXIT_PCT=-15 scatterebbe prima); survivor: liquidita' d'ingresso = liquidita' attuale (look-ahead); trade del bot con hold troncato se i dati finiscono prima di 180 min.
