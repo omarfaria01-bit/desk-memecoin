@@ -15,7 +15,9 @@ D.SRC["goplus"] = goplus
 assert goplus.lp_pct_from_dex(None) is None
 assert goplus.lp_pct_from_dex([]) is None
 assert goplus.lp_pct_from_dex([{"burn_percent": None}, {"burn_percent": None}]) is None   # dato assente, mai 0
-assert goplus.lp_pct_from_dex([{"burn_percent": 0}, {"burn_percent": 97.5}]) == 97.5       # il massimo noto
+assert goplus.lp_pct_from_dex([{"burn_percent": 0}, {"burn_percent": 97.5}]) == 0          # review: pool ignota = il piu prudente
+assert goplus.lp_pct_from_dex([{"id": "SIDE", "burn_percent": 100}, {"id": "MAIN", "burn_percent": 0}], "MAIN") == 0
+assert goplus.lp_pct_from_dex([{"id": "MAIN", "burn_percent": None}, {"id": "SIDE", "burn_percent": 100}], "MAIN") is None
 
 # ---- 2) security_check con RugCheck giu e dex Raydium (il gap: rc_fallback non sa leggere la LP Raydium
 # via byte-parsing; prima del compito 20 restava sempre "unknown" qui, ora GoPlus puo risolverlo)
@@ -134,13 +136,16 @@ asyncio.sleep = lambda s: (sleeps.append(s), _real_sleep(0))[1]
 try:
     sess = FakeSession([429, 200])
     h = D.Http(sess)
-    out = asyncio.run(h.get("http://unit.test/x"))
+    out = asyncio.run(h.get("http://unit.test/x", retries=2))   # review: retry solo dove richiesto (report RugCheck)
     assert out == {"ok": True} and sess.calls == 2, (out, sess.calls)   # riprovato una volta, poi andato a buon fine
 
     sess2 = FakeSession([429, 429, 429])
     h2 = D.Http(sess2)
     out2 = asyncio.run(h2.get("http://unit.test/y", retries=2))
     assert out2 is None and sess2.calls == 3   # tre tentativi (il default), poi si arrende
+    sess3 = FakeSession([429])   # review Claude: default senza retry (come prima: un tentativo e pausa)
+    out3 = asyncio.run(D.Http(sess3).get("http://unit.test/z"))
+    assert out3 is None and sess3.calls == 1 and 20 in sleeps
 finally:
     asyncio.sleep = _real_sleep
 
