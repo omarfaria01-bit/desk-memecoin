@@ -5760,7 +5760,10 @@ async def open_shadow(st, http, mint, m, keys, reason, score, flags, now=None, t
     if CFG["SHADOW_ROUTE_CHECK"] and br is not None and getattr(br, "realistic", False):
         pre = await br.precheck(st, mint, m, size)  # solo preventivi, nessuna transazione
         if pre and not pre.get("ok", True):
-            if pre.get("cat") in ("non rivendibile", "nessun percorso Jupiter"):
+            # review Claude (compito 4): "nessun percorso d'ACQUISTO" non e un rug: il trade vero non sarebbe partito
+            # (come per la rivendita troppo cara), quindi niente shadow -100. Resta il caso "non rivendibile":
+            # acquisto possibile e vendita no nello stesso momento = segnale honeypot.
+            if pre.get("cat") == "non rivendibile":
                 sh = {"t": now, "sym": m["symbol"], "reason": reason, "keys": list(keys), "flags": list(flags),
                       "score": round(score, 4), "thr": round(st.threshold, 4), "price": m["price"],
                       "liq_entry": m["liq"], "rt": None, "src": "jupiter", "peak_pct": 0.0, "tag": tag,
@@ -5853,7 +5856,14 @@ async def shadow_apply(st, http, mint, sh, dec, now=None):
         raw = int(sh["tokens"] * 10 ** int(sh["dec"]))
         _, err = await jup_quote(http, mint, WSOL, raw)  # solo preventivo: c'e ancora un percorso di vendita?
         if err == "no_route":
-            why, zero, rug = why + "; nessun percorso di vendita su Jupiter", True, True
+            # review Claude (compito 4): un solo 'no_route' (anche un 400 qualsiasi) chiudeva a -100% rug.
+            # Ora serve la conferma al giro successivo (MARK_NOROUTE_CONFIRM di fila, minimo 2); intanto resta aperto.
+            sh["close_noroute"] = int(sh.get("close_noroute", 0)) + 1
+            if sh["close_noroute"] < max(2, int(CFG.get("MARK_NOROUTE_CONFIRM", 3))):
+                return None
+            why, zero, rug = why + "; nessun percorso di vendita su Jupiter (confermato)", True, True
+        else:
+            sh.pop("close_noroute", None)
     sold = sh["tokens"] * frac
     sh["realized"] += 0.0 if zero else exit_value(sold, sh["last_price"], sh["liq"])
     sh["tokens"] = max(0.0, sh["tokens"] - sold)
