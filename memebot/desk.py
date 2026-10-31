@@ -319,6 +319,7 @@ CFG = {
     "SELLCHECK_MAX_RT_PCT": 15.0,     # prima di comprare: se rivendere subito costa oltre il 15% -> scarto
     "SELL_NOROUTE_WRITE_OFF": 20,     # dopo 20 vendite senza percorso Jupiter la posizione vale 0 (paper)
     "MARK_QUOTE_SEC": 60,             # valore delle posizioni dal preventivo di vendita reale ogni 60 s
+    "MARK_NOROUTE_CONFIRM": 3,        # v8.5: valore ~0 solo dopo 3 preventivi 'no_route' DI FILA (uno solo = dato mancante)
     # priority fee dinamica da getRecentPrioritizationFees (RPC pubblico gratuito)
     "PRIO_DYNAMIC": True,
     "PRIO_REFRESH_SEC": 180,
@@ -3934,10 +3935,16 @@ class PaperBroker:
             p["dec"] = dec
         qq, err = await jup_quote(self.http, mint, WSOL, int(p["tokens"] * 10 ** dec))
         if err == "no_route":
-            p["qmark"] = {"ts": time.time(), "ratio": 1e-9, "no_route": True}  # invendibile: valore ~0
+            # v8.5: un solo 'no_route' (anche un 400 qualsiasi di Jupiter) portava la posizione a -100%, crollo,
+            # vendita urgente e creatore in lista nera. Ora vale ~0 solo dopo MARK_NOROUTE_CONFIRM di fila;
+            # prima resta l'ultimo valore valido (o la formula, quando scade).
+            p["mark_noroute"] = p.get("mark_noroute", 0) + 1
+            if p["mark_noroute"] >= int(CFG.get("MARK_NOROUTE_CONFIRM", 3)):
+                p["qmark"] = {"ts": time.time(), "ratio": 1e-9, "no_route": True}  # invendibile: valore ~0
             return
         if not qq:
             return
+        p["mark_noroute"] = 0
         gross = int(qq["outAmount"]) / 1e9 * sol_usd()
         disp = p["tokens"] * p["last_price"]
         if gross > disp * 1.10:  # v8b: preventivo oltre il 10% sopra il prezzo mostrato = dato sospetto, lo ignoro
@@ -4537,6 +4544,8 @@ OVR_LIMITS.update({"BIRDEYE_XCHECK_SIZE_MULT": (0.2, 1.0), "BIRDEYE_MIN_HOLDERS"
                    "BIRDEYE_LIQ_RATIO": (0.2, 0.9), "BIRDEYE_TREND_SEC": (3600.0, 86400.0),
                    "BIRDEYE_RESERVE_CU": (500.0, 10000.0), "BIRDEYE_SAVE_AT": (0.5, 0.95)})
 OVR_INT_KEYS |= {"BIRDEYE_MIN_HOLDERS", "BIRDEYE_TREND_SEC", "BIRDEYE_RESERVE_CU"}
+OVR_LIMITS.update({"MARK_NOROUTE_CONFIRM": (2.0, 6.0)})   # v8.5
+OVR_INT_KEYS |= {"MARK_NOROUTE_CONFIRM"}
 OVR_GLOBAL_MAP.update({k: k for k in ("BIRDEYE_XCHECK_SIZE_MULT", "BIRDEYE_MIN_HOLDERS", "BIRDEYE_LIQ_RATIO",
                                       "BIRDEYE_TREND_SEC", "BIRDEYE_RESERVE_CU", "BIRDEYE_SAVE_AT")})
 OVR_DEFAULTS = {k: CFG[k] for k in list(OVR_LIMITS) + list(OVR_STR_KEYS)}
