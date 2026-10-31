@@ -91,3 +91,10 @@ Dati 31/10: watchlist delle fonti secondarie piena da ~12:30 (`WATCH_NEW_MAX` 12
 - Mai sfrattare `prio` (trending) né token con call Discord recente (`discord_call`).
 - Test: watchlist piena con mix morti/vivi → escono prima i morti; nessuna chiamata di rete in più; RAM stabile con 2000 token.
 - Nota: sfratti per tipo prima/dopo su un replay e quanti sfrattati `oldest` avrebbero fatto TP1.
+
+## Dati reali
+
+- Il branch `data-snapshot` (cartella `data/`) contiene una copia notturna dei dati paper reali del bot (trade ombra, trade, equity, eventi, state, price_paths, prior, smart wallets, creator_seed, call Discord etichettate). Niente chiavi.
+- Uso: `git fetch origin data-snapshot && git archive origin/data-snapshot data | tar -x -C /tmp/desk_data`, poi lancia gli script su copie in /tmp.
+- Per primi: `backtest/anti_dump_report.py` → risultati in `backtest/results_anti_dump.md` (branch anti-dump); `docs/analysis/calibrate_prior.py` → report di calibrazione nel branch prior-calibration.
+- Mai committare dati su main e mai fare merge di `data-snapshot`.
