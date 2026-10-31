@@ -3919,7 +3919,10 @@ async def security_check(st, http, mint, m, cache):
     holders = [h for h in (r.get("topHolders") or [])
                if h.get("address") not in exclude and h.get("owner") not in exclude]
     # v8.4f (review Claude f): indirizzi morti (incinerator) ed exchange noti fuori dal top 10, mostrati a parte
-    supply_ui0 = fnum(tok.get("supply")) / 10 ** int(fnum(tok.get("decimals"))) if tok.get("supply") else 0.0
+    # review Claude: senza 'decimals' int(fnum(None)) = 0 -> offerta grezza (x10^6) e quote ~0%: top 10, wallet
+    # identici, insider e creatore passavano. Senza decimali si usa il 'pct' di RugCheck (supply_ui = 0).
+    _dec_ok = tok.get("decimals") is not None and fnum(tok.get("decimals"), -1) >= 0
+    supply_ui0 = fnum(tok.get("supply")) / 10 ** int(fnum(tok.get("decimals"))) if tok.get("supply") and _dec_ok else 0.0
     _hp = lambda h: (fnum(h.get("uiAmount")) / supply_ui0 * 100 if supply_ui0 > 0 and fnum(h.get("uiAmount")) > 0  # noqa: E731
                      else fnum(h.get("pct")))
     dead_pct, cex_pct, cex_names, keep = 0.0, 0.0, [], []
@@ -3939,9 +3942,11 @@ async def security_check(st, http, mint, m, cache):
         return False, "lista holder non disponibile", "holder non disponibili", None
     # (v5) pcts = [pct]; se tutte <= 1 venivano moltiplicate x100 -> falsi "top 10 al 99%" sui token molto
     # distribuiti. v6: quota = uiAmount / offerta (RugCheck "pct" e gia in percento, usato come riserva)
-    supply_ui = fnum(tok.get("supply")) / 10 ** int(fnum(tok.get("decimals"))) if tok.get("supply") else 0.0
+    supply_ui = fnum(tok.get("supply")) / 10 ** int(fnum(tok.get("decimals"))) if tok.get("supply") and _dec_ok else 0.0
     pcts = [fnum(h.get("uiAmount")) / supply_ui * 100 if supply_ui > 0 and fnum(h.get("uiAmount")) > 0
             else fnum(h.get("pct")) for h in holders]
+    if not any(p_ > 0 for p_ in pcts):   # review Claude: nessuna quota calcolabile = dato mancante, non "0%"
+        return False, "quote dei holder non calcolabili (offerta/decimali/pct mancanti)", "holder non disponibili", None
     top10 = sum(sorted(pcts, reverse=True)[:10])
     t10h = soft_hard(st, "top10")
     if top10 > t10h:
