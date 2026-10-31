@@ -3063,7 +3063,7 @@ def rc_health(ok, now=None):
     return h["down"]
 
 
-def rc_down_doubts(st, cl):
+def rc_down_doubts(st, cl, crh=None):
     """Review Claude: dubbi del ripiego che si possono verificare solo nell'Analyst (cluster v2 gia fatto).
     Lista vuota = nessun dubbio. Ogni dato mancante e un dubbio, mai un 'ok'."""
     d = []
@@ -3074,6 +3074,13 @@ def rc_down_doubts(st, cl):
     n = int(fnum((cl or {}).get("holders_total")))
     if n < CFG["MIN_HOLDERS"]:
         d.append(f"holder non verificati o pochi ({n} < {CFG['MIN_HOLDERS']})" if n else "numero di holder non verificato")
+    # col ripiego r['creator'] non c'e: lista nera e quota del creatore in security_check venivano saltate.
+    # Il creatore arriva dallo storico creatore (pump.fun); se non si conosce, la lista nera non e controllabile.
+    cr = str((crh or {}).get("creator") or "")
+    if not cr:
+        d.append("creatore non verificabile (lista nera non controllata)")
+    elif cr in st.blacklist:
+        d.append("creatore in lista nera per un rug precedente")
     return d
 
 
@@ -3811,6 +3818,7 @@ async def analyst_agent(st, http, q_in, q_out):
                     smult *= soft_size(st, flag)
             # v8.4e (Kiwi): storico del creatore, solo per i candidati a un acquisto vero (2 chiamate pump.fun
             # gratuite per creatore nuovo, poi cache). 'unknown' = nessun effetto.
+            crh = None   # review Claude: mai il valore del token precedente (letto dal ripiego RugCheck qui sotto)
             if CFG.get("CREATOR_HISTORY", True) and "crh" in SRC and not so and score >= st.threshold \
                     and str(mint).endswith("pump") and callable(getattr(http, "get", None)):
                 crh = await SRC["crh"].lookup(http.get, mint, (c.get("sec") or {}).get("creator") or None)
@@ -3835,7 +3843,7 @@ async def analyst_agent(st, http, q_in, q_out):
             if (_sec.get("rc_down") or _sec.get("bundle_established")) and not so and score >= st.threshold:
                 _lv = (cl or {}).get("level", "unknown")
                 why_tag = "rugcheck_down" if _sec.get("rc_down") else "bundle_established"
-                doubts = rc_down_doubts(st, cl) if why_tag == "rugcheck_down" else \
+                doubts = rc_down_doubts(st, cl, crh) if why_tag == "rugcheck_down" else \
                     ([] if _lv in ("ok", "soft") else [f"cluster v2 '{_lv}' (serve ok o soft)"])
                 if doubts:
                     reason = f"{'RugCheck giu' if why_tag == 'rugcheck_down' else 'bundle su token affermato'}: " \
