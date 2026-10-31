@@ -50,12 +50,17 @@ def _fee_pct(tf):
     return best if best > 0 else 0.01   # fee presente ma senza un numero leggibile: la si conta comunque
 
 
-def lp_pct_from_dex(dex_list):
-    """v8.10: quota massima di LP bloccata/bruciata (burn_percent) tra le pool note a GoPlus per il token.
-    None = GoPlus non ha un burn_percent per nessuna pool (dato assente, mai interpretato come 0%)."""
-    pcts = [float(d["burn_percent"]) for d in (dex_list or [])
-            if isinstance(d, dict) and d.get("burn_percent") is not None]
-    return max(pcts) if pcts else None
+def lp_pct_from_dex(dex_list, pair=None):
+    """v8.10: LP bruciata (burn_percent) della pool che il bot usa. Review Claude: prima era il MASSIMO tra tutte le
+    pool, quindi una pool secondaria bruciata faceva passare la principale sbloccata. Ora: la pool con id/indirizzo
+    == pair; se non si riconosce, il valore PIU BASSO noto (prudente). None = nessun burn_percent (mai 0%)."""
+    rows = [d for d in (dex_list or []) if isinstance(d, dict)]
+    if pair:
+        for d in rows:
+            if pair in (d.get("id"), d.get("pair"), d.get("address"), d.get("pool")):
+                return float(d["burn_percent"]) if d.get("burn_percent") is not None else None
+    pcts = [float(d["burn_percent"]) for d in rows if d.get("burn_percent") is not None]
+    return min(pcts) if pcts else None
 
 
 def verdict(r, cfg=None):
