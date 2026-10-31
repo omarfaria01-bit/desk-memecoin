@@ -72,3 +72,17 @@ assert len(opens) == 3 and all(c[2] == D.CFG["SHADOW_TG_GROUP_SEC"] for c in ope
 
 D.TG_REF[0] = None
 print("test_shadow_telegram: ok")
+
+# ---- review Claude: un gruppo lungo (molti shadow insieme) va in piu messaggi, mai troncato
+import queue as _q, threading as _th  # noqa: E402
+from sources import notify_telegram as _NT  # noqa: E402
+n = object.__new__(_NT.Notifier)
+n.enabled, n.glock, n.groups, n.q, n.dropped, n.onflush = True, _th.Lock(), {}, _q.Queue(), 0, (lambda: None)
+for i in range(40):
+    n.group("shadow_open", f"TOK{i} | CA: {'X' * 44} | motivo {'y' * 120} | https://dexscreener.com/solana/{'X' * 44}",
+            every=0, title="SHADOW aperti")
+n._flush_groups(force=True)
+msgs = [n.q.get_nowait() for _ in range(n.q.qsize())]
+assert len(msgs) > 1 and all(len(x) <= _NT.MAX_LEN for x in msgs)
+assert all(f"TOK{i} |" in "".join(msgs) for i in range(40))   # nessuna riga persa
+print("test_shadow_telegram (messaggi divisi): ok")

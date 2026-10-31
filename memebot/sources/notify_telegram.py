@@ -122,14 +122,24 @@ class Notifier:
             for k, g in self.groups.items():
                 if g["lines"] and (force or now - g["last"] >= g["every"]):
                     extra = g.pop("extra", 0)
-                    txt = g["title"] + "\n" + "\n".join("- " + x for x in g["lines"])
+                    # review Claude: piu messaggi invece di troncare a MAX_LEN (le righe shadow con CA e link sono
+                    # ~300 caratteri: oltre ~12 righe le successive sparivano senza avviso)
+                    chunks, cur = [], g["title"]
+                    for x in g["lines"]:
+                        ln = "\n- " + str(x)[:MAX_LEN - len(g["title"]) - 20]
+                        if len(cur) + len(ln) > MAX_LEN:
+                            chunks.append(cur)
+                            cur = g["title"] + " (segue)"
+                        cur += ln
                     if extra:
-                        txt += f"\n(+{extra} altri)"
+                        cur += f"\n(+{extra} altri)"
+                    chunks.append(cur)
                     g["lines"], g["last"], sent = [], now, True
-                    try:
-                        self.q.put_nowait(txt[:MAX_LEN])
-                    except queue.Full:
-                        self.dropped += 1
+                    for txt in chunks:
+                        try:
+                            self.q.put_nowait(txt[:MAX_LEN])
+                        except queue.Full:
+                            self.dropped += 1
         if sent:
             try:
                 self.onflush()
