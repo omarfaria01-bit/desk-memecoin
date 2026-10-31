@@ -1,0 +1,7 @@
+# bug-hunt-2
+
+1. **Cosa (un commit per errore):** (a) honeypot e cluster_v2 importati a parte, e senza modulo honeypot niente acquisto; prima stavano nel try di fomo/kol/momentum e sparivano in silenzio. (b) Con `decimals` mancante le quote dei holder risultavano circa 0% (top 10 al 66,9% diventava 0,0%); ora si usa il `pct` di RugCheck, e senza quote il token è scartato. (c) La LP si conta sulla pool usata (`m['pair']`), non sulla migliore tra tutti i mercati. (d) Una pool Raydium di un token pump.fun non vale più "LP bruciata dal protocollo". (e) Report RugCheck senza `totalHolders`: holder minimi verificati con cluster v2. (f) Casi aperti: un controllo senza coppia non chiude più il caso come rug (servono 3 di fila).
+2. **Perché:** sono tutti casi di "dato mancante letto come ok" o "dato mancante letto come rug". (a)-(e) li avevo già segnalati nella issue #2 ed erano ancora aperti; (f) è nuovo, nel codice v8.5.
+3. **File:** `desk.py`; test `tests/test_bug_hunt_2.py`.
+4. **Prove:** il test cade su `main` (decimali mancanti = top 10 allo 0%). Suite come su `main`.
+5. **Rischi:** (c) un token con la pool principale senza dati LP in RugCheck va solo in shadow, anche se un'altra pool è bloccata. (d) le pool Raydium dei token pump.fun passano dalla regola LP normale. (e) con cluster v2 spento o in errore, i report senza `totalHolders` non comprano. Non ho trovato controlli positivi o lezioni negative toccati.
