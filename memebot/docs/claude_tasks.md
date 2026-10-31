@@ -131,6 +131,11 @@ RugCheck è giù da molte ore e il bot vive sul fallback: i token finiscono scar
 - Rendi conto con i numeri: quanti token scartati per `rugcheck_down` nelle ultime 24 ore, prima e dopo.
 - Branch `claude/rugcheck-fix`; deploy solo dopo la mia review.
 
+## Riferimenti open source per 18 e 20 (solo da leggere)
+- `chainstacklabs/pumpfun-bonkfun-bot` (~1000★): lettura on-chain di pump.fun/PumpSwap senza API terze. Utile per il fallback di RugCheck (LP, curva, migrazione).
+- `h100envy/crawl-hive`: bundle, sniper, operatori collegati, bubble map, LP lock, storico del dev. Utile per il cluster (18) e il fallback (20).
+**Sicurezza:** i repo di bot sniper sono spesso trappole che rubano wallet. Leggi il codice e prendi le idee, ma **non eseguire né installare** nulla da lì, non copiare dipendenze, e mai chiavi o `.env` vicino a quel codice.
+
 ## Dati reali
 
 - Il branch `data-snapshot` (cartella `data/`) contiene una copia notturna dei dati paper reali del bot (trade ombra, trade, equity, eventi, state, price_paths, prior, smart wallets, creator_seed, call Discord etichettate). Niente chiavi.
