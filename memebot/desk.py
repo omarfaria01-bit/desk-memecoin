@@ -371,6 +371,34 @@ HOST_GAPS = {"api.dexscreener.com": 0.25, "api.geckoterminal.com": 6.0, "fronten
              "lite-api.jup.ag": 1.1, "api.jup.ag": 1.1, "api.mainnet-beta.solana.com": 0.5,
              "solana-rpc.publicnode.com": 0.05}  # v6: Jupiter e RPC
 HARD_STOP_PATH = os.path.join(DATA_DIR, "HARD_STOP")
+# v8.5: transazioni live inviate con esito ancora sconosciuto (firma, mint, lato). Finche c'e una voce non risolta
+# nessun nuovo acquisto: si controlla su Solscan e si cancella il file (come HARD_STOP).
+PENDING_TX_PATH = os.path.join(DATA_DIR, "live_pending_tx.json")
+
+
+def pending_tx_load():
+    try:
+        with open(PENDING_TX_PATH) as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except FileNotFoundError:
+        return {}
+    except Exception:  # noqa: BLE001
+        return {"_illeggibile": {"status": "unknown", "side": "?", "mint": "?"}}   # file rovinato: mai 'nessuna'
+
+
+def pending_tx_save(d):
+    if not d:
+        try:
+            os.remove(PENDING_TX_PATH)
+        except FileNotFoundError:
+            pass
+        return
+    tmp = PENDING_TX_PATH + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(d, f, indent=1)
+    os.replace(tmp, PENDING_TX_PATH)
+
 # v7: moduli opzionali in sources/ (solo lettura). Se mancano il bot gira come prima, senza bonus.
 SRC = {}
 try:
@@ -3952,6 +3980,9 @@ class PaperBroker:
         p["qmark"] = {"ts": time.time(), "ratio": clamp(gross / disp, 1e-9, 2.0), "impact_pct": round((1 - gross / disp) * 100, 3)}
 
 
+RPC_NO_RESPONSE = "nodo RPC senza risposta"
+
+
 class SolanaBroker:
     """Scambi veri tramite Jupiter. In dry simula senza inviare nulla."""
 
@@ -3985,11 +4016,12 @@ class SolanaBroker:
             st.cash = await self.cash_usd(st)
             if st.period_start_equity == CFG["START_BALANCE"] and not st.positions:
                 st.period_start_equity = st.cash
+        await self.resolve_pending(st)
 
     async def rpc(self, method, params):
         d = await self.http.post(CFG["RPC_URL"], {"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
         if not isinstance(d, dict):
-            return None, "nodo RPC senza risposta"
+            return None, RPC_NO_RESPONSE
         if d.get("error"):
             err = d["error"]
             return None, str(err.get("message", err) if isinstance(err, dict) else err)[:140]
@@ -4068,23 +4100,87 @@ class SolanaBroker:
             return None, "Jupiter non ha restituito la transazione"
         tx = VersionedTransaction.from_bytes(base64.b64decode(d["swapTransaction"]))
         signed = VersionedTransaction(tx.message, [self.kp])
+        self.last_valid = int(fnum(d.get("lastValidBlockHeight"))) or None   # v8.5: scadenza del blockhash
         return base64.b64encode(bytes(signed)).decode(), None
 
-    async def send(self, b64tx):
-        sig, err = await self.rpc("sendTransaction", [b64tx, {"encoding": "base64", "skipPreflight": False,
-                                                              "preflightCommitment": "processed", "maxRetries": 3}])
-        if err or not sig:
-            return False, err or "invio fallito"
-        for _ in range(30):
+    @staticmethod
+    def tx_sig(b64tx):
+        from solders.transaction import VersionedTransaction
+        return str(VersionedTransaction.from_bytes(base64.b64decode(b64tx)).signatures[0])
+
+    async def tx_status(self, sig, last_valid=None):
+        """'ok' confermata, 'failed' errore on-chain o blockhash scaduto senza traccia, 'pending' non ancora
+        decidibile, 'unknown' RPC senza risposta."""
+        r, err = await self.rpc("getSignatureStatuses", [[sig], {"searchTransactionHistory": True}])
+        if err or not isinstance(r, dict) or not isinstance(r.get("value"), list):
+            return "unknown"
+        s = r["value"][0] if r["value"] else None
+        if s:
+            if s.get("err"):
+                return "failed"
+            return "ok" if s.get("confirmationStatus") in ("confirmed", "finalized") else "pending"
+        if last_valid:
+            h, herr = await self.rpc("getBlockHeight", [{"commitment": "confirmed"}])
+            if not herr and isinstance(h, int) and h > last_valid:
+                return "failed"   # blockhash scaduto e nessuna traccia: non puo piu arrivare
+        return "pending"
+
+    async def send(self, b64tx, entry=None):
+        """v8.5: (True, sig) confermata; (False, motivo) sicuramente NON arrivata; (None, motivo) esito SCONOSCIUTO.
+        Prima un timeout di 60 s valeva 'fallita' anche se la tx arrivava dopo: posizione fantasma o doppio ordine.
+        Ora: firma salvata su disco prima dell'invio, rinvio della stessa tx firmata (idempotente) finche e
+        confermata o finche il blockhash scade; se la RPC non risponde l'esito resta 'sconosciuto'."""
+        sig = self.tx_sig(b64tx)
+        last_valid = getattr(self, "last_valid", None)
+        pend = pending_tx_load()
+        pend[sig] = dict(entry or {}, sig=sig, last_valid=last_valid, ts=time.time(), status="sending")
+        pending_tx_save(pend)
+
+        def done(ok, why):
+            d = pending_tx_load()
+            if ok is None:
+                d.setdefault(sig, {"sig": sig})["status"] = "unknown"
+            else:
+                d.pop(sig, None)
+            pending_tx_save(d)
+            return ok, why
+        opts = {"encoding": "base64", "skipPreflight": False, "preflightCommitment": "processed", "maxRetries": 0}
+        res, err = await self.rpc("sendTransaction", [b64tx, opts])
+        if err and err != RPC_NO_RESPONSE:   # errore del nodo (preflight): non e stata inoltrata
+            return done(False, err)
+        # senza risposta (timeout) la tx puo essere partita lo stesso: si controlla la firma
+        t0 = time.time()
+        cap = max(30, int(CFG["LIVE_CONFIRM_TIMEOUT_SEC"])) * (2 if last_valid else 1)
+        while time.time() - t0 < cap:
             await asyncio.sleep(2)
-            r, _ = await self.rpc("getSignatureStatuses", [[sig], {"searchTransactionHistory": True}])
-            s = (r or {}).get("value", [None])[0] if isinstance(r, dict) else None
-            if s:
-                if s.get("err"):
-                    return False, f"transazione fallita {sig[:10]}"
-                if s.get("confirmationStatus") in ("confirmed", "finalized"):
-                    return True, sig
-        return False, f"conferma non arrivata {sig[:10]}"
+            stt = await self.tx_status(sig, last_valid)
+            if stt == "ok":
+                return done(True, sig)
+            if stt == "failed":
+                return done(False, f"transazione non andata a segno {sig[:10]}")
+            await self.rpc("sendTransaction", [b64tx, dict(opts, skipPreflight=True)])   # stessa firma: idempotente
+        return done(None, f"esito sconosciuto dopo {cap} s {sig[:10]}: controlla su Solscan")
+
+    async def resolve_pending(self, st, mint=None):
+        """Risolve le transazioni in attesa (all'avvio e prima di vendere lo stesso mint). Restano nel file solo
+        quelle ancora sconosciute o confermate senza essere registrate dal bot (da riconciliare a mano)."""
+        d = pending_tx_load()
+        out = {}
+        for sig, e in list(d.items()):
+            if mint and e.get("mint") != mint:
+                continue
+            stt = await self.tx_status(sig, e.get("last_valid")) if not sig.startswith("_") else "unknown"
+            out[sig] = stt
+            if stt == "failed":
+                d.pop(sig, None)
+            elif stt == "ok":
+                e["status"] = "confirmed_untracked"
+                log(st, "Executor", "error", f"tx {e.get('side')} {e.get('symbol', e.get('mint', '?'))} {sig[:10]} "
+                    f"confermata DOPO il timeout: verifica wallet e posizione, poi cancella live_pending_tx.json")
+            else:
+                e["status"] = "unknown"
+        pending_tx_save(d)
+        return out
 
     async def simulate(self, b64tx):
         r, err = await self.rpc("simulateTransaction", [b64tx, {"encoding": "base64", "sigVerify": False,
@@ -4126,10 +4222,17 @@ class SolanaBroker:
             st.cash -= cost
             return {"ok": True, "cost": cost, "tokens": tokens_q, "fill": cost / tokens_q, "impact": impact,
                     "fee": 0.0, "dec": dec, "note": "simulato, nessun invio"}
+        if pending_tx_load():   # v8.5: c'e una transazione dall'esito sconosciuto: niente nuovi acquisti
+            return {"ok": False, "error": "transazione precedente da verificare (live_pending_tx.json)"}
         before, sb = await self.token_raw_retry(mint), await self.sol_balance()
         if before is None:   # v8.5: senza il saldo di partenza 'got' conterebbe token gia nel wallet
             return {"ok": False, "error": "saldo token non verificabile prima dell'invio, ordine non inviato"}
-        ok, info = await self.send(tx)
+        ok, info = await self.send(tx, {"side": "buy", "mint": mint, "symbol": m.get("symbol"),
+                                        "sol": round(sol_amt, 6), "tokens_q": tokens_q})
+        if ok is None:
+            tg_send(f"LIVE: acquisto {m.get('symbol')} con esito SCONOSCIUTO ({info}). Acquisti bloccati finche "
+                    f"non verifichi il wallet e cancelli live_pending_tx.json")
+            return {"ok": False, "error": info, "uncertain": True}
         if not ok:
             return {"ok": False, "error": info}
         await asyncio.sleep(2)
@@ -4158,6 +4261,22 @@ class SolanaBroker:
             value = int(q["outAmount"]) / 1e9 * solp
             st.cash += value
             return {"ok": True, "value": value, "tokens": p["tokens"] * fraction}
+        # v8.5: una vendita precedente dello stesso token con esito sconosciuto va risolta prima di rivendere
+        # (altrimenti un TP parziale arrivato dopo il timeout veniva ripetuto)
+        prev = [(sg, e) for sg, e in pending_tx_load().items() if e.get("mint") == mint and e.get("side") == "sell"]
+        if prev:
+            stt = await self.resolve_pending(st, mint)
+            for sg, e in prev:
+                if stt.get(sg) == "ok":
+                    d = pending_tx_load()
+                    d.pop(sg, None)
+                    pending_tx_save(d)
+                    value = fnum(e.get("quote_sol")) * solp   # importo esatto non noto: preventivo
+                    log(st, "Risk", "warn", f"vendita {p.get('symbol')} {sg[:10]} confermata dopo il timeout: "
+                        f"registrata con il preventivo (${value:.2f})", mint=mint)
+                    return {"ok": True, "value": value, "tokens": fnum(e.get("tokens")), "sig": sg}
+                if stt.get(sg) != "failed":
+                    return {"ok": False, "error": f"vendita precedente {sg[:10]} ancora con esito sconosciuto"}
         # FIX: vende solo la quantita registrata dal bot (mai token extra/airdrop nel wallet)
         bal = await self.token_raw_retry(mint)
         if bal is None:   # v8.5: errore RPC != saldo 0 (prima: posizione chiusa a -100% con i token nel wallet)
@@ -4175,7 +4294,11 @@ class SolanaBroker:
         if err:
             return {"ok": False, "error": err}
         sb = await self.sol_balance()
-        ok, info = await self.send(tx)
+        ok, info = await self.send(tx, {"side": "sell", "mint": mint, "symbol": p.get("symbol"),
+                                        "tokens": sold_tokens, "quote_sol": int(q["outAmount"]) / 1e9})
+        if ok is None:
+            tg_send(f"LIVE: vendita {p.get('symbol')} con esito SCONOSCIUTO ({info}). Verifica su Solscan.")
+            return {"ok": False, "error": info, "uncertain": True}
         if not ok:
             return {"ok": False, "error": info}
         await asyncio.sleep(2)
@@ -4275,6 +4398,10 @@ async def _execute_buy(st, broker, c, mint, m):
         return
     if os.path.exists(HARD_STOP_PATH):  # v6: limite di perdita totale (si toglie cancellando HARD_STOP)
         reject(st, mint, m["symbol"], "HARD_STOP attivo: perdita totale massima", agent="Executor", cat="HARD_STOP")
+        return
+    if os.path.exists(PENDING_TX_PATH):  # v8.5: tx live dall'esito sconosciuto (si toglie cancellando il file)
+        reject(st, mint, m["symbol"], "transazione live da verificare (live_pending_tx.json)", agent="Executor",
+               cat="tx da verificare")
         return
     if mint in st.positions:
         return

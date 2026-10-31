@@ -6,6 +6,7 @@
 wallet*
 *.jsonl
 state*.json
+live_pending_tx.json*
 overrides.json
 deep_reviews.json
 *.log
