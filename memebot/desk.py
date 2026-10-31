@@ -215,6 +215,14 @@ CFG = {
     # v8.4c (BNB "Broke Nigga Baddie"): ticker di grandi asset/exchange su un mint NON ufficiale = blocco nel Filter
     # (storico: impostore HYPE shadow -92.6%, BNB cattivo; nessun impostore vincente). 'block' oppure 'off'
     "TICKER_IMPOSTOR_ACTION": "block",
+    # compito 17 (Kiwi): nomi/ticker di marchi famosi non crypto (aziende, celebrita', piattaforme). 'shadow' =
+    # tag e segnale loggati, nessun effetto su punteggio/size (verifica sui dati prima di attivare); 'on' =
+    # penalita'/size come gli altri segnali soft graduati (SOFT_FLAGS); 'off' = spento. Dati 31/10 (n=12, escluse
+    # le lezioni negative): rug 67% e pnl mediano -34% sui token-brand contro 37%/-18% sugli altri (campione
+    # piccolo: resta 'shadow' finche' non ce ne sono di piu', mai scarto rigido senza numeri piu solidi).
+    "BRAND_FILTER_MODE": "shadow",
+    "BRAND_PENALTY": 0.05,
+    "BRAND_SIZE_MULT": 0.5,
     "CREATOR_HISTORY": True,         # v8.4e: storico del creatore (pump.fun gratis, cache 12 h): soft graduale, hard >=5/70%
     "STALL_RESET_SEC": 180,          # v8.4d: ciclo fermo oltre 3 min (pausa processo/macchina) = "nessun prezzo" riparte
     "NOPRICE_MAX_WAIT": 15,          # v8.4d: tentativi (~2 min l'uno) con seconda fonte giu prima di "dati non validi"
@@ -473,6 +481,11 @@ try:  # v8.7 (E): feature dei primi scambi pump.fun (solo shadow, API pubblica, 
     SRC["stx"] = _stx
 except Exception as _e87:  # noqa: BLE001
     print(f"v8.7: smart_trades non caricato ({type(_e87).__name__})")
+try:  # compito 17: filtro nomi di marchi famosi (lista chiusa, nessuna rete)
+    from sources import brand_filter as _brand  # noqa: E402
+    SRC["brand"] = _brand
+except Exception as _e17:  # noqa: BLE001
+    print(f"compito 17: brand_filter non caricato ({type(_e17).__name__})")
 # v8.7 (F): prior pre-addestrato offline sul corpus Slinky21 (docs/analysis/pretrain_slinky.py). Solo p_prior nei
 # campi shadow: NESSUN effetto su score, soglie o Learner. Calibrazione spostata (base 0,25% train vs 10% test):
 # va letto come ranking, non come probabilita.
@@ -1524,6 +1537,10 @@ SOFT_FLAGS = {
     "honeypot_unknown": {"label": "honeypot non verificato", "hard": None, "dir": 1, "step": 0.0, "lim": (0.0, 0.0),
                          "pen": "CLUSTER_UNKNOWN_PENALTY", "size": "CLUSTER_UNKNOWN_SIZE_MULT",
                          "pen_lim": (0.03, 0.12), "size_lim": (0.3, 0.7)},
+    # compito 17: nome/ticker di un marchio famoso non crypto. 'hard': None = mai promosso a scarto rigido dal
+    # Learner in automatico (serve una review di Kiwi sui dati, vedi BRAND_FILTER_MODE).
+    "brand": {"label": "nome di un marchio famoso", "hard": None, "dir": 1, "step": 0.0, "lim": (0.0, 0.0),
+              "pen": "BRAND_PENALTY", "size": "BRAND_SIZE_MULT", "pen_lim": (0.03, 0.12), "size_lim": (0.3, 0.7)},
 }
 LEARN_PEN_LIM = (0.02, 0.10)    # penalita per segnale: il Learner resta tra 0.02 e 0.10
 LEARN_SIZE_LIM = (0.3, 0.8)     # moltiplicatore size per segnale: tra 0.3x e 0.8x
@@ -4619,6 +4636,18 @@ async def analyst_agent(st, http, q_in, q_out):
                 pen += age_pen
                 flags.append("eta_vecchia")
                 signals.append(f"age:{age_info['age_d']:.1f}d/-{age_pen:.3f}" + ("/eased" if age_info.get("eased") else ""))
+            # compito 17 (Kiwi): nome/ticker di un marchio famoso non crypto. 'shadow' (default): solo tag/log,
+            # zero effetto su punteggio/size finche' i dati non bastano per decidere. 'on': come gli altri segnali
+            # soft graduati (SOFT_FLAGS['brand']). Mai un nuovo scarto rigido senza la review di Kiwi.
+            brand_mode = CFG.get("BRAND_FILTER_MODE", "shadow")
+            brand = SRC["brand"].brand_tag(m["symbol"], m.get("name")) if brand_mode != "off" and "brand" in SRC else None
+            if brand:
+                signals.append(f"brand:{brand}")
+                if brand_mode == "on" and "brand" not in flags:
+                    flags.append("brand")
+                    pen += soft_pen(st, "brand")
+                    score -= soft_pen(st, "brand")
+                    smult *= soft_size(st, "brand")
             # v8.2: cluster v2 prima della decisione. 'unknown' (errore/tempo scaduto) non vale mai come 'ok'.
             cl = None
             if cluster2_on() and not so and score >= gate_thr:
