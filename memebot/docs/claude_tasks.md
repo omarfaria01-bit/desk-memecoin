@@ -82,3 +82,12 @@ Dalle tue note (issue #2, #5 e note dei branch). Un fix = un commit, in shadow o
 - Bassa (un commit unico se piccoli): punti 11-18 della issue #2 (campi mancanti che passano i filtri, GoPlus vuoto = unknown, cache errori di `creator_history`, log dei ricontrolli saltati, liquidità su "alive", decimali di ripiego 6 per vanity, `lp_gate` senza `lp_status`, codice morto `sec.get("rugged")`).
 - Non toccare: la parte live (issue #1, limiti in SOL) — il live non è approvato.
 - Prima di iniziare: risolvi il conflitto tra i branch 6 e 10 sul loop `scout_pumpportal` (riga `mig_note` dentro il nuovo loop con `recv()`), in un branch `claude/merge-6-10`.
+
+## 14) Watchlist più intelligente — priorità alta (piccolo, puoi farlo per primo)
+Dati 31/10: watchlist delle fonti secondarie piena da ~12:30 (`WATCH_NEW_MAX` 1200, `WATCH_TTL_MIN` 120), ~450 sfratti "watchlist piena"/ora. `add_watch` sfratta sempre il **più vecchio** non prioritario, anche se si sta muovendo, mentre tiene pool appena nate già morte.
+- **Sfratto per qualità:** prima i token "morti" (nessuno scambio/volume dall'ultimo batch DexScreener, liquidità < `MIN_LIQ`, prezzo fermo), poi il più vecchio. Usa solo i dati già letti dal Filter (salva in `st.watch[mint]` gli ultimi `liq`, `vol_m5`, `txns_m5`, `last_seen_active`), zero chiamate extra.
+- **Filtro all'ingresso** (flag `WATCH_ENTRY_GATE` = `shadow|on|off`, default `shadow`): per le fonti "nuova pool"/pump.fun, se al primo dato disponibile la liquidità è ~0 o non ci sono acquisti, non entra (in shadow: entra lo stesso ma registra `would_skip_entry`).
+- **Log degli sfratti:** evento con età in watchlist, ultima liq/volume, motivo (`dead` | `oldest`). Un campione (es. 10%) degli sfrattati `oldest` va seguito in shadow (`shadow_reason="evicted"`) per misurare se perdiamo token buoni.
+- Mai sfrattare `prio` (trending) né token con call Discord recente (`discord_call`).
+- Test: watchlist piena con mix morti/vivi → escono prima i morti; nessuna chiamata di rete in più; RAM stabile con 2000 token.
+- Nota: sfratti per tipo prima/dopo su un replay e quanti sfrattati `oldest` avrebbero fatto TP1.
