@@ -1251,6 +1251,59 @@ def build_features(st, mint, m, sec, ch):
 
 
 # ======================================================================= Scout
+# ---------------------------------------------------------------- compito 14 (Claude): watchlist piu intelligente
+# 31/10: watchlist secondaria piena da ~12:30, ~450 sfratti/ora, sempre del token PIU VECCHIO anche se si muove.
+# Ora si sfrattano prima i token "morti" (nell'ultimo dato DexScreener gia letto: nessuno scambio e nessun volume a 5
+# min, oppure liquidita sotto MIN_LIQUIDITY_USD), poi il piu vecchio. Mai i 'prio' ne quelli con call Discord. Ogni
+# sfratto e un evento (eta, ultima liq/volume, motivo dead|oldest); un campione WATCH_EVICT_SHADOW (10%) degli
+# sfratti 'oldest' va in shadow (tag 'evicted') per misurare se perdiamo token buoni. Zero chiamate in piu.
+CFG.setdefault("WATCH_EVICT_SHADOW", 0.10)
+CFG.setdefault("WATCH_ENTRY_GATE", "shadow")   # 'shadow' | 'on' | 'off' (filtro all'ingresso, fonti secondarie)
+
+
+def watch_note(w, m, now):
+    """Salva nella voce di watchlist gli ultimi dati DexScreener gia letti dal Filter."""
+    tx = int(fnum(m.get("buys_m5"))) + int(fnum(m.get("sells_m5")))
+    w.update(liq=fnum(m.get("liq")), vol_m5=fnum(m.get("vol_m5")), tx_m5=tx, px=fnum(m.get("price")),
+             dex=m.get("dex"), last_data=now)
+    if tx > 0 or fnum(m.get("vol_m5")) > 0:
+        w["last_active"] = now
+
+
+def watch_dead(w):
+    if w.get("last_data") is None:
+        return False   # mai letto: non sappiamo, non e 'morto'
+    return (int(w.get("tx_m5", 0)) == 0 and fnum(w.get("vol_m5")) <= 0) or \
+        (w.get("dex") != "pumpfun" and fnum(w.get("liq")) < CFG["MIN_LIQUIDITY_USD"])
+
+
+def watch_evict(st, pool, now=None):
+    """Sfratta un token: prima i morti (il meno attivo di recente), poi il piu vecchio. Ritorna (mint, motivo)."""
+    now = now or time.time()
+    cand = [k for k in pool if not st.watch[k].get("prio") and not discord_tag(k)] or list(pool)
+    dead = [k for k in cand if watch_dead(st.watch[k])]
+    if dead:
+        out, why = min(dead, key=lambda k: (fnum(st.watch[k].get("last_active")), st.watch[k]["seen"])), "dead"
+    else:
+        out, why = min(cand, key=lambda k: st.watch[k]["seen"]), "oldest"
+    w = st.watch.pop(out)
+    st.stats["watch_evict_" + why] += 1
+    write_event("Scout", "watch_evict", f"{w.get('sym')} fuori dalla watchlist ({why})",
+                {"mint": out, "why": why, "age_min": round((now - fnum(w.get("seen"), now)) / 60, 1),
+                 "liq": w.get("liq"), "vol_m5": w.get("vol_m5"), "tx_m5": w.get("tx_m5"), "src": w.get("src")})
+    reject(st, out, w.get("sym", "?"), "watchlist piena", agent="Scout", cat="watchlist piena", quiet=True)
+    if why == "oldest" and fnum(w.get("px")) > 0 and CFG["SHADOW_TRADES"] and \
+            random.Random(f"{CFG.get('SHADOW_SAMPLE_SEED', 0)}:ev:{out}").random() < fnum(CFG["WATCH_EVICT_SHADOW"]):
+        try:
+            spawn_shadow(st, None, out, {"symbol": w.get("sym", "?"), "price": w["px"], "liq": fnum(w.get("liq")),
+                                         "dex": w.get("dex"), "src": w.get("src")},
+                         ["evicted"], "sfrattato dalla watchlist (oldest)", 0.0, [], tag="evicted",
+                         signals=[f"src:{w.get('src') or '?'}", "shadow_reason:evicted"])
+        except Exception:  # noqa: BLE001  (fuori da un ciclo asyncio: niente shadow)
+            pass
+    return out, why
+
+
 def add_watch(st, mint, sym, src, prio=False):
     """v8.3: prio=True (trending) -> analizzato per primo e mai sfrattato da una nuova pool. Le fonti secondarie
     (nuove pool, pump.fun) hanno un limite (WATCH_NEW_MAX): oltre, esce la piu vecchia non prioritaria."""
@@ -1264,10 +1317,7 @@ def add_watch(st, mint, sym, src, prio=False):
         return
     low = [k for k, v in st.watch.items() if not v.get("prio")]
     if len(st.watch) >= CFG["WATCH_MAX"] or (not prio and len(low) >= CFG["WATCH_NEW_MAX"]):
-        pool = low or list(st.watch)
-        oldest = min(pool, key=lambda k: st.watch[k]["seen"])
-        w = st.watch.pop(oldest)
-        reject(st, oldest, w["sym"], "watchlist piena", agent="Scout", cat="watchlist piena", quiet=True)
+        watch_evict(st, low or list(st.watch))
     st.watch[mint] = {"seen": time.time(), "sym": str(sym)[:12], "src": src, "prio": bool(prio)}
     LAST_SRC[mint] = src
     if len(LAST_SRC) > 20000:
@@ -3781,7 +3831,8 @@ def record_outcome(st, keys, pnl_pct, rug, src, now=None):
         learn_shadow_step(st, key, now)
 
 
-MEASURE_ONLY_KEYS = {"narrative_relax", "rugcheck_down", "bundle_established", "buysell_relax", "score_band"}
+MEASURE_ONLY_KEYS = {"narrative_relax", "rugcheck_down", "bundle_established", "buysell_relax", "score_band",
+                     "evicted"}   # compito 14: sfrattati dalla watchlist, solo misura
 # v8.5e (analisi di Mark, decisione Kiwi 08:47): fascia di punteggio sotto soglia = acquisto PAPER a meta size;
 # acquisti/vendite 5m appena sotto il minimo = solo shadow buysell_relax.
 CFG.setdefault("SCORE_BAND", True)
@@ -4240,6 +4291,18 @@ async def filter_agent(st, http, q_out):
                 w = st.watch[mint]
                 w["liq_max"] = max(fnum(w.get("liq_max")), m["liq"])  # v7: per vedere una rimozione LP in corso
                 m["liq_max"], m["src"] = w["liq_max"], w.get("src", "")
+                first = w.get("last_data") is None
+                watch_note(w, m, now)   # compito 14: dati gia letti, per lo sfratto per qualita
+                if first and w.get("src") in ("nuova pool", "pump.fun") and CFG["WATCH_ENTRY_GATE"] != "off" and \
+                        not w.get("prio") and (int(fnum(m.get("buys_m5"))) == 0 or
+                                               (m.get("dex") != "pumpfun" and fnum(m.get("liq")) < 1.0)):
+                    w["would_skip_entry"] = True   # compito 14: niente liquidita o nessun acquisto al primo dato
+                    write_event("Scout", "watch_entry_gate", f"{m['symbol']}: al primo dato liq ${fnum(m.get('liq')):,.0f}, "
+                                f"acquisti 5m {int(fnum(m.get('buys_m5')))} ({CFG['WATCH_ENTRY_GATE']})",
+                                {"mint": mint, "mode": CFG["WATCH_ENTRY_GATE"], "src": w.get("src")})
+                    if CFG["WATCH_ENTRY_GATE"] == "on":
+                        st.watch.pop(mint, None)
+                        continue
                 if m["vol_h1"] < CFG["MIN_VOLUME_H1"]:
                     continue
                 st.watch.pop(mint, None)
