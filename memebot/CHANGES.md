@@ -898,3 +898,11 @@ Test: nuovo `tests/test_v84f.py`; tutte le 13 suite OK. Inclusi nel commit `CLAU
 
 Test (solo su copia in /tmp): 14 suite su 15 OK compreso il nuovo `tests/test_v85b.py`; `test_narr` fallisce anche
 senza patch (websocket pump.fun). ATTENZIONE: le suite scrivono e cancellano file in DATA_DIR, mai lanciarle nel live.
+
+## v8.5c (31/10/2026, decisioni di Kiwi delle 08:08)
+- RugCheck: l'API non e cambiata (stessi endpoint, nessuna auth nuova, limite 15); da stamattina il report risponde 400 "unable to generate report" per tutti i token. Ripiego on-chain `rc_fallback`: authority mint/freeze e Token-2022 dal conto del mint, top 10 da getTokenLargestAccounts con proprietari (pool, PDA di programmi e authority AMM esclusi), reti insider dall'endpoint gratuito /insiders/networks, LP verificata solo per pool PumpSwap del token con LP mint a offerta 0 (bruciata).
+- Con il ripiego un token passa solo se: authority revocate, niente Token-2022 rischioso, LP bruciata/bloccata nota, top 10 calcolato, cluster v2 ok/soft (Analyst), honeypot ok + GoPlus ok + nessun segnale soft (Executor). Size x0.5, tag `rugcheck_down`. Ogni dubbio = niente acquisto, shadow `rugcheck_down`.
+- Avviso Telegram alla caduta (5 errori di fila) e al ritorno di RugCheck, al massimo uno all'ora.
+- Bundle RugCheck soft solo per token affermati (>=7 giorni, mcap >=$5M, >=5k holder) e con cluster v2 ok/soft; per tutti gli altri resta hard. Col ripiego gli holder totali non sono noti, quindi il bundle resta hard.
+- LP 0% su DLMM/CLMM: la concentrazione delle posizioni non si verifica gratis (Meteora non espone l'elenco posizioni per pool, CLMM = NFT), quindi resta solo shadow. Eta/attivita e neet invariati.
+- Test: tests/test_v85c.py (solo su copia in /tmp).

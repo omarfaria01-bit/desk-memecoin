@@ -937,6 +937,7 @@ def summarize(pairs):
         "vol_m5": fnum(vol.get("m5")), "vol_h1_main": fnum(vol.get("h1")),
         "chg_h1": fnum(chg.get("h1")), "chg_m5": fnum(chg.get("m5")),
         "mcap": fnum(main.get("marketCap") or main.get("fdv")), "url": str(main.get("url", "")),
+        "pairs_all": [str(p.get("pairAddress")) for p in pairs if p.get("pairAddress")][:30],   # v8.5
         "twitter": bool(socials & {"twitter", "x"}), "telegram": "telegram" in socials,
         "website": bool(info.get("websites")),
         "age_min": (time.time() - created) / 60 if created else None,
@@ -3007,15 +3008,147 @@ def learn_shadow_step(st, key, now=None):
     return act
 
 
+# ---------------------------------------------------------------- v8.5: RugCheck giu -> ripiego on-chain (Kiwi 08:08)
+RC_HEALTH = {"down": False, "fails": 0, "last_ok": 0.0, "down_since": None, "alert_t": 0.0, "alerted": "up",
+             "fb_ok": 0, "fb_skip": 0}
+CFG.setdefault("RC_DOWN_FAILS", 5)            # errori di fila (senza un report riuscito negli ultimi 5 min)
+CFG.setdefault("RC_ALERT_MIN_SEC", 3600)      # al massimo un avviso Telegram all'ora
+CFG.setdefault("RC_FALLBACK", True)
+CFG.setdefault("BUNDLE_EST_MIN_DAYS", 7.0)     # v8.5: bundle RugCheck soft solo per i token affermati
+CFG.setdefault("BUNDLE_EST_MIN_MCAP", 5e6)
+CFG.setdefault("BUNDLE_EST_MIN_HOLDERS", 5000)
+CFG.setdefault("RC_DOWN_SIZE_MULT", 0.5)
+PUMP_AMM = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA"
+SYSTEM_PROGRAM = "11111111111111111111111111111111"
+AMM_AUTHORITIES = {"5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1",   # Raydium AMM v4
+                   "GpMZbSM2GgvTKHJirzeGfMFoaZ8UR2X7F4v8vHTvxFbL",   # Raydium CPMM
+                   "WLHv2UAZm6z4KyaaELi5pjdbJh6RESMva1Rnn8pJVVh"}     # Raydium launchpad
+SAFE_T22_EXT = {"metadataPointer", "tokenMetadata", "groupPointer", "groupMemberPointer", "tokenGroup",
+                "tokenGroupMember", "immutableOwner"}
+_B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+
+def _b58(b):
+    n, out = int.from_bytes(b, "big"), ""
+    while n:
+        n, r = divmod(n, 58)
+        out = _B58[r] + out
+    return "1" * (len(b) - len(b.lstrip(b"\0"))) + out
+
+
+def rc_health(ok, now=None):
+    """Stato di RugCheck + avviso Telegram alla caduta e al ritorno (massimo uno ogni RC_ALERT_MIN_SEC)."""
+    now, h = now or time.time(), RC_HEALTH
+    if ok:
+        h["fails"], h["last_ok"] = 0, now
+        if h["down"]:
+            h["down"] = False
+            write_event("Filter", "rugcheck_up", "RugCheck di nuovo disponibile", {"down_since": h["down_since"]})
+    else:
+        h["fails"] += 1
+        if not h["down"] and h["fails"] >= CFG["RC_DOWN_FAILS"] and now - h["last_ok"] >= 300:
+            h["down"], h["down_since"] = True, now
+            write_event("Filter", "rugcheck_down", f"RugCheck non disponibile ({h['fails']} errori di fila): "
+                        "ripiego on-chain attivo", {})
+    want = "down" if h["down"] else "up"
+    if want != h["alerted"] and now - h["alert_t"] >= CFG["RC_ALERT_MIN_SEC"]:
+        h["alerted"], h["alert_t"] = want, now
+        if want == "down":
+            tg_send(f"RugCheck NON disponibile da {datetime.fromtimestamp(h['down_since'] or now, TZ):%H:%M} (Roma): "
+                    "ripiego on-chain attivo (passa solo se authority, GoPlus, honeypot, cluster v2, LP bruciata e "
+                    "top 10 sono tutti ok; size x0.5, tag rugcheck_down)")
+        else:
+            tg_send(f"RugCheck di nuovo disponibile ({datetime.now(TZ):%H:%M} Roma): ripiego spento. "
+                    f"Nel frattempo: {h['fb_ok']} passati col ripiego, {h['fb_skip']} scartati/shadow")
+    return h["down"]
+
+
+async def _rpc_core(http, method, params):
+    d = await _cl2_post(http, "https://solana-rpc.publicnode.com",
+                        {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}, "core")
+    return d.get("result") if isinstance(d, dict) else None
+
+
+async def rc_fallback(http, mint, m):
+    """Report 'stile RugCheck' costruito gratis on-chain (+ reti insider RugCheck, endpoint ancora attivo).
+    None = non costruibile (=> scarto). Campi mancanti restano assenti: chi legge li tratta come dubbio."""
+    acc = await _rpc_core(http, "getAccountInfo", [mint, {"encoding": "jsonParsed"}])
+    acc = (acc or {}).get("value") if isinstance(acc, dict) else None
+    info = (((acc or {}).get("data") or {}).get("parsed") or {}).get("info") if isinstance((acc or {}).get("data"), dict) else None
+    if not info:
+        return None
+    exts = [str(e.get("extension")) for e in (info.get("extensions") or []) if isinstance(e, dict)]
+    tf = 0.0
+    for e in info.get("extensions") or []:
+        if isinstance(e, dict) and e.get("extension") == "transferFeeConfig":
+            tf = fnum(((e.get("state") or {}).get("newerTransferFee") or {}).get("transferFeeBasisPoints")) / 100
+    r = {"_fallback": True, "mintAuthority": info.get("mintAuthority"), "freezeAuthority": info.get("freezeAuthority"),
+         "token": {"supply": info.get("supply"), "decimals": info.get("decimals")}, "tokenProgram": (acc or {}).get("owner"),
+         "transferFee": {"pct": tf}, "t22_risky": sorted(set(exts) - SAFE_T22_EXT), "risks": [], "knownAccounts": {}}
+    # LP: solo pool PumpSwap del token con LP mint a offerta 0 (LP bruciata dalla migrazione pump.fun)
+    markets = [{"marketType": "unknown", "pubkey": p, "lp": {"lpLockedPct": None}} for p in (m.get("pairs_all") or [])]
+    pair = m.get("pair")
+    if str(mint).endswith("pump") and m.get("dex") == "pumpswap" and pair:
+        pa = await _rpc_core(http, "getAccountInfo", [pair, {"encoding": "base64"}])
+        pa = (pa or {}).get("value") if isinstance(pa, dict) else None
+        try:
+            raw = base64.b64decode(pa["data"][0]) if pa and pa.get("owner") == PUMP_AMM else b""
+        except Exception:  # noqa: BLE001
+            raw = b""
+        if len(raw) >= 139 and _b58(raw[43:75]) == mint:
+            lpm = _b58(raw[107:139])
+            sup = await _rpc_core(http, "getTokenSupply", [lpm])
+            amt = (sup or {}).get("value", {}).get("amount") if isinstance(sup, dict) else None
+            r["lp_mint"], r["lp_supply"] = lpm, amt
+            if amt is not None and int(amt) == 0:
+                r["launchpad"] = {"name": "Pump.Fun (verificato on-chain: LP bruciata)"}
+                markets = [mk for mk in markets if mk["pubkey"] != pair] + \
+                    [{"marketType": "pump_amm", "pubkey": pair, "lp": {"lpLockedPct": 100.0, "lpMint": lpm}}]
+    r["markets"] = markets
+    # top holder on-chain: 20 conti piu grandi -> proprietari -> esclusi pool/programmi (PDA) e authority AMM
+    la = await _rpc_core(http, "getTokenLargestAccounts", [mint])
+    la = (la or {}).get("value") if isinstance(la, dict) else None
+    if not la:
+        return None
+    ta = await _rpc_core(http, "getMultipleAccounts", [[a["address"] for a in la], {"encoding": "jsonParsed"}])
+    ta = (ta or {}).get("value") if isinstance(ta, dict) else None
+    if not ta or len(ta) != len(la):
+        return None
+    owners = [((((x or {}).get("data") or {}).get("parsed") or {}).get("info") or {}).get("owner")
+              if isinstance((x or {}).get("data"), dict) else None for x in ta]
+    uniq = sorted({o for o in owners if o})
+    oa = await _rpc_core(http, "getMultipleAccounts", [uniq, {"encoding": "base64", "dataSlice": {"offset": 0, "length": 0}}])
+    oa = (oa or {}).get("value") if isinstance(oa, dict) else None
+    if oa is None or len(oa) != len(uniq):
+        return None
+    for o, x in zip(uniq, oa):
+        if o in AMM_AUTHORITIES or o in (m.get("pairs_all") or []):
+            r["knownAccounts"][o] = {"type": "AMM", "name": "pool/authority"}
+        elif x and x.get("owner") not in (SYSTEM_PROGRAM, None):
+            r["knownAccounts"][o] = {"type": "PROGRAM", "name": str(x.get("owner"))[:8]}
+    r["topHolders"] = [{"address": a["address"], "owner": o, "uiAmount": fnum(a.get("uiAmount")),
+                        "pct": 0.0, "insider": False} for a, o in zip(la, owners)]
+    # reti insider: endpoint RugCheck separato (ancora attivo durante il guasto dei report); errore = quota ignota
+    nets = await http.get(f"https://api.rugcheck.xyz/v1/tokens/{mint}/insiders/networks")
+    if isinstance(nets, list):   # schema dell'endpoint: currentHolding = quota attuale (come tokenAmount del report)
+        nets = [dict(n, tokenAmount=n.get("tokenAmount", n.get("currentHolding"))) for n in nets if isinstance(n, dict)]
+        r["insiderNetworks"], r["graphInsidersDetected"] = nets, len(nets)
+    return r
+
+
 async def security_check(st, http, mint, m, cache):
     hit = cache.get(mint)
     if not hit or time.time() - hit[0] > 600:
         data = await http.get(f"https://api.rugcheck.xyz/v1/tokens/{mint}/report")
+        rc_health(isinstance(data, dict))
         if not isinstance(data, dict):
-            return False, "report di sicurezza non disponibile, scartato per prudenza", "report assente", None
+            data = await rc_fallback(http, mint, m) if CFG.get("RC_FALLBACK") else None
+            if not isinstance(data, dict):
+                return False, "report di sicurezza non disponibile, scartato per prudenza", "report assente", None
         cache[mint] = (time.time(), data)
         hit = cache[mint]
     r = hit[1]
+    rc_down = bool(r.get("_fallback"))
     tok = r.get("token") or {}
     if r.get("mintAuthority") or tok.get("mintAuthority"):
         return False, "mint non revocata", "mint non revocata", None
@@ -3028,6 +3161,7 @@ async def security_check(st, http, mint, m, cache):
         return False, f"tassa di trasferimento {tf:.1f}%", "tassa alta", None
     markets = r.get("markets") or []
     soft, severe = [], []  # v6: (segnale, testo) e (segnale, testo, categoria)
+    bundle_est = False
     # pump.fun: curva (niente LP) o token migrati da pump.fun su PumpSwap/Raydium (LP bruciata dal protocollo).
     # Mint che finisce in 'pump' NON basta (si puo generare): serve anche il launchpad Pump.Fun o un mercato
     # pump_fun_amm nel report RugCheck. Tutti gli altri token: regola LP >= MIN_LP_LOCKED_PCT.
@@ -3131,8 +3265,15 @@ async def security_check(st, http, mint, m, cache):
     if CFG["REJECT_INSIDER_NETWORKS"] and fnum(r.get("graphInsidersDetected")) > 0:
         # v6: conta la quota dell'offerta nelle reti collegate (prima bastava una rete qualsiasi)
         bp, bh = bundle_pct(r), soft_hard(st, "bundle")
+        _th = int(fnum(r.get("totalHolders")))
+        established = (fnum(m.get("age_min")) >= CFG["BUNDLE_EST_MIN_DAYS"] * 1440
+                       and fnum(m.get("mcap")) >= CFG["BUNDLE_EST_MIN_MCAP"] and _th >= CFG["BUNDLE_EST_MIN_HOLDERS"])
         if bp is None:
             soft.append(("bundle", "reti di wallet collegati (quota non calcolabile)"))
+        elif bp >= bh and established:   # v8.5 (Kiwi): token affermato -> soft, ma serve cluster v2 ok/soft
+            soft.append(("bundle", f"reti collegate al {bp:.1f}% (token affermato: {fnum(m.get('age_min')) / 1440:.0f} g, "
+                                   f"mcap ${fnum(m.get('mcap')) / 1e6:.1f}M, {_th} holder)"))
+            bundle_est = True
         elif bp >= bh:
             severe.append(("bundle", f"reti di wallet collegati al {bp:.1f}% dell'offerta (bundle)", "insider/bundle"))
         elif bp >= CFG["BUNDLE_SOFT_PCT"]:
@@ -3164,7 +3305,20 @@ async def security_check(st, http, mint, m, cache):
            if isinstance(r.get("tokenMeta"), dict) else None,
            "is_pump": bool(m["dex"] == "pumpfun" or pump_migrated),
            "cex_pct": round(cex_pct, 2), "cex_names": sorted(set(cex_names))[:5], "dead_pct": round(dead_pct, 2),
-           "lp_status": lp_status, "lp_locked_pct": None if lpmax is None else round(lpmax, 2)}
+           "lp_status": lp_status, "lp_locked_pct": None if lpmax is None else round(lpmax, 2),
+           "rc_down": rc_down, "bundle_established": bundle_est}
+    if rc_down:   # v8.5: ripiego on-chain, ogni dubbio = niente acquisto (shadow rugcheck_down)
+        doubt = []
+        if r.get("t22_risky"):
+            doubt.append("Token-2022 con estensioni " + ",".join(r["t22_risky"][:3]))
+        if lp_status != "protocol":
+            doubt.append(f"LP non verificata bruciata/bloccata (stato {lp_status})")
+        if not r.get("topHolders"):
+            doubt.append("top 10 non calcolato")
+        if doubt:
+            RC_HEALTH["fb_skip"] += 1
+            sec.update(severe="rugcheck_down", shadow_keys=["rugcheck_down"], soft=["rugcheck_down"] + sec["soft"])
+            return False, "RugCheck giu, ripiego on-chain con dubbi: " + "; ".join(doubt), "RugCheck giu (dubbio)", sec
     SEC_LAST[mint] = {"rc_holders": sec["rc_holders"][:5], "supply": supply_ui or None, "ts": time.time()}  # v8.4f
     if len(SEC_LAST) > 3000:
         for k in sorted(SEC_LAST, key=lambda k: SEC_LAST[k]["ts"])[:500]:
@@ -3181,7 +3335,7 @@ async def security_check(st, http, mint, m, cache):
         sec.update(severe="multi", shadow_keys=["multi"])
         return False, "troppi segnali soft insieme: " + "; ".join(sec["soft_txt"]), "troppi segnali soft", sec
     return True, f"top 10 al {top10:.1f}%" + (f" (exchange a parte {cex_pct:.1f}%)" if cex_pct >= 0.05 else "") + \
-        f", {sec['holders']} holder, LP ok" + \
+        (f", {sec['holders']} holder" if not rc_down else ", holder totali n/d (ripiego on-chain, size x0.5)") + ", LP ok" + \
         (f", segnali soft: {'; '.join(sec['soft_txt'])}" if soft else ""), None, sec
 
 
@@ -3256,6 +3410,11 @@ async def filter_agent(st, http, q_out):
                             spawn_shadow(st, http, mint, m, [sec["lp_block"]], reason, 0.0, [],
                                          tag=sec["lp_block"], signals=[f"src:{m.get('src') or '?'}",
                                                                        "reason:" + sec["lp_block"]])
+                        continue
+                    if sec and sec.get("severe") == "rugcheck_down":   # v8.5: dubbio col ripiego = shadow, mai acquisto
+                        if CFG["SHADOW_TRADES"]:
+                            spawn_shadow(st, http, mint, m, ["rugcheck_down"], reason, 0.0, [], tag="rugcheck_down",
+                                         signals=[f"src:{m.get('src') or '?'}", "reason:rugcheck_down"])
                         continue
                     if CFG["SHADOW_TRADES"] and sec and sec.get("severe"):
                         # v6: nessun acquisto possibile; l'Analyst valuta solo se aprire uno shadow trade
@@ -3653,6 +3812,26 @@ async def analyst_agent(st, http, q_in, q_out):
                     score -= fnum(crh["pen"])
                     pen += fnum(crh["pen"])
                     flags.append("creatore")
+            # v8.5 (Kiwi): RugCheck giu (ripiego) o bundle soft da token affermato -> serve cluster v2 ok/soft
+            _sec = c.get("sec") or {}
+            if (_sec.get("rc_down") or _sec.get("bundle_established")) and not so and score >= st.threshold:
+                _lv = (cl or {}).get("level", "unknown")
+                why_tag = "rugcheck_down" if _sec.get("rc_down") else "bundle_established"
+                if _lv not in ("ok", "soft"):
+                    reason = f"{'RugCheck giu' if why_tag == 'rugcheck_down' else 'bundle su token affermato'}: " \
+                             f"cluster v2 '{_lv}' (serve ok o soft)"
+                    rej(reason, agent="Analyst", cat="RugCheck giu (dubbio)" if why_tag == "rugcheck_down"
+                        else "bundle affermato senza cluster")
+                    if why_tag == "rugcheck_down":
+                        RC_HEALTH["fb_skip"] += 1
+                    if CFG["SHADOW_TRADES"]:
+                        spawn_shadow(st, http, mint, m, [why_tag], reason, score, flags + [why_tag], tag=why_tag,
+                                     signals=signals)
+                    continue
+                if why_tag == "rugcheck_down" or _sec.get("rc_down"):
+                    smult *= CFG["RC_DOWN_SIZE_MULT"]
+                    flags.append("rugcheck_down")
+                    signals.append("rugcheck_down")
             if bonus:
                 signals.append(f"bonus:{bonus:.3f}")
             detail = f"punteggio {score:.2f} (soglia {st.threshold:.2f})" + \
@@ -4600,6 +4779,19 @@ async def _execute_buy(st, broker, c, mint, m):
         if hp["level"] == "unknown":   # v8.4c (Kiwi): MAI acquisto (niente size ridotta), shadow + nuovo tentativo
             honeypot_unknown_skip(st, getattr(broker, "http", None), mint, m, c, hp)
             return
+        if (c.get("sec") or {}).get("rc_down"):   # v8.5: con RugCheck giu servono GoPlus ok e honeypot pulito
+            bad = ([f"GoPlus {hp.get('goplus_level')}"] if hp.get("goplus_level") != "ok" else []) + \
+                [str(x) for x in (hp.get("soft") or [])][:3]
+            if bad:
+                reason = "RugCheck giu: controlli di ripiego non tutti ok (" + "; ".join(bad) + ")"
+                reject(st, mint, m["symbol"], reason, agent="Executor", cat="RugCheck giu (dubbio)")
+                RC_HEALTH["fb_skip"] += 1
+                if CFG["SHADOW_TRADES"]:
+                    spawn_shadow(st, getattr(broker, "http", None), mint, m, ["rugcheck_down"], reason,
+                                 fnum(c.get("score")), (c.get("soft") or []) + ["rugcheck_down"], tag="rugcheck_down",
+                                 signals=(c.get("signals") or "").split("|"))
+                return
+            RC_HEALTH["fb_ok"] += 1
     # v8.4: controllo incrociato Birdeye (overview) per prefiltro e honeypot. MAI un filtro duro:
     # "shadow" = solo registrato, "soft" = size ridotta se Birdeye non conferma.
     if str(CFG.get("BIRDEYE_XCHECK_MODE", "shadow")) != "off":
@@ -5465,7 +5657,7 @@ def write_csv_row(path, row):
 
 def shadow_tag(keys, flags):
     ks = list(keys) + list(flags or [])
-    for k, tag in (("lp_unlocked_zero", "lp_unlocked_zero"), ("lp_unknown", "lp_unknown"),
+    for k, tag in (("rugcheck_down", "rugcheck_down"), ("lp_unlocked_zero", "lp_unlocked_zero"), ("lp_unknown", "lp_unknown"),
                    ("creator_serial", "creator_serial"), ("cluster", "cluster"), ("lp_unlocked", "lp_unlocked"), ("analyst_momentum", "analyst_momentum")):
         if any(x.startswith(k) for x in ks):
             return tag
