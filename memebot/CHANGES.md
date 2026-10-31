@@ -1065,7 +1065,7 @@ Branch uniti (branch `integration/v8.9`): `claude/watch-pause` (compito 8), `cla
   `entry_features`. Nessun ingresso bloccato. Script offline `backtest/anti_dump_report.py`.
 - Uscite veloci (SHADOW, `FAST_EXIT_MODE`): SL/TP1/trailing a ogni prezzo (trade PumpPortal + polling DexScreener
   ~12/min), campi `fast_exit_*` alla chiusura. Le uscite vere NON cambiano. Nessuna chiamata Helius/Birdeye.
-- Offline: `docs/analysis/calibrate_prior.py`. Fix nostro (anche in `anti_dump_report.py`): un rug non e mai
-  un esempio positivo, anche con pnl > 0.
+- Offline: `docs/analysis/calibrate_prior.py`. Fix nostro (anche in `anti_dump_report.py`): rug, lezioni negative e scarti rigidi mai
+  esempi positivi, anche con pnl > 0.
 Saltati perche gia in `main`: `rugcheck-fallback-review`, `cluster-beast-dessa`, `tests-cluster-rules`,
 `amazing-goodall-nfn3me` (v8.5). Non ancora rivisti: `bug-hunt-2`, `shadow-sample`, `retro-label`.
