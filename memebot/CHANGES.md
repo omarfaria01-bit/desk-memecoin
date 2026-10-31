@@ -956,3 +956,19 @@ Solo `web/server.py` e `web/index.html`; bot, `.env` e modalità PAPER non tocca
 - Banda per scheda aperta, misurata su https://desk.linkgox.com per 60 s: **5.040.517 B → 73.673 B** (−98,5%).
 - Ripristino: `/opt/desk/backups/web-20261031-092806/` (server.py, index.html, Caddyfile) →
   copiare in `/opt/desk/web/` e `systemctl restart desk-web`.
+
+## v8.5g (31/10/2026, ora di Roma) – avvisi Telegram senza doppioni dopo un riavvio — solo PAPER
+- **Stato anti-doppioni su file** `alert_state.json` (accanto a `state.json`, scrittura atomica tmp + `os.replace`):
+  RugCheck (`alerted`, `alert_t`, `down`, `down_since`, contatori ripiego), pausa host (`alert_t`), messaggio di avvio,
+  ultimo invio dei gruppi (`hard`, `err`). Solo orari e chiavi: mai token né chat id. Caricato all'avvio; file assente
+  o rotto = come prima. Orari nel futuro ignorati.
+- Limiti invariati: RugCheck max 1 avviso/ora, pausa host max 1 ogni 30 min, gruppi secondo il loro intervallo.
+  Se RugCheck era giù prima del riavvio, il ripiego (più severo) resta attivo finché non arriva un report riuscito:
+  niente nuovo avviso "NON disponibile" e niente falso "di nuovo disponibile".
+- **Messaggio "Desk avviato"** saltato se un altro è partito meno di 10 min prima (`TG_START_DEDUP_SEC`=600): riga nel log.
+- **Riga di log a invio riuscito** (`Telegram: messaggio inviato (n. N, X caratteri): <inizio testo mascherato>`).
+- `sources/notify_telegram.py`: `okf`, `onflush`, `group_state()`, `restore_groups()`. Token sempre ripulito dagli spazi.
+- Mirror (`/workspace/desk_migration/mirror_from_server.sh`): esclusi anche `.env*`, `.telegram*`, `venv`, `backups`
+  (Caddyfile con hash), `*.tmp*`; "file changed as we read it" non segna più FALLITO. `alert_state.json` escluso dal deploy.
+- Test: `tests/test_v85g_alerts.py` (copia in /tmp). Tutti i 22 test passano (test_narr richiede una copia senza
+  narratives.json/events.jsonl, come già prima).

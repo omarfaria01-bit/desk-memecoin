@@ -28,6 +28,7 @@ import os
 import random
 import re
 import sys
+import threading
 import time
 from collections import Counter, deque
 from datetime import datetime, timedelta
@@ -757,9 +758,10 @@ def tg_send(text):
     n = TG_REF[0]
     if n is not None:
         try:
-            n.send(text)
+            return bool(n.send(text))
         except Exception:  # noqa: BLE001
             pass
+    return False
 
 
 def tg_group(key, line, every=600, title=None):
@@ -1641,6 +1643,7 @@ def host_pause_alert(now=None):
     tg_send(f"Host in pausa (VM congelata): {len(ps)} paus{'a' if len(ps) == 1 else 'e'}, in tutto {tot:.0f} min "
             f"(ultima {f(ps[-1][0])}-{f(ps[-1][1])} Roma). Timer 'nessun prezzo' azzerati, nuova quotazione prima "
             "di chiudere, chiusure shadow entro 5 min = non valide per il Learner.")
+    alert_state_save()   # v8.5g
     return True
 
 
@@ -3332,12 +3335,14 @@ def rc_health(ok, now=None):
         if h["down"]:
             h["down"] = False
             write_event("Filter", "rugcheck_up", "RugCheck di nuovo disponibile", {"down_since": h["down_since"]})
+            alert_state_save()   # v8.5g
     else:
         h["fails"] += 1
         if not h["down"] and h["fails"] >= CFG["RC_DOWN_FAILS"] and now - h["last_ok"] >= 300:
             h["down"], h["down_since"] = True, now
             write_event("Filter", "rugcheck_down", f"RugCheck non disponibile ({h['fails']} errori di fila): "
                         "ripiego on-chain attivo", {})
+            alert_state_save()   # v8.5g
     want = "down" if h["down"] else "up"
     if want != h["alerted"] and now - h["alert_t"] >= CFG["RC_ALERT_MIN_SEC"]:
         h["alerted"], h["alert_t"] = want, now
@@ -3348,6 +3353,7 @@ def rc_health(ok, now=None):
         else:
             tg_send(f"RugCheck di nuovo disponibile ({datetime.now(TZ):%H:%M} Roma): ripiego spento. "
                     f"Nel frattempo: {h['fb_ok']} passati col ripiego, {h['fb_skip']} scartati/shadow")
+        alert_state_save()   # v8.5g
     return h["down"]
 
 
@@ -6563,6 +6569,103 @@ def tg_recap_text(st):
     return "\n".join(lines)
 
 
+# ======================================================================= v8.5g: stato anti-doppioni su file
+# Prima viveva solo in memoria: a ogni riavvio tornavano gli stessi avvisi (RugCheck giu, pausa host, gruppi
+# hard/err, messaggio di avvio). alert_state.json accanto a state.json: solo orari e chiavi (mai token/chat id).
+ALERT_STATE_PATH = os.path.join(DATA_DIR, "alert_state.json")
+ALERT_LOCK = threading.Lock()
+ALERT_START = {"t": 0.0}
+CFG.setdefault("TG_START_DEDUP_SEC", 600)
+_RC_KEYS = ("alerted", "alert_t", "down", "down_since", "fb_ok", "fb_skip")
+
+
+def alert_state_dump():
+    n = TG_REF[0]
+    groups = {}
+    if n is not None and hasattr(n, "group_state"):
+        try:
+            groups = n.group_state()
+        except Exception:  # noqa: BLE001
+            groups = {}
+    return {"v": 1, "saved": round(time.time(), 1),
+            "rugcheck": {k: RC_HEALTH.get(k) for k in _RC_KEYS},
+            "host_pause": {"alert_t": HOST_PAUSE["alert_t"]},
+            "start": {"t": ALERT_START["t"]},
+            "groups": groups}
+
+
+def alert_state_save():
+    """Scrittura atomica (file temporaneo + os.replace). Mai un'eccezione verso il bot."""
+    try:
+        with ALERT_LOCK:
+            d = alert_state_dump()
+            tmp = f"{ALERT_STATE_PATH}.tmp{os.getpid()}"
+            with open(tmp, "w") as f:
+                json.dump(d, f)
+            os.replace(tmp, ALERT_STATE_PATH)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _ts(x, now):
+    try:
+        x = float(x)
+    except (TypeError, ValueError):
+        return 0.0
+    return x if 0 < x <= now + 60 else 0.0   # niente orari nel futuro (orologio sbagliato = nessun blocco infinito)
+
+
+def alert_state_load(now=None):
+    """All'avvio: ripristina orari e stati gia avvisati. File assente o rotto = come prima (tutto da zero)."""
+    now = now or time.time()
+    try:
+        with open(ALERT_STATE_PATH) as f:
+            d = json.load(f)
+        if not isinstance(d, dict):
+            return {}
+    except Exception:  # noqa: BLE001
+        return {}
+    rc = d.get("rugcheck") or {}
+    if rc.get("alerted") in ("up", "down"):
+        RC_HEALTH["alerted"] = rc["alerted"]
+    RC_HEALTH["alert_t"] = _ts(rc.get("alert_t"), now)
+    for k in ("fb_ok", "fb_skip"):
+        try:
+            RC_HEALTH[k] = max(0, int(rc.get(k) or 0))
+        except (TypeError, ValueError):
+            pass
+    if rc.get("down") is True:   # RugCheck era giu: ripiego (piu severo) finche non arriva un report riuscito
+        RC_HEALTH["down"], RC_HEALTH["fails"] = True, int(CFG["RC_DOWN_FAILS"])
+        RC_HEALTH["down_since"] = _ts(rc.get("down_since"), now) or now
+    HOST_PAUSE["alert_t"] = _ts((d.get("host_pause") or {}).get("alert_t"), now)
+    ALERT_START["t"] = _ts((d.get("start") or {}).get("t"), now)
+    return d
+
+
+def alert_restore_groups(d):
+    n = TG_REF[0]
+    if n is not None and hasattr(n, "restore_groups"):
+        try:
+            n.restore_groups((d or {}).get("groups") or {})
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def tg_start_message(text, now=None):
+    """Messaggio 'Desk avviato': saltato se un altro e stato inviato meno di TG_START_DEDUP_SEC fa.
+    Ritorna (inviato, secondi dall'ultimo)."""
+    now = now or time.time()
+    ago = now - ALERT_START["t"] if ALERT_START["t"] else None
+    if ago is not None and ago < CFG["TG_START_DEDUP_SEC"]:
+        return False, ago
+    ok = tg_send(text)
+    if ok:
+        ALERT_START["t"] = now
+        alert_state_save()
+    return ok, ago
+
+
 async def telegram_agent(st):
     """v8.4: riepilogo giornaliero alle TELEGRAM_RECAP_HOUR (ora di Roma) e avvisi di budget 50/80/95%."""
     tgs = tg_load()
@@ -6577,6 +6680,7 @@ async def telegram_agent(st):
                 tgs["recap_day"] = day
                 log(st, "Telegram", "info", "riepilogo giornaliero inviato")
             tg_save(tgs)
+            alert_state_save()   # v8.5g: anche gli orari dei gruppi (hard, err)
         except Exception as e:  # noqa: BLE001
             log(st, "Telegram", "warn", f"riepilogo/avvisi: {type(e).__name__}")
 
@@ -6626,17 +6730,30 @@ async def main():
         log(st, "Logger", "info", f"avvio in modalita {mode.upper()}"
             + (" - SOLDI VERI" if mode == "live" else ", nessun ordine reale"))
         save_state(st, force=True)
+        _ast = alert_state_load()   # v8.5g: orari degli avvisi gia mandati (anti-doppioni dopo un riavvio)
         if CFG.get("TELEGRAM_ENABLED") and "tg" in SRC:   # v8.4
             try:
-                TG_REF[0] = SRC["tg"].Notifier(enabled=True, logf=lambda m: write_event("Telegram", "warn", m, {}))
+                TG_REF[0] = SRC["tg"].Notifier(enabled=True, logf=lambda m: write_event("Telegram", "warn", m, {}),
+                                               okf=lambda m: log(st, "Telegram", "info", str(m).replace("Telegram: ", "", 1)),
+                                               onflush=alert_state_save)
             except Exception as e:  # noqa: BLE001
                 TG_REF[0] = None
                 print(f"telegram non avviato ({type(e).__name__})")
+        alert_restore_groups(_ast)
         _tok = TG_REF[0] is not None and TG_REF[0].status().get("enabled")
         log(st, "Telegram", "info", "notifiche Telegram attive" if _tok else "notifiche Telegram spente "
             "(TELEGRAM_ENABLED falso, token o chat id mancanti)")
-        tg_send(f"Desk avviato in {mode.upper()} - PID {os.getpid()} - {datetime.now(TZ).strftime('%d/%m %H:%M')} "
-                f"(Roma)\nEquity ${equity(st):.2f}, posizioni aperte {len(st.positions)}")
+        log(st, "Telegram", "info", f"stato avvisi caricato da alert_state.json: RugCheck avvisato "
+            f"'{RC_HEALTH['alerted']}'{' (ancora giu, ripiego attivo)' if RC_HEALTH['down'] else ''}, "
+            f"{len((_ast or {}).get('groups') or {})} gruppi" if _ast else "stato avvisi: nessun alert_state.json, "
+            "parto da zero")
+        _sent, _ago = tg_start_message(
+            f"Desk avviato in {mode.upper()} - PID {os.getpid()} - {datetime.now(TZ).strftime('%d/%m %H:%M')} "
+            f"(Roma)\nEquity ${equity(st):.2f}, posizioni aperte {len(st.positions)}")
+        if not _sent and _ago is not None and _ago < CFG["TG_START_DEDUP_SEC"]:
+            log(st, "Telegram", "info", f"messaggio di avvio NON inviato: un altro e partito {_ago / 60:.1f} min fa "
+                "(anti-doppione, soglia 10 min)")
+        alert_state_save()   # crea/aggiorna alert_state.json subito
         try:
             await readiness_check(st, http, broker)
         except Exception as e:  # noqa: BLE001

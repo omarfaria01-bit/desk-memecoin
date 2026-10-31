@@ -8,6 +8,7 @@ notify_telegram.py - v8.4: avvisi Telegram NON bloccanti per il Desk Memecoin (P
   al massimo 1 messaggio al secondo; i messaggi in coda nello stesso secondo vengono uniti in uno solo.
 - group(chiave, riga, ogni): righe raggruppate e inviate al massimo una volta ogni `ogni` secondi per chiave.
 - Fallisce in silenzio: nessuna eccezione verso il bot.
+- v8.5g: okf (riga di log a invio riuscito), onflush, group_state/restore_groups (anti-doppioni dopo un riavvio).
 """
 from __future__ import annotations
 
@@ -41,7 +42,7 @@ def mask(text):
 
 class Notifier:
     def __init__(self, enabled=True, chat_file=CHAT_FILE, min_gap=1.0, timeout=10.0, retries=2, sender=None,
-                 logf=None):
+                 logf=None, okf=None, onflush=None):
         self.token = _token()
         self.chat = ""
         try:
@@ -53,6 +54,8 @@ class Notifier:
         self.min_gap, self.timeout, self.retries = min_gap, timeout, retries
         self.sender = sender or self._http_send       # sostituibile nei test
         self.logf = logf or (lambda msg: None)
+        self.okf = okf or (lambda msg: None)           # v8.5g: riga di log a invio riuscito (mai token/chat id)
+        self.onflush = onflush or (lambda: None)       # v8.5g: salva lo stato anti-doppioni dopo un invio di gruppo
         self.q = queue.Queue(maxsize=300)
         self.groups = {}                               # chiave -> {"lines": [], "last": ts, "every": s, "title": str}
         self.glock = threading.Lock()
@@ -89,6 +92,22 @@ class Notifier:
                 g["extra"] = g.get("extra", 0) + 1
         return True
 
+    def group_state(self):
+        """v8.5g: chiave -> ultimo invio del gruppo (per salvarlo su file e non rimandare dopo un riavvio)."""
+        with self.glock:
+            return {k: g["last"] for k, g in self.groups.items() if g.get("last")}
+
+    def restore_groups(self, d):
+        """v8.5g: ripristina l'ultimo invio per chiave; le righe nuove aspettano il loro intervallo."""
+        with self.glock:
+            for k, t in (d or {}).items():
+                try:
+                    t = float(t)
+                except (TypeError, ValueError):
+                    continue
+                g = self.groups.setdefault(str(k), {"lines": [], "last": 0.0, "every": 600, "title": str(k)})
+                g["last"] = max(g["last"], min(t, time.time()))
+
     def flush(self, wait=5.0):
         """Svuota gruppi e coda (usato alla chiusura); aspetta al massimo `wait` secondi."""
         self._flush_groups(force=True)
@@ -98,7 +117,7 @@ class Notifier:
 
     # ------------------------------------------------------------------ thread
     def _flush_groups(self, force=False):
-        now = time.time()
+        now, sent = time.time(), False
         with self.glock:
             for k, g in self.groups.items():
                 if g["lines"] and (force or now - g["last"] >= g["every"]):
@@ -106,11 +125,16 @@ class Notifier:
                     txt = g["title"] + "\n" + "\n".join("- " + x for x in g["lines"])
                     if extra:
                         txt += f"\n(+{extra} altri)"
-                    g["lines"], g["last"] = [], now
+                    g["lines"], g["last"], sent = [], now, True
                     try:
                         self.q.put_nowait(txt[:MAX_LEN])
                     except queue.Full:
                         self.dropped += 1
+        if sent:
+            try:
+                self.onflush()
+            except Exception:  # noqa: BLE001
+                pass
 
     def _run(self):
         while True:
@@ -145,6 +169,11 @@ class Notifier:
             ok, err, retry_after = r if isinstance(r, tuple) else (bool(r), "", None)
             if ok:
                 self.sent += 1
+                try:   # v8.5g: solo lunghezza e inizio del testo (mascherato), mai token o chat id
+                    head = mask(text.split("\n", 1)[0])[:60]
+                    self.okf(f"Telegram: messaggio inviato (n. {self.sent}, {len(text)} caratteri): {head}")
+                except Exception:  # noqa: BLE001
+                    pass
                 return True
             self._err(err)
             if i < self.retries:
