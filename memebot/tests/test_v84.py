@@ -503,8 +503,15 @@ def _sh(): return {"sym": "S", "last_ok": t_ - 1000, "last_price": 1.0}
 alive, dead = _sh(), _sh()
 fh = FakeHttp({"MA": {"usdPrice": 2.5}})
 vd = asyncio.run(D.verify_no_price(st22, fh, {"MA": alive, "MD": dead}, now=t_))
-assert vd == {"MA": "alive", "MD": "dead"} and alive["last_price"] == 2.5 and alive["last_ok"] == t_, vd
+# review Claude (compito 4): l'assenza dal prezzo Jupiter da sola non basta piu per 'dead' (serve il preventivo
+# di vendita 'no_route'); senza preventivo verificabile e attesa
+assert vd == {"MA": "alive", "MD": "wait"} and alive["last_price"] == 2.5 and alive["last_ok"] == t_, vd
 assert "lite-api.jup.ag/price/v3" in fh.urls[0] and len(fh.urls) == 1
+_orc = D.noprice_route_check
+D.noprice_route_check = lambda *_a, **_k: asyncio.sleep(0, result="no_route")
+dead = _sh()
+assert asyncio.run(D.verify_no_price(st22, fh, {"MD": dead}, now=t_)) == {"MD": "dead"}   # prezzo assente + no_route
+D.noprice_route_check = _orc
 w = _sh()
 for i in range(D.CFG["NOPRICE_MAX_WAIT"] - 1):
     assert asyncio.run(D.verify_no_price(st22, FakeHttp(None), {"MW": w}, now=t_)) == {"MW": "wait"}

@@ -1,0 +1,7 @@
+# exit-price-robust
+
+1. **Cosa:** tre fix sulle uscite. (a) `verify_no_price` dà "dead" solo se anche il preventivo di vendita Jupiter risponde `no_route`; preventivo valido o errore di rete = attesa, poi dati non validi. (b) Shadow: zero + rug solo con il `no_route` confermato al giro dopo; "nessun percorso d'acquisto" all'apertura non apre più uno shadow a -100. (c) `pf_learn`: un prezzo mancante a 60 min non vale più -100% e viene riprovato fino a 3 h.
+2. **Perché:** Jupiter price v3 omette di proposito i token nuovi o con poca liquidità, e `jup_quote` chiama `no_route` qualsiasi 400 con errorCode. Così bastava un dato mancante per scrivere -100/rug nel Learner, nelle statistiche dei segnali e nelle soglie del prefiltro.
+3. **File:** `desk.py` (`noprice_route_check`, `verify_no_price`, `shadow_apply`, apertura shadow, `pf_learn`); test `tests/test_exit_price_robust.py`; `tests/test_v84.py` §22 aggiornato (fissava il vecchio "assente da Jupiter = dead").
+4. **Prove:** suite su copia in /tmp tutta verde (`test_narr` fallisce anche su `main`). Il test nuovo cade su `main` ("dead" con percorso di vendita presente). Il rug vero (nessun prezzo + nessun percorso) resta rug.
+5. **Rischi:** un rug vero senza prezzo viene chiuso uno o due giri più tardi (un preventivo in più, circa 2 min); senza decimali né RPC finisce in "dati non validi" invece che in rug. Lezioni negative non toccate (le scartano cluster, ticker ed età). Posizioni paper: mai vendute a zero senza le due conferme.
