@@ -3868,7 +3868,10 @@ async def security_check(st, http, mint, m, cache):
     # pump_fun_amm nel report RugCheck. Tutti gli altri token: regola LP >= MIN_LP_LOCKED_PCT.
     lp_name = str((r.get("launchpad") or {}).get("name", "") if isinstance(r.get("launchpad"), dict) else "").lower()
     pump_amm = any("pump" in str(mk.get("marketType", "")).lower() for mk in markets if isinstance(mk, dict))
-    pump_migrated = (mint.endswith("pump") and m["dex"] in ("pumpswap", "pumpfun", "raydium")
+    # review Claude: niente 'raydium'. Da marzo 2025 pump.fun migra su PumpSwap: una pool Raydium di un token pump.fun
+    # recente e creata da terzi e la sua LP si puo ritirare. Va alla regola LP normale (RugCheck lpLockedPct): le
+    # vecchie migrazioni con LP bruciata risultano comunque bloccate al 100%.
+    pump_migrated = (mint.endswith("pump") and m["dex"] in ("pumpswap", "pumpfun")
                      and ("pump" in lp_name or pump_amm))
     # v8.4e (Kiwi 07:07): stato LP per la barriera finale dell'Executor (lp_gate). 'zero' (0% bloccata/bruciata)
     # e 'unknown' (LP non verificabile) = MAI acquisto vero, solo shadow (tag lp_unlocked_zero / lp_unknown).
