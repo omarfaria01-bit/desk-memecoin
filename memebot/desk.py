@@ -4000,15 +4000,27 @@ class SolanaBroker:
         return int(r["value"]) if isinstance(r, dict) and "value" in r else None
 
     async def token_raw(self, mint):
-        r, _ = await self.rpc("getTokenAccountsByOwner",
-                              [self.pub, {"mint": mint}, {"encoding": "jsonParsed", "commitment": "confirmed"}])
+        """Saldo grezzo del token nel wallet. v8.5: None = non verificabile (errore RPC, risposta illeggibile),
+        MAI 0: prima un 429 dava saldo 0 e la vendita chiudeva la posizione a -100% con i token ancora nel wallet."""
+        r, err = await self.rpc("getTokenAccountsByOwner",
+                                [self.pub, {"mint": mint}, {"encoding": "jsonParsed", "commitment": "confirmed"}])
+        if err or not isinstance(r, dict) or not isinstance(r.get("value"), list):
+            return None
         total = 0
-        for acc in (r or {}).get("value", []) if isinstance(r, dict) else []:
+        for acc in r["value"]:
             try:
                 total += int(acc["account"]["data"]["parsed"]["info"]["tokenAmount"]["amount"])
             except Exception:  # noqa: BLE001
-                pass
+                return None
         return total
+
+    async def token_raw_retry(self, mint, tries=3):
+        for i in range(tries):
+            v = await self.token_raw(mint)
+            if v is not None:
+                return v
+            await asyncio.sleep(1 + i)
+        return None
 
     async def decimals(self, mint):
         if mint not in self.dec_cache:
@@ -4114,13 +4126,17 @@ class SolanaBroker:
             st.cash -= cost
             return {"ok": True, "cost": cost, "tokens": tokens_q, "fill": cost / tokens_q, "impact": impact,
                     "fee": 0.0, "dec": dec, "note": "simulato, nessun invio"}
-        before, sb = await self.token_raw(mint), await self.sol_balance()
+        before, sb = await self.token_raw_retry(mint), await self.sol_balance()
+        if before is None:   # v8.5: senza il saldo di partenza 'got' conterebbe token gia nel wallet
+            return {"ok": False, "error": "saldo token non verificabile prima dell'invio, ordine non inviato"}
         ok, info = await self.send(tx)
         if not ok:
             return {"ok": False, "error": info}
         await asyncio.sleep(2)
-        after, sa = await self.token_raw(mint), await self.sol_balance()
-        got = (after - before) / 10 ** dec if after > before else tokens_q
+        after, sa = await self.token_raw_retry(mint), await self.sol_balance()
+        if after is None:
+            log(st, "Executor", "warn", f"{m.get('symbol')}: saldo dopo l'acquisto non verificabile, uso il preventivo")
+        got = (after - before) / 10 ** dec if after is not None and after > before else tokens_q
         spent = (sb - sa) / 1e9 * solp if sb and sa and sb > sa else cost
         if got <= 0:
             got = tokens_q
@@ -4143,7 +4159,9 @@ class SolanaBroker:
             st.cash += value
             return {"ok": True, "value": value, "tokens": p["tokens"] * fraction}
         # FIX: vende solo la quantita registrata dal bot (mai token extra/airdrop nel wallet)
-        bal = await self.token_raw(mint)
+        bal = await self.token_raw_retry(mint)
+        if bal is None:   # v8.5: errore RPC != saldo 0 (prima: posizione chiusa a -100% con i token nel wallet)
+            return {"ok": False, "error": "saldo token non verificabile (RPC), riprovo"}
         tracked_raw = int(p["tokens"] * min(max(fraction, 0.0), 1.0) * 10 ** dec)
         raw = min(bal, tracked_raw)
         if raw <= 0:
