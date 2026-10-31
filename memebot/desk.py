@@ -3226,7 +3226,14 @@ def record_outcome(st, keys, pnl_pct, rug, src, now=None):
         learn_shadow_step(st, key, now)
 
 
-MEASURE_ONLY_KEYS = {"narrative_relax", "rugcheck_down", "bundle_established"}   # v8.5: solo misura, mai passi
+MEASURE_ONLY_KEYS = {"narrative_relax", "rugcheck_down", "bundle_established", "buysell_relax", "score_band"}
+# v8.5e (analisi di Mark, decisione Kiwi 08:47): fascia di punteggio sotto soglia = acquisto PAPER a meta size;
+# acquisti/vendite 5m appena sotto il minimo = solo shadow buysell_relax.
+CFG.setdefault("SCORE_BAND", True)
+CFG.setdefault("SCORE_BAND_LOW", 0.45)
+CFG.setdefault("SCORE_BAND_SIZE_MULT", 0.5)
+CFG.setdefault("BUYSELL_RELAX_SHADOW", True)
+CFG.setdefault("BUYSELL_RELAX_LOW", 1.20)   # v8.5: solo misura, mai passi
 
 
 def learn_shadow_step(st, key, now=None):
@@ -3908,6 +3915,15 @@ async def analyst_agent(st, http, q_in, q_out):
                 rej(f"momentum non confermato: acq/vend 5m {bs5:.2f}",
                        agent="Analyst", cat="momentum 5m debole")
                 so or add_shadow(st, mint, m, "momento")
+                if not so and CFG["SHADOW_TRADES"] and CFG.get("BUYSELL_RELAX_SHADOW") \
+                        and CFG["BUYSELL_RELAX_LOW"] <= bs5 < CFG["MIN_BUYSELL_M5"]:
+                    # v8.5e: sicurezza ok, acq/vend 5m tra 1.20 e 1.30 -> SOLO shadow (misura), mai acquisto
+                    st.stats["buysell_relax"] = st.stats.get("buysell_relax", 0) + 1
+                    spawn_shadow(st, http, mint, m, ["buysell_relax"], f"Analyst: acq/vend 5m {bs5:.2f} "
+                                 f"(fascia {CFG['BUYSELL_RELAX_LOW']:.2f}-{CFG['MIN_BUYSELL_M5']:.2f})", 0.0,
+                                 list((c.get("sec") or {}).get("soft") or []), tag="buysell_relax",
+                                 signals=[f"src:{m.get('src') or '?'}", "reason:buysell_relax", f"bs5:{bs5:.2f}"])
+                    continue
                 so or narr_relax_shadow(st, http, mint, m, c, "momento/momentum/VWAP") or analyst_shadow(st, http, mint, m, c, "momento/momentum")
                 continue
             NARR.current(st)  # carica anche la blocklist (valida anche se le narrative sono vecchie)
@@ -3989,7 +4005,9 @@ async def analyst_agent(st, http, q_in, q_out):
                     if tg not in signals:
                         signals.append(tg)
             bonus = 0.0
-            if CFG["SIGNALS_ENABLED"] and not so and score - pen >= st.threshold - bonus_eff(st, "TOTAL_BONUS_CAP"):
+            # v8.5e: i controlli prima dell'acquisto (cluster v2, creatore, ripiego RugCheck) valgono anche per la fascia
+            gate_thr = min(st.threshold, CFG["SCORE_BAND_LOW"]) if CFG.get("SCORE_BAND") else st.threshold
+            if CFG["SIGNALS_ENABLED"] and not so and score - pen >= gate_thr - bonus_eff(st, "TOTAL_BONUS_CAP"):
                 try:
                     bonus, btags = await compute_bonus(st, mint, m, c.get("sec"))
                     signals += [t for t in btags if t not in signals]
@@ -4015,7 +4033,7 @@ async def analyst_agent(st, http, q_in, q_out):
                 signals.append(f"age:{age_info['age_d']:.1f}d/-{age_pen:.3f}" + ("/eased" if age_info.get("eased") else ""))
             # v8.2: cluster v2 prima della decisione. 'unknown' (errore/tempo scaduto) non vale mai come 'ok'.
             cl = None
-            if cluster2_on() and not so and score >= st.threshold:
+            if cluster2_on() and not so and score >= gate_thr:
                 cl = await cluster2_wait(st, http, mint, c.get("sec") or {}, cl_task, m["symbol"])
                 signals.append(cluster2_signal(cl))
                 if cl["level"] == "hard":
@@ -4044,7 +4062,7 @@ async def analyst_agent(st, http, q_in, q_out):
                     pen += soft_pen(st, "cluster")
                     score -= soft_pen(st, "cluster")
                     smult *= soft_size(st, "cluster")
-            elif CFG["CLUSTER_CHECK"] and not so and score >= st.threshold:   # v7 (solo se cluster_v2 manca)
+            elif CFG["CLUSTER_CHECK"] and not so and score >= gate_thr:   # v7 (solo se cluster_v2 manca)
                 try:
                     cl = await cluster_scan(st, http, mint, c.get("sec") or {})
                 except Exception as e:  # noqa: BLE001
@@ -4070,7 +4088,7 @@ async def analyst_agent(st, http, q_in, q_out):
                     smult *= soft_size(st, flag)
             # v8.4e (Kiwi): storico del creatore, solo per i candidati a un acquisto vero (2 chiamate pump.fun
             # gratuite per creatore nuovo, poi cache). 'unknown' = nessun effetto.
-            if CFG.get("CREATOR_HISTORY", True) and "crh" in SRC and not so and score >= st.threshold \
+            if CFG.get("CREATOR_HISTORY", True) and "crh" in SRC and not so and score >= gate_thr \
                     and str(mint).endswith("pump") and callable(getattr(http, "get", None)):
                 crh = await SRC["crh"].lookup(http.get, mint, (c.get("sec") or {}).get("creator") or None)
                 signals.append(f"creator:{crh['level']}:{crh.get('dead', 0)}/{crh.get('prev', 0)}")
@@ -4091,10 +4109,10 @@ async def analyst_agent(st, http, q_in, q_out):
                     flags.append("creatore")
             # v8.5 (Kiwi): RugCheck giu (ripiego) o bundle soft da token affermato -> serve cluster v2 ok/soft
             _sec = c.get("sec") or {}
-            if (_sec.get("rc_down") or _sec.get("bundle_established")) and not so and score >= st.threshold:
+            if (_sec.get("rc_down") or _sec.get("bundle_established")) and not so and score >= gate_thr:
                 _lv = (cl or {}).get("level", "unknown")
                 why_tag = "rugcheck_down" if _sec.get("rc_down") else "bundle_established"
-                if _lv not in ("ok", "soft"):
+                if _lv not in ("ok", "none", "soft"):   # v8.5e: 'none' = cluster v2 pulito (prima veniva scartato)
                     reason = f"{'RugCheck giu' if why_tag == 'rugcheck_down' else 'bundle su token affermato'}: " \
                              f"cluster v2 '{_lv}' (serve ok o soft)"
                     rej(reason, agent="Analyst", cat="RugCheck giu (dubbio)" if why_tag == "rugcheck_down"
@@ -4122,7 +4140,15 @@ async def analyst_agent(st, http, q_in, q_out):
                     spawn_shadow(st, http, mint, m, c.get("shadow_keys") or ["multi"], f"scartato: {so}", score,
                                  flags, signals=signals)
                 continue
-            if score < st.threshold:
+            band = (CFG.get("SCORE_BAND") and not so and CFG["MODE"] == "paper" and cl is not None
+                    and gate_thr <= score < st.threshold)
+            if band:   # v8.5e: fascia 0.45-0.50, tutti i controlli passati -> acquisto PAPER a size x0.5
+                smult *= CFG["SCORE_BAND_SIZE_MULT"]
+                flags.append("score_band")
+                signals.append(f"score_band:{score:.3f}")
+                st.stats["score_band"] = st.stats.get("score_band", 0) + 1
+                detail += f", fascia {gate_thr:.2f}-{st.threshold:.2f}: PAPER size x{CFG['SCORE_BAND_SIZE_MULT']:g}"
+            elif score < st.threshold:
                 rej(detail, agent="Analyst", cat="punteggio basso")
                 add_shadow(st, mint, m, "punteggio", f)
                 if not flags and narr_relax_shadow(st, http, mint, m, c, "punteggio basso", score):
@@ -5034,6 +5060,12 @@ async def _execute_buy(st, broker, c, mint, m):
     if size < 1:
         reject(st, mint, m["symbol"], "liquidita del conto insufficiente", agent="Executor", cat="conto vuoto")
         return
+    if "score_band" in (c.get("soft") or []) and (CFG["MODE"] != "paper" or not (CFG["HONEYPOT_CHECK"]
+                                                                                and SRC.get("honeypot"))):
+        # v8.5e: la fascia 0.45-0.50 e solo PAPER e solo con il controllo honeypot attivo
+        reject(st, mint, m["symbol"], "fascia di punteggio: solo PAPER con controllo honeypot attivo",
+               agent="Executor", cat="fascia punteggio (dubbio)")
+        return
     # v8.2: honeypot (estensioni Token-2022, authority, preventivo di VENDITA, RugCheck) prima di ogni ingresso
     if CFG["HONEYPOT_CHECK"] and SRC.get("honeypot"):
         hp = await honeypot_check(st, getattr(broker, "http", None), mint, size, c.get("sec") or {})
@@ -5058,19 +5090,26 @@ async def _execute_buy(st, broker, c, mint, m):
         if hp["level"] == "unknown":   # v8.4c (Kiwi): MAI acquisto (niente size ridotta), shadow + nuovo tentativo
             honeypot_unknown_skip(st, getattr(broker, "http", None), mint, m, c, hp)
             return
-        if (c.get("sec") or {}).get("rc_down"):   # v8.5: con RugCheck giu servono GoPlus ok e honeypot pulito
+        _rcd, _band = bool((c.get("sec") or {}).get("rc_down")), "score_band" in (c.get("soft") or [])
+        if _rcd or _band:   # v8.5: RugCheck giu / v8.5e fascia di punteggio: servono GoPlus ok e honeypot pulito
+            _tag = "rugcheck_down" if _rcd else "score_band"
             bad = ([f"GoPlus {hp.get('goplus_level')}"] if hp.get("goplus_level") != "ok" else []) + \
+                ([f"honeypot {hp.get('level')}"] if hp.get("level") != "ok" else []) + \
                 [str(x) for x in (hp.get("soft") or [])][:3]
             if bad:
-                reason = "RugCheck giu: controlli di ripiego non tutti ok (" + "; ".join(bad) + ")"
-                reject(st, mint, m["symbol"], reason, agent="Executor", cat="RugCheck giu (dubbio)")
-                RC_HEALTH["fb_skip"] += 1
+                reason = ("RugCheck giu: controlli di ripiego" if _rcd else "fascia di punteggio 0.45-0.50: controlli") \
+                    + " non tutti ok (" + "; ".join(bad) + ")"
+                reject(st, mint, m["symbol"], reason, agent="Executor",
+                       cat="RugCheck giu (dubbio)" if _rcd else "fascia punteggio (dubbio)")
+                if _rcd:
+                    RC_HEALTH["fb_skip"] += 1
                 if CFG["SHADOW_TRADES"]:
-                    spawn_shadow(st, getattr(broker, "http", None), mint, m, ["rugcheck_down"], reason,
-                                 fnum(c.get("score")), (c.get("soft") or []) + ["rugcheck_down"], tag="rugcheck_down",
+                    spawn_shadow(st, getattr(broker, "http", None), mint, m, [_tag], reason,
+                                 fnum(c.get("score")), (c.get("soft") or []) + [_tag], tag=_tag,
                                  signals=(c.get("signals") or "").split("|"))
                 return
-            RC_HEALTH["fb_ok"] += 1
+            if _rcd:
+                RC_HEALTH["fb_ok"] += 1
     # v8.4: controllo incrociato Birdeye (overview) per prefiltro e honeypot. MAI un filtro duro:
     # "shadow" = solo registrato, "soft" = size ridotta se Birdeye non conferma.
     if str(CFG.get("BIRDEYE_XCHECK_MODE", "shadow")) != "off":
@@ -5942,7 +5981,7 @@ def write_csv_row(path, row):
 
 def shadow_tag(keys, flags):
     ks = list(keys) + list(flags or [])
-    for k, tag in (("rugcheck_down", "rugcheck_down"), ("lp_unlocked_zero", "lp_unlocked_zero"), ("lp_unknown", "lp_unknown"),
+    for k, tag in (("buysell_relax", "buysell_relax"), ("rugcheck_down", "rugcheck_down"), ("lp_unlocked_zero", "lp_unlocked_zero"), ("lp_unknown", "lp_unknown"),
                    ("creator_serial", "creator_serial"), ("cluster", "cluster"), ("lp_unlocked", "lp_unlocked"), ("analyst_momentum", "analyst_momentum")):
         if any(x.startswith(k) for x in ks):
             return tag

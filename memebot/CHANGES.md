@@ -915,3 +915,15 @@ senza patch (websocket pump.fun). ATTENZIONE: le suite scrivono e cancellano fil
 - Watchlist curva (curve_watch.json): token scartati per liquidita $0 ancora sulla curva pump.fun -> ricontrollo UNA volta dopo la migrazione, entro 6 ore, max 12 all'ora; rientrano dalla pipeline completa senza eccezioni (DexScreener gratis per il controllo).
 - narrative_relax (solo misura): scartato SOLO per momentum/VWAP o punteggio (senza segnali soft) e legato a una narrativa fresca con trusted_mentions > 0 -> shadow tag narrative_relax. Nessun acquisto; il Learner non fa passi su narrative_relax/rugcheck_down/bundle_established.
 - Test: tests/test_v85d.py (solo su copia in /tmp).
+
+## v8.5e (31/10, analisi di Mark /tmp/filter_an/report.md) — codice pronto, non ancora in esecuzione
+- (D) Fascia di punteggio 0.45 ≤ score < soglia (0.50): acquisto **solo PAPER**, size ×0.5, tag `score_band`
+  (soft + segnale `score_band:<score>`). Solo con sicurezza tutta passata: Filter senza scarti gravi,
+  cluster v2 eseguito e ok/none/soft (hard e unknown = niente), storico creatore, ripiego RugCheck,
+  honeypot ok con GoPlus ok e nessun segnale soft (altrimenti shadow `score_band`), HONEYPOT_CHECK attivo.
+  I controlli prima dell'acquisto ora partono da 0.45 (`gate_thr`). Con RugCheck giù le riduzioni si sommano (×0.25).
+- (E) Acquisti/vendite 5m tra 1.20 e 1.30 con sicurezza ok: SOLO shadow `buysell_relax`, mai acquisto.
+- `score_band` e `buysell_relax` in MEASURE_ONLY_KEYS (il Learner non allenta nulla da soli).
+- Fix: il cancello v8.5 RugCheck giù / bundle affermato scartava anche il cluster v2 pulito (livello `none`); ora accetta ok/none/soft.
+- Config: SCORE_BAND, SCORE_BAND_LOW, SCORE_BAND_SIZE_MULT, BUYSELL_RELAX_SHADOW, BUYSELL_RELAX_LOW.
+- Test: tests/test_v85e.py (copia in /tmp).
