@@ -1724,6 +1724,18 @@ def host_pause_alert(now=None):
     return True
 
 
+def watch_pause_shift(st, a, b):
+    """Compito 8 (Claude): la pausa [a, b] non conta per WATCH_TTL_MIN. Sposta in avanti i 'seen' della watchlist della
+    parte di pausa non ancora compensata (piu cicli possono vedere la stessa pausa: mai due volte)."""
+    hp = HOST_PAUSE
+    shift = max(0.0, b - max(a, fnum(hp.get("watch_shift_to"))))
+    hp["watch_shift_to"] = max(fnum(hp.get("watch_shift_to")), b)
+    if shift > 0:
+        for w in st.watch.values():
+            w["seen"] = fnum(w.get("seen"), b) + shift
+    return shift
+
+
 def host_pause_check(st, name, now=None, mono=None):
     """Da chiamare a OGNI giro del ciclo 'name'. Ritorna i secondi di pausa (0 = nessuna)."""
     now, mono = now or time.time(), mono if mono is not None else time.monotonic()
@@ -1736,6 +1748,7 @@ def host_pause_check(st, name, now=None, mono=None):
     if gw <= CFG["HOST_PAUSE_SEC"] and abs(gw - gm) <= CFG["HOST_PAUSE_MONO_JUMP_SEC"]:
         return 0.0
     hp = HOST_PAUSE
+    watch_pause_shift(st, last[0], now)            # compito 8: anche prima del controllo dei doppioni
     hp["hold"] = {"risk": True, "shadow": True}   # primo giro di ogni ciclo dopo la ripresa: solo quotazioni
     if now - hp["last_evt"] < 60:                  # gia registrata dall'altro ciclo
         return gw
@@ -4054,6 +4067,7 @@ async def filter_agent(st, http, q_out):
             del st.cooldown[k]
         for k in [k for k, v in cache.items() if now - v[0] > 3600]:
             del cache[k]
+        host_pause_check(st, "filter", now)   # compito 8: una pausa rilevata qui sposta i 'seen' prima della scadenza
         for mint, w in list(st.watch.items()):
             if now - w["seen"] > CFG["WATCH_TTL_MIN"] * 60:
                 st.watch.pop(mint, None)
