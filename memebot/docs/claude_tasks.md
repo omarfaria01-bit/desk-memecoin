@@ -123,6 +123,14 @@ A ogni nuova riga shadow aperta invia su Telegram (usa il canale e il token già
 - Volume: circa 250 righe al giorno. Aggiungi un'opzione `SHADOW_TG_NOTIFY` (on di default) e un limite anti-flood (raggruppa se più di 1 al minuto).
 - Branch `claude/shadow-telegram`; lo controllo io prima del deploy.
 
+## 20) RugCheck giù da ore — PRIORITÀ MASSIMA (subito dopo il 15)
+RugCheck è giù da molte ore e il bot vive sul fallback: i token finiscono scartati come "rugcheck_down / LP unknown" oppure analizzati a metà (es. il cluster di Brilliant non visto). Per Kiwi è inaccettabile.
+- Diagnosi: il problema è l'API RugCheck (endpoint cambiato, rate limit, autenticazione o bisogno di una API key, Cloudflare) o il nostro client? Prova l'endpoint attuale e la documentazione pubblica; se serve una chiave gratuita, scrivilo nel report: Kiwi la mette nel `.env` (mai nel codice o su GitHub).
+- Correggi il client: retry con backoff, timeout, header corretti, cache per mint e health check con log chiaro su quando torna su.
+- Rendi il **fallback on-chain completo**, così il bot non dipende da un solo servizio: LP bruciata o bloccata verificata on-chain (pool PumpSwap/Raydium), top holder e cluster, mint/freeze, Token-2022 extension. Valuta fonti free alternative (Birdeye security endpoint entro i limiti free, GoPlus Solana, Helius DAS) mantenendo i limiti free.
+- Rendi conto con i numeri: quanti token scartati per `rugcheck_down` nelle ultime 24 ore, prima e dopo.
+- Branch `claude/rugcheck-fix`; deploy solo dopo la mia review.
+
 ## Dati reali
 
 - Il branch `data-snapshot` (cartella `data/`) contiene una copia notturna dei dati paper reali del bot (trade ombra, trade, equity, eventi, state, price_paths, prior, smart wallets, creator_seed, call Discord etichettate). Niente chiavi.
