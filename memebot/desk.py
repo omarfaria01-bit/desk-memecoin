@@ -3875,6 +3875,12 @@ async def security_check(st, http, mint, m, cache):
     lp_status, lp_block, lpmax = ("curve" if m["dex"] == "pumpfun" else "protocol"), None, None
     if m["dex"] != "pumpfun" and not pump_migrated:
         lps = [mk.get("lp") for mk in markets if isinstance(mk, dict) and isinstance(mk.get("lp"), dict)]
+        # review Claude: conta la LP della pool che usiamo (m['pair']), non la migliore tra tutti i mercati: una pool
+        # secondaria bloccata al 100% faceva passare un token con la pool principale senza dati LP (o sbloccata).
+        _main = next((mk for mk in markets if isinstance(mk, dict) and m.get("pair") and mk.get("pubkey") == m.get("pair")),
+                     None)
+        if _main is not None:
+            lps = [_main["lp"]] if isinstance(_main.get("lp"), dict) else []
         if not lps or all(lp.get("lpLockedPct") is None for lp in lps):
             lp_status = "unknown"
             lp_block = ("lp_unknown", "LP non verificabile: stato LP sconosciuto, solo shadow (nessun acquisto)",
