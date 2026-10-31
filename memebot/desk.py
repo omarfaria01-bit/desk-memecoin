@@ -3777,7 +3777,9 @@ BLACKLIST_RUG_REASONS = ("liquidita crollata", "invendibile", "rug", "confermato
 def blacklist_creator(st, creator, reason, mint=None, now=None):
     """Mette il creatore in lista nera SOLO se il motivo e un rug confermato. True se aggiunto/rinnovato."""
     r = str(reason or "").lower()
-    if not creator or not any(k in r for k in BLACKLIST_RUG_REASONS) or r.startswith("crollo"):
+    # parole intere: "RugCheck" (es. "nuovo rischio RugCheck") non deve contare come "rug"
+    if not creator or not any(re.search(rf"\b{k}\b", r) for k in BLACKLIST_RUG_REASONS) or r.startswith("crollo") \
+            or r.startswith("nuovo rischio"):
         return False
     if "possibile rug" in r and "confermato" not in r:   # "nessun prezzo da 15 min" senza seconda fonte: non basta
         return False
