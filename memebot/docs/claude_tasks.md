@@ -136,6 +136,9 @@ RugCheck è giù da molte ore e il bot vive sul fallback: i token finiscono scar
 - `h100envy/crawl-hive`: bundle, sniper, operatori collegati, bubble map, LP lock, storico del dev. Utile per il cluster (18) e il fallback (20).
 **Sicurezza:** i repo di bot sniper sono spesso trappole che rubano wallet. Leggi il codice e prendi le idee, ma **non eseguire né installare** nulla da lì, non copiare dipendenze, e mai chiavi o `.env` vicino a quel codice.
 
+## 21) Scarto per età = rimandare, non chiudere — segnalato da Kiwi (piccolo, alta priorità)
+DOUGHBRIKS `D7Q2ApyCUfAm9Vay3wC2g1tDBtrKdomYCLdiSPaNpump` è stato scartato il 31/10 alle 17:30 per `PF_MIN_AGE_MIN` (età 1,4 minuti, liquidità 50.000 $, +725% in 5 minuti, 1.269 transazioni) e poi non è mai finito né in watchlist né nello shadow. Un fallimento **solo per l'età** deve mettere il token in coda (priorità alta in watchlist, eventualmente prio) e rivalutarlo quando supera l'età minima. Logga il ricontrollo. Branch `claude/age-recheck`.
+
 ## Dati reali
 
 - Il branch `data-snapshot` (cartella `data/`) contiene una copia notturna dei dati paper reali del bot (trade ombra, trade, equity, eventi, state, price_paths, prior, smart wallets, creator_seed, call Discord etichettate). Niente chiavi.
