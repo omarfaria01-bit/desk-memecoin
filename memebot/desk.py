@@ -3721,6 +3721,18 @@ CFG.setdefault("BUNDLE_EST_MIN_HOLDERS", 5000)
 CFG.setdefault("RC_DOWN_SIZE_MULT", 0.5)
 PUMP_AMM = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA"
 SYSTEM_PROGRAM = "11111111111111111111111111111111"
+POOL_LOCK_PROGRAMS = {   # programmi proprietari di conti che NON sono holder (curva, pool, locker)
+    "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P": "pump.fun curva",
+    "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA": "PumpSwap",
+    "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8": "Raydium AMM v4",
+    "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C": "Raydium CPMM",
+    "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK": "Raydium CLMM",
+    "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj": "Raydium launchpad",
+    "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo": "Meteora DLMM",
+    "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB": "Meteora pools",
+    "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc": "Orca Whirlpool",
+    "strmRqUCoQUgGUan5YhzUZa6KqdzwX5L6FpUxfmKg5m": "Streamflow (locker)",
+}
 AMM_AUTHORITIES = {"5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1",   # Raydium AMM v4
                    "GpMZbSM2GgvTKHJirzeGfMFoaZ8UR2X7F4v8vHTvxFbL",   # Raydium CPMM
                    "WLHv2UAZm6z4KyaaELi5pjdbJh6RESMva1Rnn8pJVVh"}     # Raydium launchpad
@@ -3884,8 +3896,10 @@ async def rc_fallback(http, mint, m):
     for o, x in zip(uniq, oa):
         if o in AMM_AUTHORITIES or o in (m.get("pairs_all") or []):
             r["knownAccounts"][o] = {"type": "AMM", "name": "pool/authority"}
-        elif x and x.get("owner") not in (SYSTEM_PROGRAM, None):
-            r["knownAccounts"][o] = {"type": "PROGRAM", "name": str(x.get("owner"))[:8]}
+        elif x and x.get("owner") in POOL_LOCK_PROGRAMS:
+            # review Claude (compito 13): esclusi solo curva/pool/locker noti. Prima QUALSIASI account di programma
+            # (vault o PDA di un programma del team) spariva dal top 10 e la concentrazione risultava piu bassa.
+            r["knownAccounts"][o] = {"type": "PROGRAM", "name": POOL_LOCK_PROGRAMS[x.get("owner")]}
     r["topHolders"] = [{"address": a["address"], "owner": o, "uiAmount": fnum(a.get("uiAmount")),
                         "pct": 0.0, "insider": False} for a, o in zip(la, owners)]
     # reti insider: endpoint RugCheck separato (ancora attivo durante il guasto dei report); errore = quota ignota

@@ -117,9 +117,12 @@ D.CFG["HONEYPOT_CHECK"] = True
 # ---- BUCO 5 (media, NON corretto, documentato): ogni proprietario che e un account di programma viene escluso dal
 # top 10 come "PROGRAM". RugCheck distingue locker/AMM; il ripiego esclude qualsiasi PDA o vault di programma
 # (es. un programma del team), che cosi sparisce dal calcolo della concentrazione.
+# compito 13: CORRETTO. Ora si escludono solo curva/pool/locker noti (POOL_LOCK_PROGRAMS).
 t_sys = sec_check()[3]["top10"]
-t_prog = sec_check(prog_owner="Dev1111Program1111111111111111111111111111")[3]["top10"]
-assert t_prog < t_sys - 25, (t_sys, t_prog)   # 300M su 1B (30%) spariscono dal top 10: buco ancora aperto
+_r = sec_check(prog_owner="Dev1111Program1111111111111111111111111111")
+assert _r[3] is None or abs(_r[3]["top10"] - t_sys) < 1e-6, (t_sys, _r[1])   # programma sconosciuto: conta
+_r2 = sec_check(prog_owner="strmRqUCoQUgGUan5YhzUZa6KqdzwX5L6FpUxfmKg5m")
+assert _r2[3]["top10"] < t_sys - 25, (t_sys, _r2[1])                              # locker noto: escluso
 
 # ---- Token-2022 con estensioni rischiose: dubbio (gia coperto dal ripiego, verificato)
 ok, why, _, sec = sec_check(exts=[{"extension": "transferHook"}])
