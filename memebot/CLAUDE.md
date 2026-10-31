@@ -9,7 +9,7 @@ La modalità live **non va mai attivata** senza l'ok esplicito di Kiwi (il propr
   Le chiavi arrivano solo da variabili d'ambiente. Su GitHub c'è solo `.env.example`.
 - Le soglie non si cambiano a mano nel codice: vanno in `overrides.json` (esempio: `overrides.example.json`),
   che il bot legge con limiti (clamp) per ogni chiave.
-- **Claude non committa e non pusha.** Fa solo revisione e proposte (diff o descrizione con le soglie).
+- **Claude può correggere errori gravi** con commit piccoli e spiegati su branch `claude/*`, mai su `main`, senza merge. Non riavvia il bot e non lancia la sync: il deploy lo fa il reviewer dopo i test. Compiti in `docs/claude_tasks.md`.
   Kiwi (l'assistente che gestisce il bot) le verifica sui dati del bot e sui backtest prima di applicarle.
 - Ogni proposta dice: quale regola, quale soglia, su quali dati è stata provata, e cosa succede ai controlli
   positivi e alle lezioni negative.
