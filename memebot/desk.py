@@ -4208,6 +4208,8 @@ async def security_check(st, http, mint, m, cache):
 async def filter_agent(st, http, q_out):
     cache = {}
     while True:
+        if "filter" in LOOP_MONO:   # v8.9: la pausa del Filter si misura sul solo sleep, non sulla durata del giro
+            LOOP_MONO["filter"] = (time.time(), time.monotonic())   # (un giro lento non e una pausa dell'host)
         await asyncio.sleep(CFG["RECHECK_SEC"])
         now = time.time()
         for d, ttl in ((st.processed, 6 * 3600),):
