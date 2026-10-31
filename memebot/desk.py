@@ -4463,6 +4463,14 @@ async def security_check(st, http, mint, m, cache):
            "rc_down": rc_down, "bundle_established": bundle_est,
            # review Claude: report RugCheck senza totalHolders -> MIN_HOLDERS verificato dopo con cluster v2
            "holders_unknown": bool(not rc_down and not total_holders)}
+    if rc_down and cluster2_on():
+        # compito 18 (Kiwi): col ripiego, lo scarto "rugcheck_down" qui sotto va diretto allo shadow senza mai
+        # passare dall'Analyst (che altrimenti avvia cluster2_start): senza questa riga il cluster su uno shadow
+        # rugcheck_down non viene mai calcolato (caso Brilliant, cluster al 31,85% non visto). In background,
+        # mai in attesa qui: si aggancia da solo allo shadow quando st.shadow_trades[mint] esiste (vedi
+        # cluster2_scan). Un vero acquisto resta comunque bloccato dai dubbi sotto finche' non arriva all'Analyst,
+        # dove cluster2 viene sempre atteso prima di comprare (rc_down_doubts).
+        cluster2_start(st, http, mint, sec, sym=m["symbol"])
     if rc_down:   # v8.5: ripiego on-chain, ogni dubbio = niente acquisto (shadow rugcheck_down)
         doubt = []
         if r.get("t22_risky"):
@@ -7389,6 +7397,10 @@ def _close_shadow_row(st, mint, sh, pnl, rug, why, now=None):
     if fe:
         fe.update({"trough_pct": round(fnum(sh.get("trough_pct")), 2), "dyn_stop_hit": sh.get("dyn_hit")})
         fe.update(alt_exits(mint, "shadow", sh.get("t")))   # v8.4f: solo registrato
+    cl2 = sh.get("cluster2") or {}   # compito 18 (Kiwi): cluster_pct in entry_features su ogni riga shadow,
+    if cl2:                          # cosi si puo misurare (quando cluster2 ha fatto in tempo a finire)
+        fe.update({"cluster_pct": cl2.get("cluster_pct"), "cluster_level": cl2.get("level"),
+                   "cluster_max_group_pct": cl2.get("max_group_pct")})
     row.update(fe_columns(fe))
     row["pnl_cpmm"] = (round((fnum(sh.get("realized_cpmm"), sh.get("realized", 0.0)) / sh["cost"] - 1) * 100, 2)
                        if sh.get("cost") and "realized_cpmm" in sh else None)
