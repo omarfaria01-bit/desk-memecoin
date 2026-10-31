@@ -1201,10 +1201,15 @@ async def pf_learn(st, http, done):
     if pend:
         market = await dex_batch(http, list({r["mint"] for r in pend}))
         for r in pend:
-            done.add((r["mint"], r["t"]))
             pairs = market.get(r["mint"])
             px = summarize(pairs)["price"] if pairs else 0.0
-            ret = (px / r["m"]["price"] - 1) * 100 if px > 0 else -100.0
+            if px <= 0:
+                # review Claude (compito 4): prezzo assente (429, blocco DexScreener fallito, coppia non restituita)
+                # valeva -100% ed era chiuso per sempre: 30 esiti falsi per un solo errore. Ora si riprova al giro
+                # dopo, fino a max_age di load_pending (3 h); oltre, la valutazione esce senza esito.
+                continue
+            done.add((r["mint"], r["t"]))
+            ret = (px / r["m"]["price"] - 1) * 100
             hist.append([r["fails"], round(max(-100.0, min(ret, 1000.0)), 2), r["t"]])
         del hist[:-600]
     now = time.time()
