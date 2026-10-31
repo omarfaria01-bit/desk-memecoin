@@ -3619,7 +3619,8 @@ def record_outcome(st, keys, pnl_pct, rug, src, now=None):
         learn_shadow_step(st, key, now)
 
 
-MEASURE_ONLY_KEYS = {"narrative_relax", "rugcheck_down", "bundle_established", "buysell_relax", "score_band"}
+MEASURE_ONLY_KEYS = {"narrative_relax", "rugcheck_down", "bundle_established", "buysell_relax", "score_band",
+                     "sample"}   # compito 11: campioni degli scarti, solo misura
 # v8.5e (analisi di Mark, decisione Kiwi 08:47): fascia di punteggio sotto soglia = acquisto PAPER a meta size;
 # acquisti/vendite 5m appena sotto il minimo = solo shadow buysell_relax.
 CFG.setdefault("SCORE_BAND", True)
@@ -4106,6 +4107,7 @@ async def filter_agent(st, http, q_out):
                     if fails:
                         st.stats["prefilter_reject"] = st.stats.get("prefilter_reject", 0) + 1
                         reject(st, mint, m["symbol"], "prefiltro: " + ", ".join(fails), cat="prefiltro " + fails[0])
+                        sample_reject(st, http, mint, m, "prefiltro: " + ", ".join(fails), "prefiltro " + fails[0])
                         continue
                 ok, reason, cat, sec = await security_check(st, http, mint, m, cache)
                 if not ok:
@@ -4125,6 +4127,8 @@ async def filter_agent(st, http, q_out):
                         # v6: nessun acquisto possibile; l'Analyst valuta solo se aprire uno shadow trade
                         await q_out.put({"mint": mint, "m": m, "sec": sec, "filter_ok": True,
                                          "shadow_only": reason, "shadow_keys": sec.get("shadow_keys")})
+                    else:
+                        sample_reject(st, http, mint, m, reason, cat)   # compito 11: campione degli scarti
                     continue
                 st.stats["filter_pass"] += 1
                 log(st, "Filter", "pass", f"{m['symbol']} superato: {reason}", mint=mint, src=m["src"])
@@ -6543,6 +6547,8 @@ SHADOW_FIELDS = ["aperto", "chiuso", "symbol", "mint", "motivo_scarto", "chiavi"
                  "dyn_tp1", "dyn_trail_act", "dyn_trail_dist", "entry_features",
                  # v8.4d: 0 = dati non validi (es. nessun prezzo per un problema nostro), il Learner non li usa
                  "valido",
+                 # compito 11: 'sample' = scartato ma seguito (campione), vuoto = candidato vero
+                 "shadow_reason",
                  # v8.5: perche non valido (no_price, host_pause, host_pause_retro)
                  "invalid_for_learning",
                  # v8.6 (A): PnL con CPMM drain-aware + latenza d'uscita (solo registrati)
@@ -6579,13 +6585,70 @@ def shadow_tag(keys, flags):
     return "score" if list(keys) == ["score"] else "soft"
 
 
-def spawn_shadow(st, http, mint, m, keys, reason, score, flags, tag=None, signals=None):
+def spawn_shadow(st, http, mint, m, keys, reason, score, flags, tag=None, signals=None, sample=None):
     if mint in st.shadow_trades or mint in st.positions:
         return
     t = asyncio.ensure_future(open_shadow(st, http, mint, m, keys, reason, score, flags,
-                                          tag=tag or shadow_tag(keys, flags), signals=signals))
+                                          tag=tag or shadow_tag(keys, flags), signals=signals, sample=sample))
     SHADOW_TASKS.add(t)
     t.add_done_callback(SHADOW_TASKS.discard)
+    if sample is not None:
+        SAMPLE_PENDING.add(mint)
+        t.add_done_callback(lambda _t, _m=mint: SAMPLE_PENDING.discard(_m))
+
+
+# ---------------------------------------------------------------- compito 11 (Claude): campione degli scarti in shadow
+# Per avere piu esempi etichettati si segue in shadow anche una quota casuale (deterministica: seed + mint) dei token
+# scartati da prefiltro e filtri. Mai gli scarti duri di sicurezza (mint/freeze authority, rug, tassa, honeypot,
+# Token-2022 pausabile, ticker impostore) ne i token senza liquidita. Gli shadow campione: tag 'sample',
+# shadow_reason='sample' nel CSV, chiave 'sample' in MEASURE_ONLY_KEYS (il Learner non allenta nulla da qui),
+# ZERO chiamate in piu (niente preventivi Jupiter, candele, Birdeye, primi scambi o conferma 2): solo i prezzi
+# DexScreener gia letti dal ciclo shadow. Tetto proprio SHADOW_SAMPLE_MAX_OPEN, non tolgono posto agli altri.
+CFG.setdefault("SHADOW_REJECT_SAMPLE", 0.5)
+CFG.setdefault("SHADOW_SAMPLE_MAX_OPEN", 30)
+CFG.setdefault("SHADOW_SAMPLE_SEED", int(time.time() // 86400))   # cambia ogni giorno, registrato in ogni riga
+SAMPLE_PENDING = set()
+SAMPLE_HARD_CATS = ("mint non revocata", "freeze attiva", "rug", "tassa alta", "honeypot", "ticker impostore",
+                    "liquidita bassa", "caso aperto", "token-2022", "pausabil")
+
+
+def sample_rate(st, now=None):
+    """Quota effettiva: SHADOW_REJECT_SAMPLE ridotta se DexScreener ha risposto 429 negli ultimi 10 min (x0.25) o se i
+    posti per i campioni sono gia oltre l'80% (x0.5)."""
+    now = now or time.time()
+    r = clamp(fnum(CFG.get("SHADOW_REJECT_SAMPLE")), 0.0, 1.0)
+    http = getattr(BROKER_REF[0], "http", None) if BROKER_REF[0] is not None else None
+    if http is not None and now - fnum(getattr(http, "last429", {}).get("api.dexscreener.com"), 0.0) < 600:
+        r *= 0.25
+    n = sum(1 for v in st.shadow_trades.values() if v.get("tag") == "sample") + len(SAMPLE_PENDING)
+    if n >= 0.8 * max(1, int(CFG["SHADOW_SAMPLE_MAX_OPEN"])):
+        r *= 0.5
+    return r
+
+
+def sample_reject(st, http, mint, m, reason, cat, now=None):
+    """Dopo uno scarto: True se il token viene seguito in shadow come campione."""
+    try:
+        if not CFG["SHADOW_TRADES"] or mint in st.shadow_trades or mint in st.positions or mint in SAMPLE_PENDING:
+            return False
+        c = str(cat or reason or "").lower()
+        if any(k in c for k in SAMPLE_HARD_CATS) or fnum(m.get("price")) <= 0 or fnum(m.get("liq")) <= 0:
+            return False
+        p = sample_rate(st, now)
+        seed = int(CFG["SHADOW_SAMPLE_SEED"])
+        if p <= 0 or random.Random(f"{seed}:{mint}").random() >= p:
+            return False
+        n = sum(1 for v in st.shadow_trades.values() if v.get("tag") == "sample") + len(SAMPLE_PENDING)
+        if n >= int(CFG["SHADOW_SAMPLE_MAX_OPEN"]):
+            st.stats["shadow_sample_full"] += 1
+            return False
+        st.stats["shadow_sample"] += 1
+        spawn_shadow(st, http, mint, m, ["sample"], str(reason)[:160], 0.0, [], tag="sample",
+                     signals=[f"src:{m.get('src') or '?'}", f"reject:{str(cat or '?')[:40]}", f"sample_seed:{seed}",
+                              f"sample_p:{p:.3f}"], sample=str(cat or "?"))
+        return True
+    except Exception:  # noqa: BLE001
+        return False
 
 
 POS_LABELS = {"buono_kiwi", "probabile_buono", "caso_stelle_aperto"}
@@ -6616,7 +6679,8 @@ def _close_shadow_row(st, mint, sh, pnl, rug, why, now=None):
            "rug": int(bool(rug or pnl <= -50)) if (not sh.get("np_invalid") or sh.get("inv_why") == "pnl_implausibile")
            else 0, "tag": sh.get("tag", ""),
            "signals": "|".join(sh.get("signals") or []), "valido": 0 if sh.get("np_invalid") else 1,
-           "invalid_for_learning": (sh.get("inv_why") or "no_price") if sh.get("np_invalid") else ""}
+           "invalid_for_learning": (sh.get("inv_why") or "no_price") if sh.get("np_invalid") else "",
+           "shadow_reason": sh.get("shadow_reason", "")}
     _lag = dict(sh.get("_lag") or {})   # v8.6 (A)
     fe = dict(sh.get("fe") or {})  # v8.1
     if fe and sh.get("_lagx"):
@@ -6645,7 +6709,7 @@ def _close_shadow_row(st, mint, sh, pnl, rug, why, now=None):
                 {"mint": mint, "keys": sh["keys"], "pnl_pct": round(pnl, 2), "rug": row["rug"]})
 
 
-async def open_shadow(st, http, mint, m, keys, reason, score, flags, now=None, tag=None, signals=None):
+async def open_shadow(st, http, mint, m, keys, reason, score, flags, now=None, tag=None, signals=None, sample=None):
     """Apre uno shadow trade. Ritorna lo shadow, 'rug' se non c'e percorso di vendita, None se non aperto."""
     if not CFG["SHADOW_TRADES"] or mint in st.shadow_trades or mint in st.positions or m["price"] <= 0:
         return None
@@ -6655,7 +6719,12 @@ async def open_shadow(st, http, mint, m, keys, reason, score, flags, now=None, t
         if n_an >= CFG["SHADOW_MAX_OPEN_ANALYST"]:
             st.stats["shadow_full"] += 1
             return None
-    elif len(st.shadow_trades) - n_an >= CFG["SHADOW_MAX_OPEN"]:
+    elif tag == "sample":   # compito 11: tetto a parte (anche gli altri non perdono posto)
+        if sum(1 for v in st.shadow_trades.values() if v.get("tag") == "sample") >= CFG["SHADOW_SAMPLE_MAX_OPEN"]:
+            st.stats["shadow_sample_full"] += 1
+            return None
+    elif len(st.shadow_trades) - n_an - sum(1 for v in st.shadow_trades.values() if v.get("tag") == "sample") \
+            >= CFG["SHADOW_MAX_OPEN"]:
         st.stats["shadow_full"] += 1
         return None
     signals = list(signals or [])
@@ -6667,7 +6736,7 @@ async def open_shadow(st, http, mint, m, keys, reason, score, flags, now=None, t
     tokens, fill, _, _ = buy_tokens(size, m["price"], m["liq"])
     src, dec = "formula", None
     br = BROKER_REF[0]
-    if CFG["SHADOW_ROUTE_CHECK"] and br is not None and getattr(br, "realistic", False):
+    if CFG["SHADOW_ROUTE_CHECK"] and br is not None and getattr(br, "realistic", False) and sample is None:
         pre = await br.precheck(st, mint, m, size)  # solo preventivi, nessuna transazione
         if pre and not pre.get("ok", True):
             if pre.get("cat") in ("non rivendibile", "nessun percorso Jupiter"):
@@ -6691,7 +6760,8 @@ async def open_shadow(st, http, mint, m, keys, reason, score, flags, now=None, t
           "max_hold": max_hold, "links": m.get("links") or {}, "url": m.get("url", ""), "dex": m.get("dex"),
           "realized_cpmm": 0.0, "drained_cpmm": 0.0}
     try:  # v8.1: feature d'ingresso e stop dinamico anche per gli shadow
-        fe = await entry_features(st, http, mint, m, signals, soft=flags, accel=None, base_stop=CFG["STOP_LOSS_PCT"])
+        fe = await entry_features(st, http, mint, m, signals, soft=flags, accel=None, base_stop=CFG["STOP_LOSS_PCT"],
+                                  allow_fetch=sample is None)   # compito 11: campioni senza chiamate in piu
     except Exception:  # noqa: BLE001
         fe = {}
     sh.update({"fe": fe, "stop_dyn": fe.get("dyn_stop_shadow"), "trough_pct": 0.0, "dyn_hits": 0, "dyn_hit": None,
@@ -6699,8 +6769,14 @@ async def open_shadow(st, http, mint, m, keys, reason, score, flags, now=None, t
                else None})
     if mint in st.shadow_trades or mint in st.positions:
         return None
+    if sample is not None:
+        if sum(1 for v in st.shadow_trades.values() if v.get("tag") == "sample") >= CFG["SHADOW_SAMPLE_MAX_OPEN"]:
+            st.stats["shadow_sample_full"] += 1   # ricontrollo dopo le attese: mai oltre il tetto
+            return None
+        sh.update(shadow_reason="sample", sample_cat=sample)
     st.shadow_trades[mint] = sh
-    spawn_confirm2(st, http, mint, m, sh["fe"], "shadow")   # v8.6 (C): solo misura
+    if sample is None:
+        spawn_confirm2(st, http, mint, m, sh["fe"], "shadow")   # v8.6 (C): solo misura
     path_tick(mint, "shadow", m["price"], m["liq"], 0.0, now=now, ev="entry")
     st.stats["shadow_open"] += 1
     _dc = discord_tag(mint, now)   # v8.8: call NKT sugli shadow (solo dato)
