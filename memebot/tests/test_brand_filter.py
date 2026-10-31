@@ -79,3 +79,10 @@ out = asyncio.run(run_once("OK1", dict(mk, symbol="Goyim", name="Goyim"), st))
 assert len(out) == 1 and "brand" not in out[0]["soft"], out
 
 print("test_brand_filter: ok")
+
+# ---- review Claude: un controllo positivo (GTA6, 'probabile_buono') ha il tag ma mai la penalita con BRAND_FILTER_MODE on
+import desk as _D  # noqa: E402
+assert "probabile_buono" in _D.POS_LABELS and _D.SRC["brand"].brand_tag("GTA6") == "GTA6"
+_src = open(_D.__file__).read()
+assert 'st.labels.get(mint) not in POS_LABELS' in _src
+print("test_brand_filter (controlli positivi): ok")
