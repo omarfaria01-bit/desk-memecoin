@@ -3007,7 +3007,7 @@ async def stx_task(st, http, mint, m, fe, creator=None):
             creator = creator or mi.get("creator")
         r = await SRC["stx"].fetch(http.get, mint, creator, created, {"MAX_PAGES": int(CFG.get("STX_PAGES", 3))})
         fe["stx"] = r
-        for k in ("sniper_pct", "first20_sold_pct", "dev_first_sell_dt"):
+        for k in ("sniper_pct", "first20_sold_pct", "dev_first_sell_dt", "creator_known"):
             fe[k] = r.get(k)
         write_event("Analyst", "early_trades", f"primi scambi {m.get('symbol')}: "
                     + (f"sniper {r.get('sniper_pct')}%, primi20 venduto {r.get('first20_sold_pct')}%, "
