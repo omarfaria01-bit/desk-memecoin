@@ -3063,6 +3063,20 @@ def rc_health(ok, now=None):
     return h["down"]
 
 
+def rc_down_doubts(st, cl):
+    """Review Claude: dubbi del ripiego che si possono verificare solo nell'Analyst (cluster v2 gia fatto).
+    Lista vuota = nessun dubbio. Ogni dato mancante e un dubbio, mai un 'ok'."""
+    d = []
+    lv = (cl or {}).get("level", "unknown")
+    if lv not in ("ok", "soft"):
+        d.append(f"cluster v2 '{lv}' (serve ok o soft)")
+    # col ripiego totalHolders non c'e e MIN_HOLDERS in security_check veniva saltato: conta di cluster v2
+    n = int(fnum((cl or {}).get("holders_total")))
+    if n < CFG["MIN_HOLDERS"]:
+        d.append(f"holder non verificati o pochi ({n} < {CFG['MIN_HOLDERS']})" if n else "numero di holder non verificato")
+    return d
+
+
 async def _rpc_core(http, method, params):
     d = await _cl2_post(http, "https://solana-rpc.publicnode.com",
                         {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}, "core")
@@ -3821,9 +3835,11 @@ async def analyst_agent(st, http, q_in, q_out):
             if (_sec.get("rc_down") or _sec.get("bundle_established")) and not so and score >= st.threshold:
                 _lv = (cl or {}).get("level", "unknown")
                 why_tag = "rugcheck_down" if _sec.get("rc_down") else "bundle_established"
-                if _lv not in ("ok", "soft"):
+                doubts = rc_down_doubts(st, cl) if why_tag == "rugcheck_down" else \
+                    ([] if _lv in ("ok", "soft") else [f"cluster v2 '{_lv}' (serve ok o soft)"])
+                if doubts:
                     reason = f"{'RugCheck giu' if why_tag == 'rugcheck_down' else 'bundle su token affermato'}: " \
-                             f"cluster v2 '{_lv}' (serve ok o soft)"
+                             + "; ".join(doubts)
                     rej(reason, agent="Analyst", cat="RugCheck giu (dubbio)" if why_tag == "rugcheck_down"
                         else "bundle affermato senza cluster")
                     if why_tag == "rugcheck_down":
