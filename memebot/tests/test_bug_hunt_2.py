@@ -106,3 +106,12 @@ assert not D.creator_blacklisted(st, "C2", now=i2["exp"] + 1) and "C2" not in st
 st.blacklist.add("OLD")                                                                         # voce senza info
 assert D.creator_blacklisted(st, "OLD")
 print("lista nera OK")
+
+# ---- ripiego RugCheck: quota del creatore dai top holder gia letti
+st = D.State()
+cl = {"level": "ok", "holders_total": 5000}
+sec = {"rc_holders": [("CR1", 2.0), ("X", 1.0)]}
+assert D.rc_down_doubts(st, cl, {"creator": "CR1"}, sec) == []
+sec_big = {"rc_holders": [("CR1", D.CFG["MAX_CREATOR_PCT"] + 1), ("X", 1.0)]}
+assert any("il creatore tiene" in x for x in D.rc_down_doubts(st, cl, {"creator": "CR1"}, sec_big))
+print("quota creatore ripiego OK")

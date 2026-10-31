@@ -3814,7 +3814,7 @@ def creator_blacklisted(st, creator, now=None):
     return True
 
 
-def rc_down_doubts(st, cl, crh=None):
+def rc_down_doubts(st, cl, crh=None, sec=None):
     """Review Claude: dubbi del ripiego che si possono verificare solo nell'Analyst (cluster v2 gia fatto).
     Lista vuota = nessun dubbio. Ogni dato mancante e un dubbio, mai un 'ok'."""
     d = []
@@ -3832,6 +3832,10 @@ def rc_down_doubts(st, cl, crh=None):
         d.append("creatore non verificabile (lista nera non controllata)")
     elif creator_blacklisted(st, cr):
         d.append("creatore in lista nera per un rug precedente")
+    else:   # review Claude (compito 13): col ripiego la quota del creatore non era calcolata (creator assente)
+        cpct = sum(fnum(p_) for o, p_ in ((sec or {}).get("rc_holders") or []) if o == cr)
+        if cpct > CFG["MAX_CREATOR_PCT"]:
+            d.append(f"il creatore tiene il {cpct:.1f}% (> {CFG['MAX_CREATOR_PCT']:g}%)")
     return d
 
 
@@ -4626,7 +4630,7 @@ async def analyst_agent(st, http, q_in, q_out):
             if (_sec.get("rc_down") or _sec.get("bundle_established")) and not so and score >= gate_thr:
                 _lv = (cl or {}).get("level", "unknown")
                 why_tag = "rugcheck_down" if _sec.get("rc_down") else "bundle_established"
-                doubts = rc_down_doubts(st, cl, crh) if why_tag == "rugcheck_down" else \
+                doubts = rc_down_doubts(st, cl, crh, _sec) if why_tag == "rugcheck_down" else \
                     ([] if _lv in ("ok", "none", "soft") else [f"cluster v2 '{_lv}' (serve ok o soft)"])
                 if doubts:   # v8.5e: 'none' = cluster v2 pulito (accettato anche qui e in rc_down_doubts)
                     reason = f"{'RugCheck giu' if why_tag == 'rugcheck_down' else 'bundle su token affermato'}: " \
