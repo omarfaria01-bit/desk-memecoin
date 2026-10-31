@@ -52,10 +52,20 @@ def load(paths):
                     except ValueError:
                         fe = {}
                     rows.append({"mint": r.get("mint", ""), "sym": r.get("symbol", ""), "pnl": pnl, "fe": fe,
+                                 "rug": str(r.get("rug", "")).strip().lower() in ("1", "true", "si", "yes"),
                                  "src": path.rsplit("/", 1)[-1]})
         except OSError as e:
             print(f"> file non letto: {path} ({e})", file=sys.stderr)
     return rows
+
+
+def is_crash(r):
+    """v8.9: crash = pnl <= -50% oppure rug (un rug non e mai un esempio positivo, anche con pnl > 0 dopo un TP1)."""
+    return r["pnl"] <= -50 or r.get("rug", False)
+
+
+def is_win(r):
+    return r["pnl"] > 0 and not r.get("rug", False)
 
 
 def feat(r, k):
@@ -69,7 +79,7 @@ def scan(rows, k, d):
     have = [r for r in rows if feat(r, k) is not None]
     if len(have) < 10:
         return None, len(have)
-    crash = [r for r in have if r["pnl"] <= -50]
+    crash = [r for r in have if is_crash(r)]
     best = None
     for t in sorted({feat(r, k) for r in have}):
         blk = [r for r in have if (feat(r, k) >= t if d == "ge" else feat(r, k) <= t)]
@@ -78,13 +88,13 @@ def scan(rows, k, d):
         les_have = [r for r in have if r["mint"] in LESSONS]
         if les_have and not all(r in blk for r in les_have):
             continue
-        bc = sum(1 for r in blk if r["pnl"] <= -50)
-        bw = sum(1 for r in blk if r["pnl"] > 0)
+        bc = sum(1 for r in blk if is_crash(r))
+        bw = sum(1 for r in blk if is_win(r))
         gain = -sum(r["pnl"] for r in blk)   # pnl tolto dal totale (positivo = conviene bloccare)
         score = bc - bw
         if bc and (best is None or (score, gain) > (best["score"], best["gain"])):
             best = {"t": t, "blocked": len(blk), "crash_blocked": bc, "crash_tot": len(crash), "win_blocked": bw,
-                    "win_tot": sum(1 for r in have if r["pnl"] > 0), "gain": round(gain, 1), "score": score,
+                    "win_tot": sum(1 for r in have if is_win(r)), "gain": round(gain, 1), "score": score,
                     "probable_good_blocked": sorted({PROBABLE_GOOD[r["mint"]] for r in blk if r["mint"] in PROBABLE_GOOD})}
     return best, len(have)
 
@@ -96,7 +106,7 @@ def age_gate(rows):
             o = out.setdefault(x, {"n": 0, "skipped": 0, "crash": 0, "crash_avoided": 0, "pnl": [], "pnl_d": []})
             o["n"] += 1
             o["pnl"].append(r["pnl"])
-            crash = r["pnl"] <= -50
+            crash = is_crash(r)
             o["crash"] += crash
             if e.get("skipped"):
                 o["skipped"] += 1
@@ -115,9 +125,9 @@ def avg(xs):
 
 def main(paths):
     rows = load(paths)
-    crash = [r for r in rows if r["pnl"] <= -50]
+    crash = [r for r in rows if is_crash(r)]
     print("# Anti-dump dopo la migrazione (compito 10)\n")
-    print(f"Righe valide: {len(rows)} (crash <= -50%: {len(crash)}, vincenti: {sum(1 for r in rows if r['pnl'] > 0)}). "
+    print(f"Righe valide: {len(rows)} (crash <= -50%: {len(crash)}, vincenti: {sum(1 for r in rows if is_win(r))}). "
           f"File: {', '.join(paths)}\n")
     les = [r for r in rows if r["mint"] in LESSONS]
     if les:

@@ -1048,3 +1048,24 @@ Nessun effetto su acquisti, score, soglie o Learner: solo campi in `entry_featur
   negli eventi `reject`, in `entry_features` (trade e shadow), sugli shadow (`sh`, evento `shadow_open`, tag `discord:nkt`).
 - Peso nello score 0, nessuna chiamata di rete, nessun credito. Label/max_x (esito futuro) MAI esposti come feature.
 - `DISCORD_CALLS_MODE`: 'shadow' (default) / 'off'. Test: `tests/test_v88_discord.py`.
+
+## v8.9 (31/10/2026, ora di Roma) - revisione e integrazione dei branch di Claude — solo PAPER
+
+Branch uniti (branch `integration/v8.9`): `claude/watch-pause` (compito 8), `claude/exit-price-robust` (compito 4),
+`claude/review-v86-v87` (compito 7), `claude/merge-6-10` (compiti 6 + 10, conflitto gia risolto da Claude),
+`claude/prior-calibration` (compito 9, solo offline).
+- Watchlist: dopo una pausa dell'host i token non scadono piu in blocco. Fix nostro: la pausa nel ciclo del Filter
+  si misura solo sullo sleep (un giro lento non e una pausa dell'host, niente falsi avvisi).
+- Uscite: "nessun prezzo" = rug solo se anche il preventivo di vendita dice `no_route`; `no_route` confermato su due
+  giri negli shadow; "liquidita crollata" (azzeramento/rug) solo dopo `LIQ_CRASH_CONFIRM` = 2 letture distinte;
+  prezzo mancante nel prefiltro = nessun esito (prima -100%).
+- Token-2022: transfer hook spento ma con authority attiva = scarto rigido (approvato da Kiwi).
+- `_cpmm_cap` tolto dopo una vendita fallita; `creator_known` nella feature E; una sola `stx_task` alla volta.
+- Anti-dump (SHADOW): `min_since_migration`, `mig_src`, `bs5`, `top10` e `age_gate` 10/15/20 min registrati in
+  `entry_features`. Nessun ingresso bloccato. Script offline `backtest/anti_dump_report.py`.
+- Uscite veloci (SHADOW, `FAST_EXIT_MODE`): SL/TP1/trailing a ogni prezzo (trade PumpPortal + polling DexScreener
+  ~12/min), campi `fast_exit_*` alla chiusura. Le uscite vere NON cambiano. Nessuna chiamata Helius/Birdeye.
+- Offline: `docs/analysis/calibrate_prior.py`. Fix nostro (anche in `anti_dump_report.py`): un rug non e mai
+  un esempio positivo, anche con pnl > 0.
+Saltati perche gia in `main`: `rugcheck-fallback-review`, `cluster-beast-dessa`, `tests-cluster-rules`,
+`amazing-goodall-nfn3me` (v8.5). Non ancora rivisti: `bug-hunt-2`, `shadow-sample`, `retro-label`.

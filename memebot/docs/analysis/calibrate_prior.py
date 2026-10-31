@@ -39,6 +39,11 @@ def logit(p):
     return math.log(p / (1 - p))
 
 
+def _is_rug(r):
+    """v8.9: un token segnato rug (o cattivo) non e MAI un esempio positivo, anche con pnl > 0 (TP1 prima del rug)."""
+    return str(r.get("rug", "")).strip().lower() in ("1", "true", "si", "yes")
+
+
 def load(paths, model=None):
     rows = []
     for path in paths:
@@ -61,7 +66,7 @@ def load(paths, model=None):
                             p = sigmoid(model["b"] + sum(w * fs.get(k, 0.0) for k, w in model["w"].items()))
                     if p is None:
                         continue
-                    rows.append({"t": r.get("aperto") or r.get("opened") or "", "p": p, "y": int(pnl > 0),
+                    rows.append({"t": r.get("aperto") or r.get("opened") or "", "p": p, "y": int(pnl > 0 and not _is_rug(r)),
                                  "mint": r.get("mint", "")})
         except OSError as e:
             print(f"> file non letto: {path} ({e})", file=sys.stderr)
