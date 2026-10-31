@@ -6588,8 +6588,9 @@ def shadow_tag(keys, flags):
 def spawn_shadow(st, http, mint, m, keys, reason, score, flags, tag=None, signals=None, sample=None):
     if mint in st.shadow_trades or mint in st.positions:
         return
+    kw = {"sample": sample} if sample is not None else {}   # firma vecchia di open_shadow invariata per gli altri
     t = asyncio.ensure_future(open_shadow(st, http, mint, m, keys, reason, score, flags,
-                                          tag=tag or shadow_tag(keys, flags), signals=signals, sample=sample))
+                                          tag=tag or shadow_tag(keys, flags), signals=signals, **kw))
     SHADOW_TASKS.add(t)
     t.add_done_callback(SHADOW_TASKS.discard)
     if sample is not None:
