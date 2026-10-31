@@ -51,10 +51,23 @@ def mint_flags(parsed, cfg=None):
         elif name == "confidentialTransferMint":
             soft.append("trasferimenti confidenziali")
         elif name == "pausableConfig" and (s.get("paused") or s.get("authority")):
-            (hard if s.get("paused") else soft).append("token pausabile" + (" (in pausa)" if s.get("paused") else ""))
+            # v8.6 (B): pausabile con authority = il dev puo bloccare tutte le vendite in ogni momento -> rigido
+            hard.append("token pausabile" + (" (in pausa)" if s.get("paused") else " (authority attiva, puo bloccare le vendite)"))
         elif name not in SAFE_EXT:
             soft.append(f"estensione insolita {name}")
-    return hard, soft, {"extensions": ext_names, "decimals": info.get("decimals"), "fee_bps": fee_bps}
+    # v8.6 (B): segnali Token-2022 solo registrati (transfer hook / account congelati di default restano rigidi sopra)
+    t22 = []
+    for e in info.get("extensions") or []:
+        name, s = e.get("extension"), e.get("state") or {}
+        if name == "transferHook":
+            t22.append("transfer_hook" if s.get("programId") else ("transfer_hook_auth" if s.get("authority") else "transfer_hook_off"))
+        elif name == "defaultAccountState":
+            t22.append("default_frozen" if str(s.get("accountState", "")).lower() == "frozen" else "default_state")
+        elif name == "permanentDelegate":
+            t22.append("permanent_delegate" if s.get("delegate") else "permanent_delegate_off")
+        elif name == "pausableConfig":
+            t22.append("pausable")
+    return hard, soft, {"extensions": ext_names, "decimals": info.get("decimals"), "fee_bps": fee_bps, "t22_flags": t22}
 
 
 def sell_verdict(sell_quote, sell_err, buy_lamports, cfg=None):

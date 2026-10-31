@@ -28,6 +28,36 @@ CFG = {
 API = "https://frontend-api-v3.pump.fun/coins-v2"
 CACHE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "creator_history_cache.json")
 _MEM = {"loaded": False, "data": {"mint": {}, "creator": {}}}
+# v8.7 (D): seme di reputazione dal corpus Slinky21 (giu-lug 2026): creatore -> [lanci, graduati, rug, falliti]
+SEED_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "creator_seed.json")
+SEED = {"loaded": False, "c": {}}
+SERIAL_MIN = 10
+
+
+def seed_info(creator):
+    """v8.7 (D): storico del creatore nel corpus, letto PRIMA delle API. None se assente. Solo informativo:
+    'serial_launcher' (>= 10 lanci, 0 graduati) e un flag soft SHADOW, nessun effetto su livello/penalita."""
+    if not SEED["loaded"]:
+        SEED["loaded"] = True
+        try:
+            with open(SEED_PATH, encoding="utf-8") as fh:
+                SEED["c"] = (json.load(fh) or {}).get("c") or {}
+        except Exception:  # noqa: BLE001
+            SEED["c"] = {}
+    v = SEED["c"].get(str(creator or ""))
+    if not v:
+        return None
+    n, g, r, f = (list(v) + [0, 0, 0, 0])[:4]
+    return {"n": n, "g": g, "rug": r, "fail": f, "serial_launcher": bool(n >= SERIAL_MIN and g == 0)}
+
+
+def seed_for_mint(mint, creator=None):
+    """v8.7: creatore dalla cache (o dato) -> seed_info. Nessuna chiamata di rete."""
+    try:
+        cr = creator or ((_load()["mint"].get(mint) or {}).get("creator"))
+        return (cr, seed_info(cr)) if cr else (None, None)
+    except Exception:  # noqa: BLE001
+        return None, None
 
 
 def _f(x):
@@ -100,6 +130,7 @@ async def lookup(get, mint, creator=None, now=None, cfg=None):
     c.update(cfg or {})
     now = now or time.time()
     d = _load()
+    seed = seed_info(creator) if creator else None   # v8.7 (D): prima delle API
     try:
         mi = d["mint"].get(mint)
         if not mi or now - mi.get("t", 0) > c["CACHE_TTL_H"] * 3600:
@@ -111,20 +142,23 @@ async def lookup(get, mint, creator=None, now=None, cfg=None):
             d["mint"][mint] = mi
             _save()
         cr = mi.get("creator") or creator
+        if cr and cr != creator:
+            seed = seed_info(cr)
         if not cr:
             return {"level": "unknown", "pen": 0.0, "why": "creatore sconosciuto a pump.fun", "creator": None}
         ce = d["creator"].get(cr)
         if not ce or now - ce.get("t", 0) > c["CACHE_TTL_H"] * 3600:
             lst = await get(f"{API}/user-created-coins/{cr}?offset=0&limit={int(c['LIMIT'])}")
             if not isinstance(lst, dict) or not isinstance(lst.get("coins"), list):
-                return {"level": "unknown", "pen": 0.0, "why": "storico creatore non disponibile", "creator": cr}
+                return {"level": "unknown", "pen": 0.0, "why": "storico creatore non disponibile", "creator": cr,
+                        "seed": seed}
             keep = ("mint", "created_timestamp", "ath_market_cap", "usd_market_cap", "complete", "is_banned")
             ce = {"t": now, "count": lst.get("count"), "coins": [{k: x.get(k) for k in keep} for x in lst["coins"]
                                                                   if isinstance(x, dict)]}
             d["creator"][cr] = ce
             _save()
         r = evaluate(ce["coins"], mint, mi.get("created"), now, c)
-        r.update(creator=cr, total=ce.get("count"))
+        r.update(creator=cr, total=ce.get("count"), seed=seed)
         return r
     except Exception as e:  # noqa: BLE001
         return {"level": "unknown", "pen": 0.0, "why": f"errore storico creatore ({type(e).__name__})", "creator": None}

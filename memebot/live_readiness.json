@@ -1,5 +1,5 @@
 {
- "ts": "2026-10-31T08:16:57+01:00",
+ "ts": "2026-10-31T08:33:18+01:00",
  "ok": 10,
  "total": 15,
  "checks": [
@@ -16,12 +16,12 @@
   {
    "check": "Jupiter quote API",
    "ok": true,
-   "detail": "https://lite-api.jup.ag/swap/v1 in 1254 ms, SOL $95.82"
+   "detail": "https://lite-api.jup.ag/swap/v1 in 1250 ms, SOL $95.63"
   },
   {
    "check": "RPC Solana",
    "ok": true,
-   "detail": "slot 463601183 in 71 ms"
+   "detail": "slot 463605771 in 63 ms"
   },
   {
    "check": "RPC privato/veloce",

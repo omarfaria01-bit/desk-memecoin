@@ -6,7 +6,8 @@ narratives.json, overrides.json) e li spinge al browser via Server-Sent Events.
 NON scrive nessun file, NON controlla il bot, NON tocca STOP. Serve solo:
   GET /              -> index.html
   GET /api/snapshot  -> JSON
-  GET /api/stream    -> SSE (evento "snap" quando i dati cambiano, "ping" ogni ~5 s)
+  GET /api/stream    -> SSE: "snap" completo alla connessione, poi "patch" solo con le
+                        sezioni cambiate (controllo ogni ~3 s) e un heartbeat "hb" ogni ~12 s
 """
 import ast, asyncio, csv, hashlib, io, json, os, re, time
 from datetime import datetime
@@ -18,7 +19,10 @@ BOT = os.path.dirname(HERE)
 TZ = ZoneInfo("Europe/Rome")
 PORT = int(os.environ.get("DESK_WEB_PORT", "8077"))
 HOST = os.environ.get("DESK_WEB_HOST", "127.0.0.1")
-TICK = 1.5
+TICK = 3.0          # controllo cambiamenti ogni ~3 s
+HEARTBEAT = 12.0    # evento minimo "hb" se non ci sono patch (il client va in allarme dopo 15 s)
+LIVE_Q = 60         # il punto "ora" del grafico avanza a passi di 60 s (evita patch inutili)
+VOLATILE = {"files_age"}  # non scatena patch da solo, viaggia insieme alle altre
 P = lambda n: os.path.join(BOT, n)
 
 # --------------------------------------------------------------- filtro nomi offensivi
@@ -302,6 +306,7 @@ def exit_value(tokens, price, liq, cfg):
 
 def build():
     now = time.time()
+    now_q = now // LIVE_Q * LIVE_Q  # minuti trascorsi avanzano tutti insieme, una volta al minuto
     cfg = get_cfg()
     st = cached(P("state.json"), read_json)
     st = st if isinstance(st, dict) else {}
@@ -342,7 +347,7 @@ def build():
             "sym": sym, "mint": str(mint)[:60], "cost": round(cost, 2), "value": round(value, 2),
             "realized": round(realized, 2), "pnl_pct": round(pnl_pct, 2),
             "pnl_usd": round(value + realized - cost, 2), "peak": round(peak, 2),
-            "min": int((now - fnum(p.get("opened"), now)) / 60), "score": round(fnum(p.get("score")), 3),
+            "min": max(0, int((now_q - fnum(p.get("opened"), now_q)) // 60)), "score": round(fnum(p.get("score")), 3),
             "stop": round(stop, 1), "tp1": round(tp1, 1), "tp2": round(tp2, 1), "tp_stage": stage,
             "trail_start": round(tstart, 1), "trail_dist": round(tdist, 1), "trail_on": peak >= tstart,
             "trail_exit": round(peak - tdist, 1), "max_hold": int(fnum(ef.get("max_hold"), fnum(cfg.get("MAX_HOLD_MIN"), 180))),
@@ -483,7 +488,10 @@ def build():
             ser.append((round(e), round((v / base - 1) * 100, 3)))
     ser.sort()
     if ser and (st or not eqs):
-        ser.append((round(now), round((eq_now / base - 1) * 100, 3)))
+        live_t = int(now // LIVE_Q * LIVE_Q)
+        if ser and live_t <= ser[-1][0]:
+            live_t = ser[-1][0] + 1
+        ser.append((live_t, round((eq_now / base - 1) * 100, 3)))
     last_t = ser[-1][0] if ser else now
     ov_series = {"1h": downsample([x for x in ser if x[0] >= last_t - 3600], 360),
                  "6h": downsample([x for x in ser if x[0] >= last_t - 6 * 3600], 500),
@@ -533,20 +541,24 @@ def build():
         pnl = ((val + fnum(sh.get("realized"))) / cost - 1) * 100 if cost > 0 else 0.0
         sym0 = sh.get("sym")
         sh_open.append({"mint": str(mint)[:60], "sym": clean_sym(sym0), "pnl_pct": round(pnl, 2),
-                        "peak": round(fnum(sh.get("peak_pct")), 2), "min": int((now - fnum(sh.get("t"), now)) / 60),
+                        "peak": round(fnum(sh.get("peak_pct")), 2), "min": max(0, int((now_q - fnum(sh.get("t"), now_q)) // 60)),
                         "reason": clean_text(str(sh.get("reason", ""))[:160], [sym0]),
                         "keys": [clean_text(str(k)[:30]) for k in (sh.get("keys") or [])[:6]],
                         "score": round(fnum(sh.get("score")), 3), "tp_stage": int(fnum(sh.get("tp_stage")))})
     sh_open.sort(key=lambda x: -x["pnl_pct"])
-    sh_rows = cached(P("shadow_trades.csv"), parse_shadow_csv) or []
+    sh_all = cached(P("shadow_trades.csv"), parse_shadow_csv) or []
+    # v8.5: righe "DATI NON VALIDI" (valido=0: nessun prezzo, pausa dell'host) mostrate ma escluse dalle statistiche
+    sh_rows = [r for r in sh_all if str(r.get("valido", "1")).strip() != "0"]
+    sh_invalid = len(sh_all) - len(sh_rows)
     sh_closed = []
-    for r in reversed(sh_rows):
+    for r in reversed(sh_all):
         sym0 = r.get("symbol")
         sh_closed.append({"t": str(r.get("chiuso", ""))[5:16], "sym": clean_sym(sym0), "mint": str(r.get("mint", ""))[:60],
                           "reason": clean_text(str(r.get("motivo_scarto", ""))[:160], [sym0]),
                           "keys": clean_text(str(r.get("chiavi", ""))[:80]), "pnl_pct": round(fnum(r.get("pnl_pct")), 2),
                           "peak": round(fnum(r.get("peak_pct")), 2), "min": int(fnum(r.get("minuti"))),
-                          "exit": clean_text(str(r.get("uscita", ""))[:120], [sym0]), "rug": int(fnum(r.get("rug")))})
+                          "exit": clean_text(str(r.get("uscita", ""))[:120], [sym0]), "rug": int(fnum(r.get("rug"))),
+                          "valid": 0 if str(r.get("valido", "1")).strip() == "0" else 1})
     ls = st.get("learner_shadow") if isinstance(st.get("learner_shadow"), dict) else {}
     sh_flags = []
     for k, e in ls.items():
@@ -561,7 +573,7 @@ def build():
                          "hard_d": round(fnum(e.get("hard_d")), 4)})
     sh_flags.sort(key=lambda x: -x["n"])
     shadow = {"file": os.path.exists(P("shadow_trades.csv")), "open": sh_open[:40], "closed": sh_closed[:80],
-              "closed_n": len(sh_rows), "wins": sum(1 for r in sh_rows if fnum(r.get("pnl_pct")) > 0 and not int(fnum(r.get("rug")))),
+              "closed_n": len(sh_rows), "invalid_n": sh_invalid, "wins": sum(1 for r in sh_rows if fnum(r.get("pnl_pct")) > 0 and not int(fnum(r.get("rug")))),
               "rugs": sum(1 for r in sh_rows if int(fnum(r.get("rug")))),
               "avg": round(sum(-100.0 if int(fnum(r.get("rug"))) else fnum(r.get("pnl_pct")) for r in sh_rows) / len(sh_rows), 2) if sh_rows else None,
               "flags": sh_flags}
@@ -600,21 +612,65 @@ def build():
 
 
 # --------------------------------------------------------------- server
-SNAP = {"data": None, "json": "{}", "hash": "", "ts": 0}
+SNAP = {"json": "{}", "hash": "", "ts": 0, "parts": {}, "subs": {}, "keys": ()}
 CLIENTS = set()
+
+
+def _j(v):
+    return json.dumps(v, ensure_ascii=False, separators=(",", ":"), default=str)
+
+
+def diff_snapshot(d):
+    """Confronta d con l'ultimo snapshot. Ritorna (patch|None, full_needed).
+    patch = {"s": {sezione: valore}, "m": {sezione: {sottochiave: valore}}, "d": {sezione: [sottochiavi rimosse]}}"""
+    parts = {k: _j(v) for k, v in d.items()}
+    subs = {k: {sk: _j(sv) for sk, sv in v.items()} for k, v in d.items() if isinstance(v, dict)}
+    old_parts, old_subs = SNAP["parts"], SNAP["subs"]
+    keys = tuple(d.keys())
+    full = keys != SNAP["keys"]
+    changed = [k for k in keys if parts[k] != old_parts.get(k)]
+    real = [k for k in changed if k not in VOLATILE]
+    SNAP["parts"], SNAP["subs"], SNAP["keys"] = parts, subs, keys
+    if full or not real:
+        return None, full
+    patch = {"s": {}, "m": {}, "d": {}}
+    for k in changed:
+        if k in subs and k in old_subs:
+            o, n = old_subs[k], subs[k]
+            m = {sk: d[k][sk] for sk in n if n[sk] != o.get(sk)}
+            rm = [sk for sk in o if sk not in n]
+            if m:
+                patch["m"][k] = m
+            if rm:
+                patch["d"][k] = rm
+        else:
+            patch["s"][k] = d[k]
+    patch = {k: v for k, v in patch.items() if v}
+    return patch, False
+
+
+def broadcast(ev, body):
+    for q in list(CLIENTS):
+        if q.qsize() < 20:
+            q.put_nowait((ev, body))
+        else:  # client lento: svuota e rimanda tutto
+            while not q.empty():
+                q.get_nowait()
+            q.put_nowait(("snap", SNAP["json"]))
 
 
 async def updater():
     while True:
         try:
             d = build()
-            body = json.dumps(d, ensure_ascii=False, separators=(",", ":"), default=str)
-            h = hashlib.sha1(body.encode()).hexdigest()
-            if h != SNAP["hash"]:
-                SNAP.update(json=body, hash=h)
-                for q in list(CLIENTS):
-                    if q.qsize() < 3:
-                        q.put_nowait(("snap", body))
+            patch, full = diff_snapshot(d)
+            if patch is not None or full:
+                body = "{" + ",".join(_j(k) + ":" + SNAP["parts"][k] for k in SNAP["keys"]) + "}"
+                SNAP.update(json=body, hash=hashlib.sha1(body.encode()).hexdigest()[:16])
+                if full:
+                    broadcast("snap", body)
+                else:
+                    broadcast("patch", _j(patch))
             SNAP["ts"] = time.time()
         except Exception as e:  # noqa: BLE001
             print(f"{datetime.now(TZ):%H:%M:%S} errore snapshot: {type(e).__name__}: {e}", flush=True)
@@ -632,12 +688,16 @@ async def index(request):
 
 
 async def snapshot(request):
+    etag = f'"{SNAP["hash"]}"'
+    if SNAP["hash"] and request.headers.get("If-None-Match") == etag:
+        return web.Response(status=304, headers={**SEC_HEADERS, "ETag": etag, "Cache-Control": "no-cache"})
     return web.Response(text=SNAP["json"], content_type="application/json",
-                        headers={**SEC_HEADERS, "Cache-Control": "no-store"})
+                        headers={**SEC_HEADERS, "Cache-Control": "no-cache", "ETag": etag})
 
 
 async def stream(request):
-    resp = web.StreamResponse(headers={**SEC_HEADERS, "Content-Type": "text/event-stream", "Cache-Control": "no-cache, no-transform",
+    # niente "no-transform": Caddy puo comprimere lo stream (gzip con flush a ogni evento)
+    resp = web.StreamResponse(headers={**SEC_HEADERS, "Content-Type": "text/event-stream", "Cache-Control": "no-cache",
                                        "X-Accel-Buffering": "no", "Connection": "keep-alive"})
     await resp.prepare(request)
     q = asyncio.Queue()
@@ -647,10 +707,10 @@ async def stream(request):
         await resp.write(f"event: snap\ndata: {SNAP['json']}\n\n".encode())
         while True:
             try:
-                ev, body = await asyncio.wait_for(q.get(), timeout=5)
+                ev, body = await asyncio.wait_for(q.get(), timeout=HEARTBEAT)
                 await resp.write(f"event: {ev}\ndata: {body}\n\n".encode())
             except asyncio.TimeoutError:
-                await resp.write(f"event: ping\ndata: {{\"t\":{time.time():.0f}}}\n\n".encode())
+                await resp.write(b"event: hb\ndata: 1\n\n")  # ~20 byte, il client lo conta come "vivo"
     except (ConnectionResetError, asyncio.CancelledError):
         pass
     finally:

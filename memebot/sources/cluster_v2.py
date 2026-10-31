@@ -109,6 +109,12 @@ CFG = {
     # (hub 9Ja2iw), HYPERCHAN 59/60 (BXTDKd) -> HARD; Bonnie max 1, DESSA 3 (KuCoin), CATE 5, GLITCH 7 (MEXC),
     # BEAST 5 -> nessun effetto.
     "SINGLE_FUNDER_SHARE": 0.5, "SINGLE_FUNDER_MIN": 10,
+    # review Claude (compito 2, BEAST/DESSA): famiglie di segnali soft indipendenti. Con FAM_HARD_N famiglie insieme
+    # il token e HARD solo se FAM_MODE = 'on'; con 'shadow' (default) il risultato e solo registrato in 'combo'.
+    "FAM_MODE": "shadow", "FAM_HARD_N": 3,
+    "FAM_FUNDER_MIN": 5,       # famiglia 'funder': un finanziatore (non exchange) per >= 5 holder controllati, o una stella
+    "FAM_CEX_MIN": 3,          # famiglia 'cex_fresh': >= 3 wallet nuovi finanziati dallo STESSO exchange (DESSA: 3 KuCoin)
+    "FAM_UNIFORM_MIN": 4,      # famiglia 'uniform': altopiano di quote uniformi da >= 4 wallet
     # v8.4: stima della dimensione reale del gruppo maggiore sui holder letti ma senza controllo del funder
     "EST_ENABLED": True,
     "EST_MIN_RATE": 0.5,         # si estende solo se nel campione controllato il pattern e dominante (>= 50%)
@@ -272,6 +278,30 @@ def single_funder(rows, infra=None, cfg=None):
         return (None, 0, len(checked), 0.0)
     f, n = by.most_common(1)[0]
     return (f, n, len(checked), round(n / len(checked), 3))
+
+
+def combo_families(rows, infra, c, fresh_share, scanned, sf, stars, uni_n, max_true, linked_pct):
+    """Review Claude (compito 2): famiglie di segnali soft INDIPENDENTI presenti nel token. Funzione pura.
+    -> (famiglie, n. massimo di wallet nuovi finanziati dallo stesso exchange)."""
+    fams = []
+    if scanned >= 10 and fresh_share >= c["FRESH_SOFT"]:
+        fams.append("fresh")
+    by_cex = {}
+    for r in rows:   # wallet nuovi (src = primo finanziatore) finanziati da un exchange noto (non hub automatici)
+        s = r.get("src")
+        lab = infra_label(s, infra) if s else None
+        if lab and not str(lab).startswith("hub"):
+            by_cex[lab] = by_cex.get(lab, 0) + 1
+    cex_n = max(by_cex.values(), default=0)
+    if cex_n >= c["FAM_CEX_MIN"]:
+        fams.append("cex_fresh")
+    if sf[1] >= c["FAM_FUNDER_MIN"] or stars:   # stella e finanziatore comune sono la stessa famiglia
+        fams.append("funder")
+    if uni_n >= c["FAM_UNIFORM_MIN"]:
+        fams.append("uniform")
+    if max_true >= c["GROUP_SOFT_PCT"] or linked_pct >= c["LINKED_SOFT_PCT"]:
+        fams.append("group")
+    return fams, cex_n
 
 
 def analyze(rows, infra=None, funder_of_funder=None, cfg=None, swarm=None, distributors=None):
@@ -501,6 +531,10 @@ def analyze(rows, infra=None, funder_of_funder=None, cfg=None, swarm=None, distr
                    f"({sf[3] * 100:.0f}%)")
     if len(stars) >= c["STAR_HARD_N"]:
         why.append(f"{len(stars)} cluster a stella (un finanziatore -> {', '.join(str(x[1]) for x in stars[:6])} wallet)")
+    fams, cex_n = combo_families(rows, infra, c, fresh_share, scanned, sf, stars, uni_n, max_true, linked_pct)
+    combo_hit = len(fams) >= int(c["FAM_HARD_N"])
+    if combo_hit and c["FAM_MODE"] == "on":
+        why.append(f"{len(fams)} famiglie di segnali soft insieme ({', '.join(fams)})")
     if why:
         level = "hard"
     else:
@@ -539,7 +573,8 @@ def analyze(rows, infra=None, funder_of_funder=None, cfg=None, swarm=None, distr
             "networks": len(tg), "net_pct": linked_pct, "wallets": linked_n,
             "uniform": {"wallets": uni_n, "pct": uni_pct, "from_rank": uni_s + 1},
             "stars": [(x[0][:6], x[1], x[2]) for x in stars[:8]],
-            "single_funder": {"funder": str(sf[0] or "")[:6], "wallets": sf[1], "checked": sf[2], "share": sf[3]}}
+            "single_funder": {"funder": str(sf[0] or "")[:6], "wallets": sf[1], "checked": sf[2], "share": sf[3]},
+            "combo": {"families": fams, "n": len(fams), "hit": combo_hit, "mode": c["FAM_MODE"], "cex_fresh_n": cex_n}}
 
 
 
@@ -849,6 +884,15 @@ async def _acquisition(rpc, mint, owner, token_acc, excl):
     return out
 
 
+def _smart_match(full):
+    """v8.5s: incrocio con sources/smart_wallets.json sugli holder GIA scaricati. Mai eccezioni, mai rete."""
+    try:
+        from sources import smart_wallets as _sw
+        return _sw.match(full or {})
+    except Exception as e:  # noqa: BLE001
+        return {"error": type(e).__name__}
+
+
 async def scan(post, mint, rpc_urls=None, exclude=(), token_program=None, cfg=None, log=None):
     """Analisi completa. Ritorna dict (vedi analyze) con 'level'; 'unknown' se dati insufficienti o tempo
     scaduto (il chiamante NON deve trattarlo come ok). Non solleva eccezioni di rete."""
@@ -856,14 +900,16 @@ async def scan(post, mint, rpc_urls=None, exclude=(), token_program=None, cfg=No
     c.update(cfg or {})
     t0 = time.time()
     rpc = _Rpc(post, rpc_urls or RPC_FAST, c["CALL_GAP"])
+    smart = None   # v8.5s: wallet della lista smart money tra gli holder (SHADOW, 0 chiamate in piu)
     unk = lambda why, **k: dict({"level": "unknown", "why": why, "calls": rpc.calls,  # noqa: E731
-                                 "sec": round(time.time() - t0, 1)}, **k)
+                                 "sec": round(time.time() - t0, 1), "smart": smart}, **k)
     excl = set(exclude or [])
     full = {}
     holders, n_hold, swarm = await top_holders(rpc, mint, excl, token_program, int(c["TOP_N"]), c["MIN_PCT"],
                                                full=full)
     if not holders:
         return unk("lista holder non disponibile dalla RPC")
+    smart = _smart_match(full)
     rows = {o: {"o": o, "pct": p, "acc": a, "ntx": None, "src": None, "ts": None, "slot": None}
             for o, p, a in holders}
     sem = asyncio.Semaphore(6)
@@ -954,6 +1000,7 @@ async def scan(post, mint, rpc_urls=None, exclude=(), token_program=None, cfg=No
         if exp.get("added") or exp.get("relinked"):
             res = analyze(list(rows.values()), found_infra, fof, c, swarm=swarm, distributors=distributors)
     res["expand"] = {k: v for k, v in exp.items() if k != "links"}
+    res["smart"] = smart
     res.update(calls=rpc.calls, sec=round(time.time() - t0, 1), holders_total=n_hold, acq_read=done,
                new_infra=sorted(found_infra), distributors=sorted(distributors),
                top_funders=[(s[:6] + ".." + s[-4:], n, infra_label(s, found_infra))
