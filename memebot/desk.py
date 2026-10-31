@@ -422,11 +422,6 @@ try:
         momentum as _mom  # noqa: E402
     _kol.CALL_GAP = max(getattr(_kol, "CALL_GAP", 0.15), 0.5)   # RPC pubblica condivisa: piano
     SRC = {"fomo": _fomo, "kol": _kol, "theses": _theses, "mom": _mom}
-    try:  # v8.2
-        from sources import cluster_v2 as _cl2, honeypot as _hp  # noqa: E402
-        SRC["cluster2"], SRC["honeypot"] = _cl2, _hp
-    except Exception as _e2:  # noqa: BLE001
-        print(f"v8.2: cluster_v2/honeypot non caricati ({type(_e2).__name__}: {_e2})")
     try:  # v8.5s: lista smart money di Kiwi (SHADOW, solo log)
         from sources import smart_wallets as _sw  # noqa: E402
         SRC["smart"] = _sw
@@ -439,6 +434,13 @@ try:
         print(f"v8.8: discord_calls non caricato ({type(_e4).__name__}: {_e4})")
 except Exception as _e:  # noqa: BLE001
     SRC = {"error": f"{type(_e).__name__}: {_e}"[:160]}
+try:  # v8.2. Review Claude: import separato. Prima stava DENTRO il try di fomo/kol/momentum: se uno di quelli non si
+    # caricava, honeypot e cluster v2 sparivano e l'Executor saltava il controllo honeypot in silenzio.
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from sources import cluster_v2 as _cl2, honeypot as _hp  # noqa: E402
+    SRC["cluster2"], SRC["honeypot"] = _cl2, _hp
+except Exception as _e2:  # noqa: BLE001
+    print(f"v8.2: cluster_v2/honeypot non caricati ({type(_e2).__name__}: {_e2})")
 try:
     from sources.solkeys import on_curve, DEAD_ADDRS  # noqa: E402  v8.4f
 except Exception:  # noqa: BLE001
@@ -5660,6 +5662,11 @@ async def _execute_buy(st, broker, c, mint, m):
                 return
             if _rcd:
                 RC_HEALTH["fb_ok"] += 1
+    elif CFG["HONEYPOT_CHECK"]:
+        # review Claude: controllo honeypot richiesto ma modulo non caricato = niente acquisto (mai 'ok' per assenza)
+        reject(st, mint, m["symbol"], "controllo honeypot non disponibile (modulo honeypot non caricato)",
+               agent="Executor", cat="honeypot non verificato")
+        return
     elif (c.get("sec") or {}).get("rc_down"):
         # review Claude: con HONEYPOT_CHECK spento (config.json) o il modulo honeypot non caricato il blocco sopra
         # non gira, e con lui il requisito "GoPlus ok + honeypot pulito" del ripiego: si comprava con i soli
