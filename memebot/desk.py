@@ -3315,6 +3315,10 @@ async def security_check(st, http, mint, m, cache):
             doubt.append(f"LP non verificata bruciata/bloccata (stato {lp_status})")
         if not r.get("topHolders"):
             doubt.append("top 10 non calcolato")
+        if not isinstance(r.get("insiderNetworks"), list):
+            # review Claude: senza l'endpoint delle reti insider (errore, 429, schema diverso) graphInsidersDetected
+            # resta assente e il controllo bundle sopra veniva SALTATO: un bundle che RugCheck dava hard passava
+            doubt.append("reti insider RugCheck non verificabili (controllo bundle non fatto)")
         if doubt:
             RC_HEALTH["fb_skip"] += 1
             sec.update(severe="rugcheck_down", shadow_keys=["rugcheck_down"], soft=["rugcheck_down"] + sec["soft"])
