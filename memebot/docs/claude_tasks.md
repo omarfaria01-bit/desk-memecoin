@@ -115,6 +115,9 @@ Token con nomi o loghi di aziende e personaggi famosi (es. LEGO, AMAZON, BEAST/M
 - Implementazione come **tag + penalità sul punteggio in shadow**; diventa hard reject solo se i dati mostrano un rug rate chiaramente più alto. Logga il tag.
 - Branch `claude/brand-filter`; deploy solo dopo la mia review.
 
+## 18) Cluster nei trade shadow — segnalato da Kiwi
+Brilliant (2Tx6L2Qk…, 31/10 13:15, shadow per rugcheck_down, poi −99%) aveva un cluster di wallet collegati al **31,85%** (bubblemap). Verifica che il controllo cluster giri anche quando RugCheck è giù e che una quota così alta sia un hard reject; registra `cluster_pct` in `entry_features` di ogni riga shadow, così possiamo misurarlo. Branch `claude/cluster-shadow`.
+
 ## Dati reali
 
 - Il branch `data-snapshot` (cartella `data/`) contiene una copia notturna dei dati paper reali del bot (trade ombra, trade, equity, eventi, state, price_paths, prior, smart wallets, creator_seed, call Discord etichettate). Niente chiavi.
