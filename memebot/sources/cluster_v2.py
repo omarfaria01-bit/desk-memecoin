@@ -888,12 +888,19 @@ async def scan(post, mint, rpc_urls=None, exclude=(), token_program=None, cfg=No
             r["ntx"] = len(sigs)
             if sigs and len(sigs) < c["FRESH_TX"]:
                 r["src"], r["ts"], r["slot"] = await _funding(rpc, o, sigs[-1]["signature"])
-    await asyncio.gather(*(acq(o) for o, _, _ in holders),
-                         *(wal(o) for o, _, _ in holders[:int(c["WALLET_TOP_N"])]))
+    # v8.5: prima i controlli 'wal' (finanziatore, wallet nuovi, hub): sono quelli delle regole piu forti e con il
+    # budget scaduto venivano tagliati per primi, dando un verdetto 'pulito' senza averli fatti
+    top_w = holders[:int(c["WALLET_TOP_N"])]
+    await asyncio.gather(*(wal(o) for o, _, _ in top_w),
+                         *(acq(o) for o, _, _ in holders))
     done = sum(1 for r in rows.values() if r.get("acq"))
     if done < max(5, int(0.6 * len(holders))):
         return unk(f"solo {done}/{len(holders)} holder letti (RPC lenta o in 429)", scanned=done,
                    timeout=time.time() - t0 > c["BUDGET_SEC"])
+    wdone = sum(1 for o, _, _ in top_w if rows[o]["ntx"] is not None)
+    if wdone < min(len(top_w), max(5, int(0.6 * len(top_w)))):   # v8.5: anche i wallet devono essere stati letti
+        return unk(f"solo {wdone}/{len(top_w)} wallet controllati per il finanziatore (RPC lenta o in 429)",
+                   scanned=done, wallets_checked=wdone, timeout=time.time() - t0 > c["BUDGET_SEC"])
     # funder e fee payer piu usati: infrastruttura (attivita altissima) o finanziatore del funder (2 salti)
     cnt = {}
     for r in rows.values():

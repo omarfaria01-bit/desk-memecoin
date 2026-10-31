@@ -166,7 +166,7 @@ CFG = {
     "CLUSTER2_BUDGET_SEC": 75,        # tempo massimo di una scansione (top 150 holder, ~450 chiamate RPC)
     "CLUSTER2_MAX_QUEUE": 4,          # scansioni in background per gli shadow (quelle dei trade veri passano sempre)
     "CLUSTER_GROUP_HARD_PCT": 20.0,   # un SOLO gruppo di wallet collegati >= 20% dell'offerta = scarto rigido
-    "CLUSTER_UNKNOWN_ACTION": "soft", # cluster non verificabile: 'soft' (penalita + size ridotta) o 'skip'
+    "CLUSTER_UNKNOWN_ACTION": "skip", # v8.5: cluster non verificabile = niente acquisto (shadow 'cluster_unknown')
     "CLUSTER_UNKNOWN_PENALTY": 0.05,
     "CLUSTER_UNKNOWN_SIZE_MULT": 0.5,
     "CLUSTER_HELD_RECHECK_MIN": 20,   # ricontrollo cluster delle posizioni aperte (es. DESSA)
@@ -319,6 +319,7 @@ CFG = {
     "SELLCHECK_MAX_RT_PCT": 15.0,     # prima di comprare: se rivendere subito costa oltre il 15% -> scarto
     "SELL_NOROUTE_WRITE_OFF": 20,     # dopo 20 vendite senza percorso Jupiter la posizione vale 0 (paper)
     "MARK_QUOTE_SEC": 60,             # valore delle posizioni dal preventivo di vendita reale ogni 60 s
+    "MARK_NOROUTE_CONFIRM": 3,        # v8.5: valore ~0 solo dopo 3 preventivi 'no_route' DI FILA (uno solo = dato mancante)
     # priority fee dinamica da getRecentPrioritizationFees (RPC pubblico gratuito)
     "PRIO_DYNAMIC": True,
     "PRIO_REFRESH_SEC": 180,
@@ -370,6 +371,34 @@ HOST_GAPS = {"api.dexscreener.com": 0.25, "api.geckoterminal.com": 6.0, "fronten
              "lite-api.jup.ag": 1.1, "api.jup.ag": 1.1, "api.mainnet-beta.solana.com": 0.5,
              "solana-rpc.publicnode.com": 0.05}  # v6: Jupiter e RPC
 HARD_STOP_PATH = os.path.join(DATA_DIR, "HARD_STOP")
+# v8.5: transazioni live inviate con esito ancora sconosciuto (firma, mint, lato). Finche c'e una voce non risolta
+# nessun nuovo acquisto: si controlla su Solscan e si cancella il file (come HARD_STOP).
+PENDING_TX_PATH = os.path.join(DATA_DIR, "live_pending_tx.json")
+
+
+def pending_tx_load():
+    try:
+        with open(PENDING_TX_PATH) as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except FileNotFoundError:
+        return {}
+    except Exception:  # noqa: BLE001
+        return {"_illeggibile": {"status": "unknown", "side": "?", "mint": "?"}}   # file rovinato: mai 'nessuna'
+
+
+def pending_tx_save(d):
+    if not d:
+        try:
+            os.remove(PENDING_TX_PATH)
+        except FileNotFoundError:
+            pass
+        return
+    tmp = PENDING_TX_PATH + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(d, f, indent=1)
+    os.replace(tmp, PENDING_TX_PATH)
+
 # v7: moduli opzionali in sources/ (solo lettura). Se mancano il bot gira come prima, senza bonus.
 SRC = {}
 try:
@@ -899,6 +928,8 @@ def summarize(pairs):
     return {
         "vol_h1": vol_h1, "price": fnum(main.get("priceUsd")),
         "liq": fnum((main.get("liquidity") or {}).get("usd")),
+        # v8.5: campo liquidita assente (opzionale su DexScreener) != liquidita 0: chi lo legge tiene il valore precedente
+        "liq_known": (main.get("liquidity") or {}).get("usd") is not None,
         "dex": str(main.get("dexId", "?")), "pair": str(main.get("pairAddress", "")),
         "symbol": str(base.get("symbol", "?"))[:12], "name": str(base.get("name", ""))[:40],
         "buys_h1": int(fnum(tx.get("buys"))), "sells_h1": int(fnum(tx.get("sells"))),
@@ -1799,6 +1830,26 @@ LABEL_SEEDS = [
              "Shadow 00:04 chiuso a -100 alle 01:04 = DATO NON VALIDO (pausa processo): GeckoTerminal dava -55% "
              "alle 00:45 e ~-43% alle 01:00-01:05; il rug completo e arrivato dopo. v8.4e: regola 'un solo "
              "finanziatore >= 50% dei controllati' = HARD. MAI controllo pulito o vincente."},
+    # v8.4f: casi Kiwi 31/10 (solo registro: pnl None -> nessun effetto sul Learner; MAI regole rilassate da qui)
+    {"id": "dacity-2026-10-31-buono", "mint": "nxPqZ4F7ux8Vph5NFu25rEP6Kx9Gr1U6Fmj36Rjpump", "sym": "Dacity",
+     "label": "buono_kiwi", "pnl_pct": None, "rug": False,
+     "note": "CONTROLLO POSITIVO confermato da Kiwi (31/10 07:39): Dacity Coin, pumpswap ~20 g, liq ~$392k, mcap "
+             "~$8.5M. Il bot lo scartava per reti RugCheck (bundle 30.6%, hard) e regole eta/attivita."},
+    {"id": "gta6-2026-10-31-dacf", "mint": "4kjruqGHDsSqkMdFfCjV7Vb62HPFhtXyWc2t6JpQzDnz", "sym": "GTA6",
+     "label": "probabile_buono", "pnl_pct": None, "rug": False,
+     "note": "caso Kiwi 31/10: probabile buono, DA CONFERMARE (GTA VI, Meteora DLMM, ~85 g, mcap ~$10.6M)."},
+    {"id": "stonk-2026-10-31-dacf", "mint": "6GmAFSYs4gk3FDao5FzzySQpPZaWsa4rUJHacpMpUNgx", "sym": "STONK",
+     "label": "probabile_buono", "pnl_pct": None, "rug": False,
+     "note": "caso Kiwi 31/10: probabile buono, DA CONFERMARE (Meteora/Orca, ~87 g, mcap ~$103M)."},
+    {"id": "float-2026-10-31-dacf", "mint": "Bv1a7cEj5aRnJQhMw4kRQqAFesMSd5LwcDnUzq52BMmr", "sym": "FLOAT",
+     "label": "probabile_buono", "pnl_pct": None, "rug": False,
+     "note": "caso Kiwi 31/10: probabile buono, DA CONFERMARE (Raydium CPMM, ~56 h, mcap ~$663k)."},
+    {"id": "neet-2026-10-31-dacf", "mint": "Ce2gx9KGXJ6C9Mp5b5x1sn9Mg87JwEbrQby4Zqo3pump", "sym": "neet",
+     "label": "probabile_buono", "pnl_pct": None, "rug": False,
+     "note": "caso Kiwi 31/10: probabile buono, DA CONFERMARE (pumpswap ~552 g, liq ~$1.6M, mcap ~$25.7M)."},
+    {"id": "lumi-2026-10-31-dacf", "mint": "HvitmAeh6TkToQonoiNwqWcrZsYdYiaSZHP7yMmspump", "sym": "LUMI",
+     "label": "probabile_buono", "pnl_pct": None, "rug": False,
+     "note": "caso Kiwi 31/10: probabile buono, DA CONFERMARE (pumpswap ~6 h, mcap ~$700k, +1509% 24h)."},
 ]
 
 
@@ -1813,6 +1864,105 @@ def apply_label_seeds(st):
         st.lessons.append(f"{datetime.now(TZ):%d/%m %H:%M} caso '{sd['label']}' {sd['sym']}: {sd['note'][:150]}")
         write_event("Learner", "label_seed", f"caso etichettato {sd['sym']} = '{sd['label']}'",
                     {"mint": sd["mint"], "label": sd["label"], "note": sd["note"]})
+
+
+# v8.5: casi da seguire fino alla fine (solo osservazione, nessun acquisto, nessun effetto sul Learner).
+# Ogni CASE_WATCH_SEC un controllo DexScreener gratuito di prezzo e liquidita, fino al rug o a 'days' giorni.
+CASE_WATCH = [
+    {"id": "leverhedge-2026-10-31", "mint": "FWatMYieKhRuJ1yuTcmVG1njRhZWwqHwjR11pBympump", "sym": "Leverhedge",
+     "label": "caso_stelle_aperto", "days": 7,
+     "note": "caso stelle aperto (Kiwi 31/10): Bubblemaps ~14 cluster a stella, GMGN rischio rug 46.9%, top10 4.76%, "
+             "+25.000% in 24 h. Ne buono ne cattivo: si segue fino al rug o 7 giorni."},
+]
+CASE_MINTS = {c["mint"] for c in CASE_WATCH}
+CASE_WATCH_PATH = os.path.join(DATA_DIR, "case_watch.json")
+CASE_WATCH_LOG = os.path.join(DATA_DIR, "case_watch.jsonl")
+CFG.setdefault("CASE_WATCH_SEC", 3600)
+CFG.setdefault("CASE_RUG_DROP_PCT", 80.0)      # rug: prezzo -80% dal massimo...
+CFG.setdefault("CASE_RUG_LIQ_DROP_PCT", 80.0)  # ...o liquidita -80% dal massimo...
+CFG.setdefault("CASE_RUG_MIN_LIQ", 1000.0)     # ...o liquidita sotto $1k (o nessuna coppia)
+
+
+def case_watch_load():
+    try:
+        with open(CASE_WATCH_PATH) as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def case_watch_save(d):
+    tmp = CASE_WATCH_PATH + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(d, f, indent=1)
+    os.replace(tmp, CASE_WATCH_PATH)
+
+
+def apply_case_watch(st, now=None):
+    """Registra i casi aperti: etichetta neutra (sostituisce un eventuale 'bad_cluster' automatico) e niente
+    promozione automatica a 'rug' dal label_watch (quella conterebbe come esito)."""
+    now, d = now or time.time(), case_watch_load()
+    for cs in CASE_WATCH:
+        st.labels[cs["mint"]] = cs["label"]
+        st.label_watch.pop(cs["mint"], None)
+        if cs["id"] not in d:
+            d[cs["id"]] = {"mint": cs["mint"], "sym": cs["sym"], "label": cs["label"], "t0": now,
+                           "until": now + cs["days"] * 86400, "status": "aperto", "pk": 0.0, "lpk": 0.0, "n": 0}
+            write_event("Learner", "case_open", f"caso {cs['sym']} = '{cs['label']}' seguito per {cs['days']} giorni",
+                        {"mint": cs["mint"], "note": cs["note"]})
+    case_watch_save(d)
+    return d
+
+
+def case_watch_step(c, m, now):
+    """Aggiorna un caso con un dato DexScreener (m=None: nessuna coppia). Restituisce la riga di log."""
+    c.setdefault("status", "aperto")
+    price, liq = (fnum(m.get("price")), fnum(m.get("liq"))) if m else (0.0, 0.0)
+    if m and not m.get("liq_known", True):
+        liq = c.get("last_l", 0.0)
+    c["pk"], c["lpk"] = max(c.get("pk", 0.0), price), max(c.get("lpk", 0.0), liq)
+    dp = (1 - price / c["pk"]) * 100 if c["pk"] > 0 else 0.0
+    dl = (1 - liq / c["lpk"]) * 100 if c["lpk"] > 0 else 0.0
+    c.update(last=price, last_l=liq, last_t=now, n=c.get("n", 0) + 1)
+    row = {"t": datetime.fromtimestamp(now, TZ).strftime("%Y-%m-%d %H:%M"), "id": None, "sym": c["sym"],
+           "price": price, "liq": round(liq, 2), "mcap": (m or {}).get("mcap"), "chg_h24": (m or {}).get("chg_h24"),
+           "from_peak_pct": round(-dp, 1), "liq_from_peak_pct": round(-dl, 1)}
+    if c["n"] > 1 and (not m or dp >= CFG["CASE_RUG_DROP_PCT"] or dl >= CFG["CASE_RUG_LIQ_DROP_PCT"]
+                       or liq < CFG["CASE_RUG_MIN_LIQ"]):
+        c["status"], c["end_t"] = "rug", now
+        c["end_why"] = "nessuna coppia" if not m else (f"prezzo {-dp:.0f}% dal massimo, liquidita {-dl:.0f}% "
+                                                       f"(${liq:,.0f})")
+    elif now >= c["until"]:
+        c["status"], c["end_t"], c["end_why"] = "chiuso_7g", now, f"7 giorni passati, prezzo {-dp:+.0f}% dal massimo"
+    row["status"] = c["status"]
+    return row
+
+
+async def case_watch_agent(st, http):
+    while True:
+        d = case_watch_load()
+        live = {k: c for k, c in d.items() if c.get("status") == "aperto"}
+        if live:
+            mk = await dex_batch(http, [c["mint"] for c in live.values()])
+            now = time.time()
+            for k, c in live.items():
+                pairs = mk.get(c["mint"])
+                m = summarize(pairs) if pairs else None
+                if m is not None:
+                    m["mcap"] = fnum((max(pairs, key=lambda p: fnum((p.get("liquidity") or {}).get("usd")))
+                                      ).get("marketCap"))
+                    m["chg_h24"] = fnum((max(pairs, key=lambda p: fnum((p.get("liquidity") or {}).get("usd")))
+                                         .get("priceChange") or {}).get("h24"))
+                row = case_watch_step(c, m, now)
+                row["id"] = k
+                with open(CASE_WATCH_LOG, "a") as f:
+                    f.write(json.dumps(row) + "\n")
+                if c["status"] != "aperto":
+                    write_event("Learner", "case_close", f"caso {c['sym']} chiuso: {c['status']} ({c.get('end_why')})",
+                                {"mint": c["mint"], "label": c["label"]})
+            case_watch_save(d)
+        await asyncio.sleep(CFG["CASE_WATCH_SEC"])
 
 
 def label_watch_tick(st, mint, price, liq, now=None):
@@ -3072,6 +3222,10 @@ async def filter_agent(st, http, q_out):
                 st.watch.pop(mint, None)
                 st.processed[mint] = now
                 st.stats["volume_ok"] += 1
+                if mint in CASE_MINTS:   # v8.5: caso aperto = solo osservazione, mai acquisto (neanche paper)
+                    reject(st, mint, m["symbol"], "caso aperto in osservazione (nessun acquisto)", cat="caso aperto",
+                           quiet=True)
+                    continue
                 for word in words_of(m["name"], m["symbol"]):
                     st.hot.append((now, word, mint))
                 if m["price"] <= 0 or m["liq"] <= 0 or m["liq"] < CFG["MIN_LIQUIDITY_USD"]:
@@ -3439,9 +3593,10 @@ async def analyst_agent(st, http, q_in, q_out):
                 if cl["level"] == "unknown":
                     if CFG["CLUSTER_UNKNOWN_ACTION"] == "skip":
                         rej(f"cluster non verificabile: {cl.get('why')}", agent="Analyst", cat="cluster non verificato")
+                        st.stats["cluster_unknown_skip"] += 1   # v8.5: conteggio dei token finiti nello skip
                         if CFG["SHADOW_TRADES"]:
                             spawn_shadow(st, http, mint, m, ["cluster_unknown"], "cluster non verificabile", score,
-                                         flags + ["cluster_unknown"], signals=signals)
+                                         flags + ["cluster_unknown"], tag="cluster_unknown", signals=signals)
                         continue
                     if "cluster_unknown" not in flags:
                         flags.append("cluster_unknown")
@@ -3932,15 +4087,24 @@ class PaperBroker:
             p["dec"] = dec
         qq, err = await jup_quote(self.http, mint, WSOL, int(p["tokens"] * 10 ** dec))
         if err == "no_route":
-            p["qmark"] = {"ts": time.time(), "ratio": 1e-9, "no_route": True}  # invendibile: valore ~0
+            # v8.5: un solo 'no_route' (anche un 400 qualsiasi di Jupiter) portava la posizione a -100%, crollo,
+            # vendita urgente e creatore in lista nera. Ora vale ~0 solo dopo MARK_NOROUTE_CONFIRM di fila;
+            # prima resta l'ultimo valore valido (o la formula, quando scade).
+            p["mark_noroute"] = p.get("mark_noroute", 0) + 1
+            if p["mark_noroute"] >= int(CFG.get("MARK_NOROUTE_CONFIRM", 3)):
+                p["qmark"] = {"ts": time.time(), "ratio": 1e-9, "no_route": True}  # invendibile: valore ~0
             return
         if not qq:
             return
+        p["mark_noroute"] = 0
         gross = int(qq["outAmount"]) / 1e9 * sol_usd()
         disp = p["tokens"] * p["last_price"]
         if gross > disp * 1.10:  # v8b: preventivo oltre il 10% sopra il prezzo mostrato = dato sospetto, lo ignoro
             return
         p["qmark"] = {"ts": time.time(), "ratio": clamp(gross / disp, 1e-9, 2.0), "impact_pct": round((1 - gross / disp) * 100, 3)}
+
+
+RPC_NO_RESPONSE = "nodo RPC senza risposta"
 
 
 class SolanaBroker:
@@ -3973,14 +4137,22 @@ class SolanaBroker:
         log(st, "Executor", "info", f"wallet {self.pub[:4]}...{self.pub[-4:]} collegato: {bal / 1e9:.4f} SOL "
                                     f"(SOL a ${solp:,.2f})")
         if self.mode == "live":
-            st.cash = await self.cash_usd(st)
-            if st.period_start_equity == CFG["START_BALANCE"] and not st.positions:
-                st.period_start_equity = st.cash
+            # v8.5: cassa dal saldo appena letto (cash_usd su errore restituisce st.cash = START_BALANCE)
+            st.cash = max(0.0, bal / 1e9 - CFG["SOL_RESERVE"]) * solp
+            if st.cash <= 0:
+                raise RuntimeError(f"wallet senza SOL oltre la riserva ({CFG['SOL_RESERVE']} SOL)")
+            if not st.positions and not st.closed and st.total_start == CFG["START_BALANCE"]:
+                # v8.5: primo avvio live (stato nuovo): TUTTE le basi dei limiti dal saldo vero, non dai 1000 $
+                # di partenza. Prima solo period_start_equity: con 50 $ nel wallet scattava subito HARD_STOP
+                # (-95%), con piu di ~1430 $ il -30% arrivava molto oltre.
+                st.total_start = st.day_start_equity = st.period_start_equity = st.cash
+                log(st, "Risk", "info", f"live: basi dei limiti di perdita dal wallet ${st.cash:,.2f}")
+        await self.resolve_pending(st)
 
     async def rpc(self, method, params):
         d = await self.http.post(CFG["RPC_URL"], {"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
         if not isinstance(d, dict):
-            return None, "nodo RPC senza risposta"
+            return None, RPC_NO_RESPONSE
         if d.get("error"):
             err = d["error"]
             return None, str(err.get("message", err) if isinstance(err, dict) else err)[:140]
@@ -3991,15 +4163,27 @@ class SolanaBroker:
         return int(r["value"]) if isinstance(r, dict) and "value" in r else None
 
     async def token_raw(self, mint):
-        r, _ = await self.rpc("getTokenAccountsByOwner",
-                              [self.pub, {"mint": mint}, {"encoding": "jsonParsed", "commitment": "confirmed"}])
+        """Saldo grezzo del token nel wallet. v8.5: None = non verificabile (errore RPC, risposta illeggibile),
+        MAI 0: prima un 429 dava saldo 0 e la vendita chiudeva la posizione a -100% con i token ancora nel wallet."""
+        r, err = await self.rpc("getTokenAccountsByOwner",
+                                [self.pub, {"mint": mint}, {"encoding": "jsonParsed", "commitment": "confirmed"}])
+        if err or not isinstance(r, dict) or not isinstance(r.get("value"), list):
+            return None
         total = 0
-        for acc in (r or {}).get("value", []) if isinstance(r, dict) else []:
+        for acc in r["value"]:
             try:
                 total += int(acc["account"]["data"]["parsed"]["info"]["tokenAmount"]["amount"])
             except Exception:  # noqa: BLE001
-                pass
+                return None
         return total
+
+    async def token_raw_retry(self, mint, tries=3):
+        for i in range(tries):
+            v = await self.token_raw(mint)
+            if v is not None:
+                return v
+            await asyncio.sleep(1 + i)
+        return None
 
     async def decimals(self, mint):
         if mint not in self.dec_cache:
@@ -4047,23 +4231,87 @@ class SolanaBroker:
             return None, "Jupiter non ha restituito la transazione"
         tx = VersionedTransaction.from_bytes(base64.b64decode(d["swapTransaction"]))
         signed = VersionedTransaction(tx.message, [self.kp])
+        self.last_valid = int(fnum(d.get("lastValidBlockHeight"))) or None   # v8.5: scadenza del blockhash
         return base64.b64encode(bytes(signed)).decode(), None
 
-    async def send(self, b64tx):
-        sig, err = await self.rpc("sendTransaction", [b64tx, {"encoding": "base64", "skipPreflight": False,
-                                                              "preflightCommitment": "processed", "maxRetries": 3}])
-        if err or not sig:
-            return False, err or "invio fallito"
-        for _ in range(30):
+    @staticmethod
+    def tx_sig(b64tx):
+        from solders.transaction import VersionedTransaction
+        return str(VersionedTransaction.from_bytes(base64.b64decode(b64tx)).signatures[0])
+
+    async def tx_status(self, sig, last_valid=None):
+        """'ok' confermata, 'failed' errore on-chain o blockhash scaduto senza traccia, 'pending' non ancora
+        decidibile, 'unknown' RPC senza risposta."""
+        r, err = await self.rpc("getSignatureStatuses", [[sig], {"searchTransactionHistory": True}])
+        if err or not isinstance(r, dict) or not isinstance(r.get("value"), list):
+            return "unknown"
+        s = r["value"][0] if r["value"] else None
+        if s:
+            if s.get("err"):
+                return "failed"
+            return "ok" if s.get("confirmationStatus") in ("confirmed", "finalized") else "pending"
+        if last_valid:
+            h, herr = await self.rpc("getBlockHeight", [{"commitment": "confirmed"}])
+            if not herr and isinstance(h, int) and h > last_valid:
+                return "failed"   # blockhash scaduto e nessuna traccia: non puo piu arrivare
+        return "pending"
+
+    async def send(self, b64tx, entry=None):
+        """v8.5: (True, sig) confermata; (False, motivo) sicuramente NON arrivata; (None, motivo) esito SCONOSCIUTO.
+        Prima un timeout di 60 s valeva 'fallita' anche se la tx arrivava dopo: posizione fantasma o doppio ordine.
+        Ora: firma salvata su disco prima dell'invio, rinvio della stessa tx firmata (idempotente) finche e
+        confermata o finche il blockhash scade; se la RPC non risponde l'esito resta 'sconosciuto'."""
+        sig = self.tx_sig(b64tx)
+        last_valid = getattr(self, "last_valid", None)
+        pend = pending_tx_load()
+        pend[sig] = dict(entry or {}, sig=sig, last_valid=last_valid, ts=time.time(), status="sending")
+        pending_tx_save(pend)
+
+        def done(ok, why):
+            d = pending_tx_load()
+            if ok is None:
+                d.setdefault(sig, {"sig": sig})["status"] = "unknown"
+            else:
+                d.pop(sig, None)
+            pending_tx_save(d)
+            return ok, why
+        opts = {"encoding": "base64", "skipPreflight": False, "preflightCommitment": "processed", "maxRetries": 0}
+        res, err = await self.rpc("sendTransaction", [b64tx, opts])
+        if err and err != RPC_NO_RESPONSE:   # errore del nodo (preflight): non e stata inoltrata
+            return done(False, err)
+        # senza risposta (timeout) la tx puo essere partita lo stesso: si controlla la firma
+        t0 = time.time()
+        cap = max(30, int(CFG["LIVE_CONFIRM_TIMEOUT_SEC"])) * (2 if last_valid else 1)
+        while time.time() - t0 < cap:
             await asyncio.sleep(2)
-            r, _ = await self.rpc("getSignatureStatuses", [[sig], {"searchTransactionHistory": True}])
-            s = (r or {}).get("value", [None])[0] if isinstance(r, dict) else None
-            if s:
-                if s.get("err"):
-                    return False, f"transazione fallita {sig[:10]}"
-                if s.get("confirmationStatus") in ("confirmed", "finalized"):
-                    return True, sig
-        return False, f"conferma non arrivata {sig[:10]}"
+            stt = await self.tx_status(sig, last_valid)
+            if stt == "ok":
+                return done(True, sig)
+            if stt == "failed":
+                return done(False, f"transazione non andata a segno {sig[:10]}")
+            await self.rpc("sendTransaction", [b64tx, dict(opts, skipPreflight=True)])   # stessa firma: idempotente
+        return done(None, f"esito sconosciuto dopo {cap} s {sig[:10]}: controlla su Solscan")
+
+    async def resolve_pending(self, st, mint=None):
+        """Risolve le transazioni in attesa (all'avvio e prima di vendere lo stesso mint). Restano nel file solo
+        quelle ancora sconosciute o confermate senza essere registrate dal bot (da riconciliare a mano)."""
+        d = pending_tx_load()
+        out = {}
+        for sig, e in list(d.items()):
+            if mint and e.get("mint") != mint:
+                continue
+            stt = await self.tx_status(sig, e.get("last_valid")) if not sig.startswith("_") else "unknown"
+            out[sig] = stt
+            if stt == "failed":
+                d.pop(sig, None)
+            elif stt == "ok":
+                e["status"] = "confirmed_untracked"
+                log(st, "Executor", "error", f"tx {e.get('side')} {e.get('symbol', e.get('mint', '?'))} {sig[:10]} "
+                    f"confermata DOPO il timeout: verifica wallet e posizione, poi cancella live_pending_tx.json")
+            else:
+                e["status"] = "unknown"
+        pending_tx_save(d)
+        return out
 
     async def simulate(self, b64tx):
         r, err = await self.rpc("simulateTransaction", [b64tx, {"encoding": "base64", "sigVerify": False,
@@ -4105,13 +4353,24 @@ class SolanaBroker:
             st.cash -= cost
             return {"ok": True, "cost": cost, "tokens": tokens_q, "fill": cost / tokens_q, "impact": impact,
                     "fee": 0.0, "dec": dec, "note": "simulato, nessun invio"}
-        before, sb = await self.token_raw(mint), await self.sol_balance()
-        ok, info = await self.send(tx)
+        if pending_tx_load():   # v8.5: c'e una transazione dall'esito sconosciuto: niente nuovi acquisti
+            return {"ok": False, "error": "transazione precedente da verificare (live_pending_tx.json)"}
+        before, sb = await self.token_raw_retry(mint), await self.sol_balance()
+        if before is None:   # v8.5: senza il saldo di partenza 'got' conterebbe token gia nel wallet
+            return {"ok": False, "error": "saldo token non verificabile prima dell'invio, ordine non inviato"}
+        ok, info = await self.send(tx, {"side": "buy", "mint": mint, "symbol": m.get("symbol"),
+                                        "sol": round(sol_amt, 6), "tokens_q": tokens_q})
+        if ok is None:
+            tg_send(f"LIVE: acquisto {m.get('symbol')} con esito SCONOSCIUTO ({info}). Acquisti bloccati finche "
+                    f"non verifichi il wallet e cancelli live_pending_tx.json")
+            return {"ok": False, "error": info, "uncertain": True}
         if not ok:
             return {"ok": False, "error": info}
         await asyncio.sleep(2)
-        after, sa = await self.token_raw(mint), await self.sol_balance()
-        got = (after - before) / 10 ** dec if after > before else tokens_q
+        after, sa = await self.token_raw_retry(mint), await self.sol_balance()
+        if after is None:
+            log(st, "Executor", "warn", f"{m.get('symbol')}: saldo dopo l'acquisto non verificabile, uso il preventivo")
+        got = (after - before) / 10 ** dec if after is not None and after > before else tokens_q
         spent = (sb - sa) / 1e9 * solp if sb and sa and sb > sa else cost
         if got <= 0:
             got = tokens_q
@@ -4133,8 +4392,27 @@ class SolanaBroker:
             value = int(q["outAmount"]) / 1e9 * solp
             st.cash += value
             return {"ok": True, "value": value, "tokens": p["tokens"] * fraction}
+        # v8.5: una vendita precedente dello stesso token con esito sconosciuto va risolta prima di rivendere
+        # (altrimenti un TP parziale arrivato dopo il timeout veniva ripetuto)
+        prev = [(sg, e) for sg, e in pending_tx_load().items() if e.get("mint") == mint and e.get("side") == "sell"]
+        if prev:
+            stt = await self.resolve_pending(st, mint)
+            for sg, e in prev:
+                if stt.get(sg) == "ok":
+                    d = pending_tx_load()
+                    d.pop(sg, None)
+                    pending_tx_save(d)
+                    value = fnum(e.get("quote_sol")) * solp   # importo esatto non noto: preventivo
+                    log(st, "Risk", "warn", f"vendita {p.get('symbol')} {sg[:10]} confermata dopo il timeout: "
+                        f"registrata con il preventivo (${value:.2f})", mint=mint)
+                    # resolved_prev: il chiamante NON deve chiudere la posizione se restano token (vendita precedente parziale)
+                    return {"ok": True, "value": value, "tokens": fnum(e.get("tokens")), "sig": sg, "resolved_prev": True}
+                if stt.get(sg) != "failed":
+                    return {"ok": False, "error": f"vendita precedente {sg[:10]} ancora con esito sconosciuto"}
         # FIX: vende solo la quantita registrata dal bot (mai token extra/airdrop nel wallet)
-        bal = await self.token_raw(mint)
+        bal = await self.token_raw_retry(mint)
+        if bal is None:   # v8.5: errore RPC != saldo 0 (prima: posizione chiusa a -100% con i token nel wallet)
+            return {"ok": False, "error": "saldo token non verificabile (RPC), riprovo"}
         tracked_raw = int(p["tokens"] * min(max(fraction, 0.0), 1.0) * 10 ** dec)
         raw = min(bal, tracked_raw)
         if raw <= 0:
@@ -4148,7 +4426,11 @@ class SolanaBroker:
         if err:
             return {"ok": False, "error": err}
         sb = await self.sol_balance()
-        ok, info = await self.send(tx)
+        ok, info = await self.send(tx, {"side": "sell", "mint": mint, "symbol": p.get("symbol"),
+                                        "tokens": sold_tokens, "quote_sol": int(q["outAmount"]) / 1e9})
+        if ok is None:
+            tg_send(f"LIVE: vendita {p.get('symbol')} con esito SCONOSCIUTO ({info}). Verifica su Solscan.")
+            return {"ok": False, "error": info, "uncertain": True}
         if not ok:
             return {"ok": False, "error": info}
         await asyncio.sleep(2)
@@ -4230,6 +4512,9 @@ def lp_gate(c):
 
 
 async def _execute_buy(st, broker, c, mint, m):
+    if mint in CASE_MINTS:   # v8.5: caso aperto, solo osservazione
+        reject(st, mint, m["symbol"], "caso aperto in osservazione (nessun acquisto)", agent="Executor", cat="caso aperto")
+        return
     g5 = m5_gate(m, c.get("candles"))   # v8.4f: barriera anche qui, per ogni percorso
     if g5:
         reject(st, mint, m["symbol"], g5, agent="Executor", cat="momento sbagliato")
@@ -4248,6 +4533,10 @@ async def _execute_buy(st, broker, c, mint, m):
         return
     if os.path.exists(HARD_STOP_PATH):  # v6: limite di perdita totale (si toglie cancellando HARD_STOP)
         reject(st, mint, m["symbol"], "HARD_STOP attivo: perdita totale massima", agent="Executor", cat="HARD_STOP")
+        return
+    if os.path.exists(PENDING_TX_PATH):  # v8.5: tx live dall'esito sconosciuto (si toglie cancellando il file)
+        reject(st, mint, m["symbol"], "transazione live da verificare (live_pending_tx.json)", agent="Executor",
+               cat="tx da verificare")
         return
     if mint in st.positions:
         return
@@ -4488,7 +4777,7 @@ OVR_LIMITS = {"MIN_CHANGE_M5_PCT": (-8.0, 5.0),   # v8.4f
               "CLUSTER_UNKNOWN_SIZE_MULT": (0.2, 1.0), "CLUSTER_HELD_RECHECK_MIN": (5.0, 120.0),
               **BONUS_LIMITS}
 OVR_STR_KEYS = {"DYN_STOP_MODE": ("off", "shadow", "on"), "DYN_TP_MODE": ("off", "shadow"),
-                "CLUSTER_UNKNOWN_ACTION": ("soft", "skip"), "CLUSTER_HELD_ACTION": ("exit", "alert"),
+                "CLUSTER_UNKNOWN_ACTION": ("skip",), "CLUSTER_HELD_ACTION": ("exit", "alert"),
                 "HONEYPOT_UNKNOWN_ACTION": ("skip",)}  # v8.1: valori testuali ammessi
 OVR_BOOL_KEYS = {"DYN_STOP_SIZE_SCALE"}
 OVR_INT_KEYS = {"MAX_HOLD_MIN", "TIME_STOP_MIN", "SOFT_MAX_FLAGS", "BUNDLE_MAX_NETWORKS", "BUNDLE_NET_MIN_WALLETS",
@@ -4535,6 +4824,8 @@ OVR_LIMITS.update({"BIRDEYE_XCHECK_SIZE_MULT": (0.2, 1.0), "BIRDEYE_MIN_HOLDERS"
                    "BIRDEYE_LIQ_RATIO": (0.2, 0.9), "BIRDEYE_TREND_SEC": (3600.0, 86400.0),
                    "BIRDEYE_RESERVE_CU": (500.0, 10000.0), "BIRDEYE_SAVE_AT": (0.5, 0.95)})
 OVR_INT_KEYS |= {"BIRDEYE_MIN_HOLDERS", "BIRDEYE_TREND_SEC", "BIRDEYE_RESERVE_CU"}
+OVR_LIMITS.update({"MARK_NOROUTE_CONFIRM": (2.0, 6.0)})   # v8.5
+OVR_INT_KEYS |= {"MARK_NOROUTE_CONFIRM"}
 OVR_GLOBAL_MAP.update({k: k for k in ("BIRDEYE_XCHECK_SIZE_MULT", "BIRDEYE_MIN_HOLDERS", "BIRDEYE_LIQ_RATIO",
                                       "BIRDEYE_TREND_SEC", "BIRDEYE_RESERVE_CU", "BIRDEYE_SAVE_AT")})
 OVR_DEFAULTS = {k: CFG[k] for k in list(OVR_LIMITS) + list(OVR_STR_KEYS)}
@@ -4810,7 +5101,7 @@ async def _sell_position(st, broker, mint, reason, fraction=1.0, zero=False, mar
         p["sell_latency_slip"] = res["latency_slip"]
     p["realized"] += res["value"]
     p["tokens"] = max(0.0, p["tokens"] - res["tokens"])
-    if fraction < 0.999 and p["tokens"] > 0:
+    if (fraction < 0.999 or res.get("resolved_prev")) and p["tokens"] > 0:   # v8.5: vendita precedente risolta != chiusura
         if mark_tp:  # una vendita parziale da override (sell_half) non consuma la presa di profitto
             p["tp_done"] = True
         log(st, "Risk", "sell", f"VENDE {fraction * 100:.0f}% di {p['symbol']} per ${res['value']:.2f}: {reason}",
@@ -4940,7 +5231,9 @@ async def risk_agent(st, http, broker):
                         if mint in market:
                             m = summarize(market[mint])
                             if m["price"] > 0:
-                                p["last_price"], p["liq"], p["last_ok"] = m["price"], max(m["liq"], 1.0), time.time()
+                                p["last_price"], p["last_ok"] = m["price"], time.time()
+                                if m.get("liq_known", True):  # v8.5: liquidita assente = dato mancante, non rug
+                                    p["liq"] = max(m["liq"], 1.0)
                         if getattr(broker, "realistic", False):
                             try:  # v6: valore di uscita dal preventivo Jupiter reale (ogni MARK_QUOTE_SEC)
                                 await broker.refresh_mark(mint, p)
@@ -5365,7 +5658,9 @@ async def shadow_trade_agent(st, http):
                 if mint in market:
                     m = summarize(market[mint])
                     if m["price"] > 0:
-                        sh["last_price"], sh["liq"], sh["last_ok"] = m["price"], max(m["liq"], 1.0), now
+                        sh["last_price"], sh["last_ok"] = m["price"], now
+                        if m.get("liq_known", True):  # v8.5: liquidita assente = dato mancante, non rug
+                            sh["liq"] = max(m["liq"], 1.0)
                         sh.pop("np_wait", None), sh.pop("np_src", None)
                         path_tick(mint, "shadow", m["price"], m["liq"], mark_pnl_pct(sh), now=now)
             stale = {k: v for k, v in st.shadow_trades.items() if now - fnum(v.get("last_ok"), now) > 900}
@@ -5413,6 +5708,9 @@ def build_recap(st):
         lines += ["", "Ancora aperte:"] + [f"- {p['symbol']}: {mark_pnl_pct(p):+.1f}%" for p in st.positions.values()]
     if st.lessons:
         lines += ["", "Lezioni recenti:"] + [f"- {x}" for x in list(st.lessons)[-10:]]
+    if st.stats.get("cluster_unknown_skip"):
+        lines += ["", f"Cluster non verificabile -> niente acquisto (shadow cluster_unknown): "
+                      f"{st.stats['cluster_unknown_skip']} token"]
     if st.reject_reasons:
         lines += ["", "Motivi di scarto piu frequenti:"]
         lines += [f"- {r}: {n}" for r, n in st.reject_reasons.most_common(10)]
@@ -5715,6 +6013,7 @@ async def main():
     st = load_state()
     ST_REF[0] = st
     apply_label_seeds(st)   # v8.2
+    apply_case_watch(st)    # v8.5
     mode = CFG["MODE"]
     if mode not in ("paper", "dry", "live"):
         print(f"MODE '{mode}' non valido: usa paper, dry o live")
@@ -5764,6 +6063,7 @@ async def main():
             "Shadow": lambda: shadow_trade_agent(st, http),
             "Recap": lambda: recap_agent(st),
             "Helius": lambda: helius_agent(st),
+            "Casi": lambda: case_watch_agent(st, http),
             "Telegram": lambda: telegram_agent(st),
             "Dashboard": lambda: dashboard(st),
         }

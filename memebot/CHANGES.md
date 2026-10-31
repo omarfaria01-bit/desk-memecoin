@@ -874,3 +874,27 @@ Fonte: `docs/claude_knowledge_review.md`. Secondo riavvio (SIGTERM) dopo quello 
 
 Test: nuovo `tests/test_v84f.py`; tutte le 13 suite OK. Inclusi nel commit `CLAUDE.md`, `docs/` e l'esclusione
 `claude_report*` in `tools/sync_github.sh`.
+
+## Aggiornamento 31/10/2026 (mattina) – v8.5: correzioni di Claude + cluster sconosciuto = niente acquisto (PAPER)
+
+**Crediti: Claude** (commit 8dd05f1..68011c5, revisionati e adattati; patch `apply.patch`).
+- Correzioni di Claude sul percorso live (inerte in PAPER): `live_pending_tx.json` per le tx in sospeso,
+  `MARK_NOROUTE_CONFIRM` = 3 (override 2-6, intero), liquidità assente su DexScreener ≠ liquidità 0
+  (`liq_known` in `summarize`), correzioni in `sources/cluster_v2.py`, test `tests/test_v85.py`.
+- Nostra aggiunta alla patch: `sell()` risolve una vendita live precedente arrivata dopo il timeout
+  (`resolved_prev`), `_sell_position` la tratta come parziale se restano token; `live_pending_tx.json*` in BAD del sync.
+- **Decisione Kiwi:** `CLUSTER_UNKNOWN_ACTION` passa da `soft` a `skip`: cluster non verificabile = niente acquisto,
+  shadow con tag `cluster_unknown`, contatore `stats.cluster_unknown_skip` (riga nel recap). Override: ammesso solo
+  `skip` (non si può riallentare). Storico events.jsonl: 15 token "unknown" su 43 scansioni cluster v2; uno solo
+  (CATE, 30/10 20:14) era stato comprato con la vecchia regola soft.
+- **Casi aperti (`CASE_WATCH`)**: Leverhedge (FWatMY…Bympump) = `caso_stelle_aperto`, né buono né cattivo
+  (Bubblemaps ~14 cluster a stella, GMGN rischio rug 46.9%, top10 4.76%, +25.000% 24 h). Controllo DexScreener
+  gratuito ogni ora (prezzo, liquidità, mcap) in `case_watch.jsonl`/`case_watch.json` fino al rug (prezzo o
+  liquidità −80% dal massimo, liquidità < $1k o nessuna coppia) o a 7 giorni. Etichetta automatica `bad_cluster`
+  sostituita, niente promozione a 'rug' dal label_watch, nessun effetto sul Learner. Mai acquisto (Filter ed
+  Executor lo scartano con "caso aperto").
+- Casi Kiwi 31/10 in `LABEL_SEEDS` (pnl None, nessun effetto sul Learner): Dacity = controllo positivo confermato;
+  GTA6, STONK, FLOAT, neet, LUMI = probabile buono, da confermare. Vedi `docs/kiwi_controls.md`.
+
+Test (solo su copia in /tmp): 14 suite su 15 OK compreso il nuovo `tests/test_v85b.py`; `test_narr` fallisce anche
+senza patch (websocket pump.fun). ATTENZIONE: le suite scrivono e cancellano file in DATA_DIR, mai lanciarle nel live.

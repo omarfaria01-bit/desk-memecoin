@@ -132,6 +132,8 @@ async def run_analyst(cands, st):
         out.append(qo.get_nowait())
     await asyncio.sleep(0.05)
     return out
+assert D.CFG["CLUSTER_UNKNOWN_ACTION"] == "skip"   # v8.5: default = niente acquisto
+D.CFG["CLUSTER_UNKNOWN_ACTION"] = "soft"           # ramo 'soft' (vecchio comportamento) ancora coperto
 D.CL2["cache"].clear(); D.CL2["tasks"].clear()
 st = D.State(); st.threshold = 0.0
 out = asyncio.run(run_analyst([{"mint": k, "m": dict(mk), "sec": {"soft": []}, "filter_ok": True}
@@ -149,7 +151,9 @@ D.CFG["CLUSTER_UNKNOWN_ACTION"] = "skip"
 st = D.State(); st.threshold = 0.0
 out = asyncio.run(run_analyst([{"mint": "UNK1", "m": dict(mk), "sec": {"soft": []}, "filter_ok": True}], st))
 assert out == [] and st.reject_reasons.get("cluster non verificato") == 1
-D.CFG["CLUSTER_UNKNOWN_ACTION"] = "soft"
+assert st.stats.get("cluster_unknown_skip") == 1, st.stats
+if D.CFG["SHADOW_TRADES"]:
+    assert opened[-1][0] == "UNK1" and opened[-1][1] == ["cluster_unknown"] and opened[-1][2] == "cluster_unknown", opened[-1]
 # scarto per momentum (come BEAST): la scansione parte lo stesso e i dati finiscono sullo shadow
 D.CL2["cache"].clear(); D.CL2["tasks"].clear()
 D.cluster2_scan = D.__dict__["cluster2_scan"]
@@ -255,7 +259,10 @@ r = D.parse_overrides(json.dumps({"global": {"CLUSTER_GROUP_HARD_PCT": 40, "HONE
                                              "CLUSTER_UNKNOWN_ACTION": "ok"}}), D.OVR.values(), {}, set())
 g = r["globals"]
 assert g["CLUSTER_GROUP_HARD_PCT"] == 20 and g["HONEYPOT_SELL_IMPACT_PCT"] == 25, g
-assert g["CLUSTER_UNKNOWN_ACTION"] == "soft", g
+assert g["CLUSTER_UNKNOWN_ACTION"] == "skip", g   # v8.5: 'ok' non valido -> resta skip
+r = D.parse_overrides(json.dumps({"global": {"CLUSTER_UNKNOWN_ACTION": "soft"}}), D.OVR.values(), {}, set())
+assert r["globals"].get("CLUSTER_UNKNOWN_ACTION", "skip") == "skip", r   # non si puo riallentare a 'soft'
+
 print("override OK")
 print("TUTTI I TEST v8.2 OK")
 
