@@ -108,6 +108,13 @@ La regola base: i controlli di sicurezza non diventano **mai** dinamici. Possono
 - Metrica: guadagno medio per trade dopo i costi, % di rug e drawdown massimo. Il win rate non conta.
 - Ogni pezzo in un branch `claude/dynamic-16x` separato; deploy solo dopo la mia review e il test in paper.
 
+## 17) Filtro "nomi di marchi famosi" — idea di Kiwi (dopo il 15)
+Token con nomi o loghi di aziende e personaggi famosi (es. LEGO, AMAZON, BEAST/MrBeast, Gemini, Pumpfun) sono spesso rug o honeypot; anche le deep review di Mark (`/workspace/desk_reviews/deep_reviews.json`) danno punteggi bassi alle imitazioni di brand.
+- Lista di brand e ticker famosi (aziende, celebrità, exchange e piattaforme crypto) con match su nome e simbolo (case-insensitive, varianti tipo "AMAZ0N").
+- Prima verifica sui dati: % di rug, crolli ≤−50% e media dei token-brand rispetto agli altri (shadow più retro-label). Report con numeri.
+- Implementazione come **tag + penalità sul punteggio in shadow**; diventa hard reject solo se i dati mostrano un rug rate chiaramente più alto. Logga il tag.
+- Branch `claude/brand-filter`; deploy solo dopo la mia review.
+
 ## Dati reali
 
 - Il branch `data-snapshot` (cartella `data/`) contiene una copia notturna dei dati paper reali del bot (trade ombra, trade, equity, eventi, state, price_paths, prior, smart wallets, creator_seed, call Discord etichettate). Niente chiavi.
