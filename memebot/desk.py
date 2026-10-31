@@ -2316,6 +2316,21 @@ def apply_case_watch(st, now=None):
 def case_watch_step(c, m, now):
     """Aggiorna un caso con un dato DexScreener (m=None: nessuna coppia). Restituisce la riga di log."""
     c.setdefault("status", "aperto")
+    if not m:
+        # review Claude: un solo giro senza coppia (429, DexScreener lento) chiudeva il caso come rug per sempre e
+        # scriveva prezzo 0. Ora rug "nessuna coppia" solo dopo CASE_MISS_RUG controlli di fila senza dati.
+        c["miss"] = int(c.get("miss", 0)) + 1
+        row = {"t": datetime.fromtimestamp(now, TZ).strftime("%Y-%m-%d %H:%M"), "id": None, "sym": c["sym"],
+               "price": None, "liq": None, "mcap": None, "chg_h24": None, "from_peak_pct": None,
+               "liq_from_peak_pct": None, "miss": c["miss"]}
+        if c.get("n", 0) >= 1 and c["miss"] >= int(CFG.get("CASE_MISS_RUG", 3)):
+            c["status"], c["end_t"] = "rug", now
+            c["end_why"] = f"nessuna coppia per {c['miss']} controlli di fila"
+        elif now >= c["until"]:
+            c["status"], c["end_t"], c["end_why"] = "chiuso_7g", now, "7 giorni passati (ultimo controllo senza dati)"
+        row["status"] = c["status"]
+        return row
+    c["miss"] = 0
     price, liq = (fnum(m.get("price")), fnum(m.get("liq"))) if m else (0.0, 0.0)
     if m and not m.get("liq_known", True):
         liq = c.get("last_l", 0.0)
@@ -2342,6 +2357,7 @@ def case_watch_step(c, m, now):
 # tra cui iCoin (poi x41). Ora: in watchlist, ricontrollo UNA volta sola dopo la migrazione (entro 6 ore), al massimo
 # CURVE_RECHECK_MAX_H all'ora. Alla ricontrollata il token rientra dall'inizio della pipeline: nessuna eccezione.
 CURVE_WATCH_PATH = os.path.join(DATA_DIR, "curve_watch.json")
+CFG.setdefault("CASE_MISS_RUG", 3)   # review Claude: controlli di fila senza coppia prima di un caso 'rug' 
 CFG.setdefault("CURVE_WATCH", True)
 CFG.setdefault("CURVE_WATCH_TTL_SEC", 6 * 3600)
 CFG.setdefault("CURVE_WATCH_CHECK_SEC", 300)
