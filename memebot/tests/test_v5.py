@@ -45,7 +45,7 @@ print("window5 OK")
 # sizing + cost gate + exposure
 async def sizing():
     st = D.State(); st.cash = 1000.0
-    def c(score): return {"filter_ok": True, "analyst_ok": True, "score": score, "thesis": "t", "features": {}, "sec": {}}
+    def c(score): return {"filter_ok": True, "analyst_ok": True, "score": score, "thesis": "t", "features": {}, "sec": {"lp_status": "ok"}}
     m = {"symbol": "S", "price": 1.0, "liq": 200000.0, "url": ""}
     await D._execute_buy(st, D.PaperBroker(), c(0.6), "A", m); assert abs(st.positions["A"]["cost"] - 30) < 1e-6
     await D._execute_buy(st, D.PaperBroker(), c(1.2), "B", m); assert abs(st.positions["B"]["cost"] - 0.05 * D.equity(st)) < 2

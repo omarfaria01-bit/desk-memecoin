@@ -1026,6 +1026,7 @@ def summarize(pairs):
         "buys_m5": int(fnum(tx5.get("buys"))), "sells_m5": int(fnum(tx5.get("sells"))),
         "vol_m5": fnum(vol.get("m5")), "vol_h1_main": fnum(vol.get("h1")),
         "chg_h1": fnum(chg.get("h1")), "chg_m5": fnum(chg.get("m5")),
+        "chg_m5_known": chg.get("m5") is not None,   # review Claude: variazione 5m assente != 0%
         "mcap": fnum(main.get("marketCap") or main.get("fdv")), "url": str(main.get("url", "")),
         "pairs_all": [str(p.get("pairAddress")) for p in pairs if p.get("pairAddress")][:30],   # v8.5
         "twitter": bool(socials & {"twitter", "x"}), "telegram": "telegram" in socials,
@@ -2785,9 +2786,7 @@ async def honeypot_check(st, http, mint, size_usd, sec):
                         {"mint": mint, "t22_flags": info["t22_flags"], "hard": list(h)})
     else:
         miss.append("account del mint non letto")
-    # RugCheck (gia letto dal Filter): rug segnalato o authority = rigido
-    if sec.get("rugged"):
-        hard.append("RugCheck: token segnalato come rug")
+    # RugCheck (gia letto dal Filter): un token 'rugged' e gia scartato in security_check (sec non ha quella chiave)
     sol = sol_usd() if sol_known() else 0.0
     lam = int((size_usd / sol if sol > 0 else 0.1) * 1e9)
     q, err = await _hp_quote(http, WSOL, mint, lam)
@@ -4838,9 +4837,9 @@ async def token_decimals(http, mint):
     try:
         dec = int(d["result"]["value"]["decimals"])
     except Exception:  # noqa: BLE001
-        if not mint.endswith("pump"):
-            return None
-        dec = 6  # i token pump.fun hanno sempre 6 decimali (l'RPC pubblico a volte risponde 429)
+        # review Claude: niente piu 6 'a occhio' per i mint che finiscono in 'pump': un indirizzo vanity non pump.fun
+        # con 9 decimali dava quantita sbagliate di 1000x (falso crollo nel mark). Errore RPC = sconosciuto, riprova.
+        return None
     SIM["dec"][mint] = dec
     return dec
 
@@ -5575,6 +5574,8 @@ def ret5_entry(m, candles=None):
         v = None
     if v and v.get("ret5") is not None:
         return fnum(v["ret5"]), "candele"
+    if not m.get("chg_m5_known", True):   # review Claude: senza candele e senza chg_m5 il ritorno non e noto
+        return None, "nessun dato"
     return fnum(m.get("chg_m5")), "chg_m5"
 
 
@@ -5628,6 +5629,8 @@ def spawn_confirm2(st, http, mint, m, fe, kind):
 def m5_gate(m, candles=None):
     """v8.4f: None se ok, altrimenti il motivo. Nessuna eccezione da bonus KOL, narrativa o trending."""
     r5, src = ret5_entry(m, candles)
+    if r5 is None:   # review Claude: dato mancante = non verificabile, mai 'ok' (prima valeva 0% e passava)
+        return "prezzo a 5 min non verificabile (nessuna candela e nessuna variazione 5m da DexScreener)"
     if r5 < fnum(CFG["MIN_CHANGE_M5_PCT"]):
         return f"prezzo in calo a 5 min ({r5:+.1f}% da {src}, minimo {fnum(CFG['MIN_CHANGE_M5_PCT']):+g}%)"
     return None
@@ -5649,6 +5652,8 @@ def lp_gate(c):
     lpp = sec.get("lp_locked_pct")
     if stt in ("ok", "partial") and lpp is not None and fnum(lpp) < LP_ZERO_MAX_PCT:
         return "lp_unlocked_zero"
+    if stt is None:   # review Claude: stato LP mai calcolato = sconosciuto, mai 'ok'
+        return "lp_unknown"
     return None
 
 

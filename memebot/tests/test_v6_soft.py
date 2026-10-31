@@ -79,7 +79,7 @@ print("override OK")
 br = D.PaperBroker()
 async def go_buy(mult):
     st = D.State(); st.cash = 1000.0
-    c = {"filter_ok": True, "analyst_ok": True, "score": 0.6, "thesis": "t", "features": {}, "sec": {},
+    c = {"filter_ok": True, "analyst_ok": True, "score": 0.6, "thesis": "t", "features": {}, "sec": {"lp_status": "ok"},
          "soft": ["bundle"] if mult < 1 else [], "size_mult": mult}
     await D._execute_buy(st, br, c, "M", {"symbol": "S", "price": 1.0, "liq": 5_000_000.0, "url": ""})
     return st.positions["M"]

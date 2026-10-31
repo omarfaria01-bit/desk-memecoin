@@ -139,6 +139,9 @@ async def check(session, mint, cfg=None, now=None):
                 err = type(e).__name__
     if not res:
         return {"level": "unknown", "why": f"GoPlus non disponibile ({err})", "flags": []}
+    if not any(res.get(k) is not None for k in ("mintable", "freezable", "closable", "balance_mutable_authority")):
+        # review Claude: voce presente ma campi chiave vuoti (token non ancora indicizzato) = sconosciuto, mai 'ok'
+        return {"level": "unknown", "why": "GoPlus: token non ancora analizzato (campi vuoti)", "flags": []}
     hard, soft, flags, fee = verdict(res, c)
     out = {"level": "hard" if hard else "ok", "why": "; ".join(hard or soft), "hard": hard, "soft": soft,
            "flags": flags, "fee_pct": fee}

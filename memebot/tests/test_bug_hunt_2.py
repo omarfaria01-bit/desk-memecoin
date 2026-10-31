@@ -115,3 +115,49 @@ assert D.rc_down_doubts(st, cl, {"creator": "CR1"}, sec) == []
 sec_big = {"rc_holders": [("CR1", D.CFG["MAX_CREATOR_PCT"] + 1), ("X", 1.0)]}
 assert any("il creatore tiene" in x for x in D.rc_down_doubts(st, cl, {"creator": "CR1"}, sec_big))
 print("quota creatore ripiego OK")
+
+# ---- punti piccoli (issue #2, 11-18)
+from sources import goplus as GP, creator_history as CRH
+m_nochg = D.summarize([{"priceUsd": "1", "liquidity": {"usd": 1e4}, "pairAddress": "p", "baseToken": {}, "priceChange": {}}])
+assert m_nochg["chg_m5_known"] is False and D.m5_gate(m_nochg, None).startswith("prezzo a 5 min non verificabile")
+m_chg = D.summarize([{"priceUsd": "1", "liquidity": {"usd": 1e4}, "pairAddress": "p", "baseToken": {},
+                      "priceChange": {"m5": 3.0}}])
+assert D.m5_gate(m_chg, None) is None
+assert D.lp_gate({"sec": {"soft": []}}) == "lp_unknown" and D.lp_gate({"sec": {"lp_status": "ok"}}) is None
+
+
+class FakeResp:
+    def __init__(self, d): self.d, self.status = d, 200
+    async def __aenter__(self): return self
+    async def __aexit__(self, *a): return False
+    async def json(self, content_type=None): return self.d
+
+
+class FakeSess:
+    def __init__(self, d): self.d = d
+    def get(self, *a, **k): return FakeResp(self.d)
+
+
+GP._cache.clear() if hasattr(GP, "_cache") else None
+r = asyncio.run(GP.check(FakeSess({"code": 1, "result": {"MNEW": {"metadata_mutable": None}}}), "MNEW"))
+assert r["level"] == "unknown" and "campi vuoti" in r["why"], r
+coins = [{"mint": f"c{i}", "created_timestamp": 1, "ath_market_cap": 1e5, "usd_market_cap": None} for i in range(6)]
+ev = CRH.evaluate(coins, "X", created_ms=10_000_000_000_000, now=10_000_000_000)
+assert ev["prev"] == 0 and ev["dead"] == 0 and ev["level"] == "none", ev   # mcap mancante non e 'morto'
+
+
+async def no_info(url):
+    return None
+CRH._MEM.update(loaded=True, data={"mint": {}, "creator": {}})
+CRH._save = lambda: None
+asyncio.run(CRH.lookup(no_info, "MX", now=1_000_000.0))
+mi = CRH._MEM["data"]["mint"]["MX"]
+assert 1_000_000.0 - mi["t"] > CRH.CFG["CACHE_TTL_H"] * 3600 - 11 * 60   # scade in ~10 min, non in 12 h
+
+
+class H:
+    async def post(self, *a, **k):
+        return None
+D.SIM["dec"].pop("V" * 40 + "pump", None)
+assert asyncio.run(D.token_decimals(H(), "V" * 40 + "pump")) is None     # niente piu 6 'a occhio'
+print("punti piccoli OK")
