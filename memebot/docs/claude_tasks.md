@@ -55,3 +55,16 @@ Dati di Mark (`/workspace/desk_backtest_hist/results.md` §12, OOS ottobre, 790 
 - Aggiungi in shadow il campo `min_since_migration` all'ingresso e un gate in shadow `ENTRY_MIN_AGE_MIN` (test 10/15/20 min): registra cosa sarebbe successo entrando solo dopo l'età minima (riusa i prezzi già letti, zero chiamate extra).
 - Script offline che, sulle righe shadow/trade valide, misura per i crash ≤−50%: concentrazione holder, rapporto buy/sell, `sniper_pct`, `first20_sold_pct`, `dev_first_sell_dt`, `serial_launcher`, `discord_call`, e trova le soglie che bloccano più crash perdendo meno vincenti (controlli positivi in `docs/kiwi_controls.md` mai bloccati, lezioni negative sempre bloccate).
 - Output: report + proposta di soglie in `overrides.example.json`. Nessuna soglia attiva senza review.
+
+## 11) Campionamento più ampio degli scarti in shadow — priorità alta (dopo il 10)
+Per accelerare il learning: oggi solo una parte dei token scartati viene seguita in shadow, quindi abbiamo pochi esempi etichettati.
+- Flag `SHADOW_REJECT_SAMPLE` (frazione 0–1, default 0.5) e `SHADOW_MAX_OPEN` (tetto alle posizioni shadow aperte, default 60) per seguire in shadow anche una quota casuale (seed registrato) dei token scartati da prefiltro/filtri (escludi honeypot, freeze/mint authority, Token-2022 pausable: quelli restano scarto duro senza shadow).
+- Ogni riga ha `shadow_reason="sample"` + le chiavi di scarto, così il learning distingue "scartato ma seguito" da "candidato vero".
+- Zero chiamate extra a Helius/Birdeye: riusa i prezzi già letti (PumpPortal/DexScreener) e rispetta i limiti gratuiti; se il budget richieste supera l'80% riduci il campionamento da solo.
+- Test: carico con 200 scarti finti → nessun superamento del tetto, RAM stabile.
+
+## 12) Ri-etichettatura notturna di tutti i token visti — priorità alta (dopo il 10)
+- Script offline `tools/retro_label.py` (cron sul server alle 04:00 Rome, `nice`), che per ogni mint visto nelle ultime 24–48 h (watchlist, scartati, shadow, trade) prende le candele 1m da GeckoTerminal (rispetta il rate limit, cache su disco, riprendibile) e assegna l'etichetta con le convenzioni del bot: win = TP1 +30% prima di SL −12%; rug = ≤10% dell'entrata entro 24 h (anche dopo TP1, e allora **non** è positivo); loss; unknown.
+- Output `data/retro_labels.jsonl` (idempotente) con le feature viste al momento + etichetta; nessun token rug o segnalato come cattivo è mai esempio positivo.
+- Il learning lo legge solo come dati in più (flag `RETRO_LABELS_IN_LEARNING`, default off): il reviewer lo attiva dopo il controllo.
+- Nota: quanti mint al giorno, tempo di esecuzione, richieste usate.
