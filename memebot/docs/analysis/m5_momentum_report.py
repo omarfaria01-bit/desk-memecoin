@@ -46,6 +46,11 @@ def classify(msg):
         if "in 5 min" in msg and "da candele" not in msg and "da chg_m5" not in msg:
             return "calo_5m_raw_meno8"          # taglio grezzo esistente, invariato
         if "prezzo in calo a 5 min" in msg:
+            # review Claude: solo la fascia [-8%, 0) viene liberata da MIN_CHANGE_M5_PCT = -8; sotto -8% (es. candele
+            # a -10,8% con tick sopra -8%) resterebbe scartato e non va contato come prova
+            m = re.search(r"\(([-+]?\d+(?:\.\d+)?)% da ", msg)
+            if m and float(m.group(1)) < -8.0:
+                return "calo_5m_candele_sotto_meno8"
             return "calo_5m_candele_zero"       # m5_gate: MIN_CHANGE_M5_PCT
         return "altro_momento"
     if "acq/vend 5m" in msg:
@@ -69,11 +74,15 @@ def stats(items):
     n = len(items)
     if n == 0:
         return {"n": 0}
-    pnls = [float(r["pnl_cpmm"] or r["pnl_pct"]) for r in items]
+    pnls = [float(r.get("pnl_cpmm") or r["pnl_pct"]) for r in items]
     rugs = sum(1 for r in items if r["rug"] == "1")
     wins = sum(1 for p in pnls if p >= 30)
     lessons = sorted({r["symbol"] for r in items if r["symbol"].upper() in NEG_LESSONS})
-    return {"n": n, "avg_pnl": round(sum(pnls) / n, 1), "rug": rugs, "rug_pct": round(100 * rugs / n, 1),
+    srt = sorted(pnls)
+    med = srt[n // 2] if n % 2 else (srt[n // 2 - 1] + srt[n // 2]) / 2
+    days = sorted({str(r.get("aperto", ""))[:10] for r in items if r.get("aperto")})
+    return {"n": n, "avg_pnl": round(sum(pnls) / n, 1), "median_pnl": round(med, 1), "days": days,
+            "rug": rugs, "rug_pct": round(100 * rugs / n, 1),
             "win30": wins, "win30_pct": round(100 * wins / n, 1), "lezioni_negative": lessons}
 
 
@@ -131,7 +140,13 @@ def main(shadow_path, events_path):
     cg = buckets.get("calo_5m_candele_zero", [])
     sc = stats(cg)
     print("\n## Proposta\n")
-    if sc.get("n", 0) >= 5 and sc["avg_pnl"] > 0 and sc["rug"] == 0:
+    # review Claude: con meno di 30 casi o un solo giorno di dati la proposta non e dimostrata (la review del 30/10
+    # sulla stessa fascia trovava -14,1% su 9): solo segnalata, mai JSON da copiare
+    if sc.get("n", 0) and (sc["n"] < 30 or len(sc.get("days", [])) < 3):
+        print(f"Campione troppo piccolo: n={sc['n']} su {len(sc.get('days', []))} giorni "
+              f"(pnl medio {sc['avg_pnl']:+.1f}%, mediana {sc['median_pnl']:+.1f}%). Nessuna proposta: servono >= 30 casi "
+              f"su >= 3 giorni (la review del 30/10 sulla stessa fascia dava -14,1% su 9).")
+    elif sc.get("n", 0) >= 5 and sc["avg_pnl"] > 0 and sc["rug"] == 0:
         print(f"MIN_CHANGE_M5_PCT 0.0 -> -8.0 (limite di clamp OVR_LIMITS, combacia col taglio grezzo "
               f"gia esistente a -8%, invariato). Evidenza: n={sc['n']}, pnl medio {sc['avg_pnl']:+.1f}%, "
               f"rug {sc['rug']}/{sc['n']}, win>=30% {sc['win30']}/{sc['n']}.")

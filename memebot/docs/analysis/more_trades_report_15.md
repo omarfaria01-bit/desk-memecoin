@@ -65,3 +65,14 @@ per la prossima iterazione.
 ## Riproducibilità
 
 `python3 docs/analysis/m5_momentum_report.py /tmp/desk_data/data/shadow_trades.csv /tmp/desk_data/data/events.jsonl`
+
+
+## Review di Claude (31/10, dati `data-snapshot` 13:18): proposta SOSPESA
+
+Ho rilanciato lo script sui dati reali e i numeri tornano (n=9, +17,5%), ma ci sono tre problemi:
+
+1. **Il campione include un caso che la proposta non libera.** Con `MIN_CHANGE_M5_PCT` = -8 passa solo chi ha un calo a 5 min in [-8%, 0). "offline" (09:06) aveva **-10,8% dalle candele** (il tick era sopra -8%) e resterebbe scartato. Fascia vera: **n = 8, media +15,8%, mediana +26,3%, 3/8 con esito >= +30%, 0 rug**. Lo script ora separa `calo_5m_candele_sotto_meno8`.
+2. **LUMI non resta scartato.** Alle 09:42 LUMI era fermato da `m5_gate` con **-1,2%**: con -8 passerebbe. Non è un danno (LUMI è un "probabile buono" in `docs/kiwi_controls.md`), ma la frase "resta scartato anche con -8%" è sbagliata.
+3. **Prova debole e in conflitto.** Tutti e 8 i casi sono tra le 08:18 e le 11:20 del 31/10 (un solo regime di mercato). 0 rug su 8 è compatibile con un tasso vero fino a circa il 37% (intervallo al 95%). La review del 30/10 (`docs/claude_knowledge_review.md`, punto c), sulla **stessa fascia**, dava **-14,1% su 9 (1 vincente)**, ed è il motivo per cui la soglia è stata portata a 0. Messi insieme, i due campioni danno circa 0.
+
+**Raccomandazione:** non applicare per ora. Tenere `MIN_CHANGE_M5_PCT` = 0 e riesaminare con almeno 30 casi su almeno 3 giorni. Il campione degli scarti in shadow (compito 11, branch `claude/shadow-sample`) accelera la raccolta. Lo script non stampa più il JSON da copiare finché il campione è sotto quella soglia. `docs/proposed_overrides_15.json` ha `global` vuoto e la proposta in `global_proposto_sospeso`.
