@@ -1251,6 +1251,59 @@ def build_features(st, mint, m, sec, ch):
 
 
 # ======================================================================= Scout
+# ---------------------------------------------------------------- compito 21 (Claude): scarto per eta = rimandare
+# Caso DOUGHBRIKS (31/10 17:30): scartato dal prefiltro SOLO per PF_MIN_AGE_MIN (1,4 min, liq $50k, +725% in 5 min) e mai
+# piu rivisto. Ora torna in watchlist con priorita e viene rivalutato quando supera l'eta minima, passando di nuovo da
+# TUTTI i controlli (prefiltro, sicurezza, cluster v2, Analyst). Inoltre ogni scarto solo-eta apre uno shadow 'age_only'
+# (fasce di volume e momento nei segnali, PnL a 5/15/60 min) per decidere con i dati se abbassare PF_MIN_AGE_MIN.
+CFG.setdefault("AGE_RECHECK", True)
+CFG.setdefault("AGE_RECHECK_MAX", 2)         # ricontrolli massimi per mint
+CFG.setdefault("AGE_RECHECK_PAD_SEC", 30)    # margine dopo l'eta minima
+
+
+def _band(x, edges, labels):
+    for e, lab in zip(edges, labels):
+        if x < e:
+            return lab
+    return labels[-1]
+
+
+def age_requeue(st, http, mint, m, w=None, now=None):
+    """Scarto solo per eta: shadow age_only + rientro in watchlist (prio) dopo l'eta minima. True se rimandato."""
+    now = now or time.time()
+    w = w or {}
+    vol_b = _band(fnum(m.get("vol_h1")), (25e3, 100e3, 500e3), ("vol<25k", "vol25-100k", "vol100-500k", "vol>500k"))
+    m5_b = _band(fnum(m.get("chg_m5")), (0.0, 20.0, 100.0), ("m5<0", "m5 0-20", "m5 20-100", "m5>100"))
+    if CFG["SHADOW_TRADES"]:
+        spawn_shadow(st, http, mint, m, ["age_only"], "prefiltro: solo eta minima", 0.0, [], tag="age_only",
+                     signals=[f"src:{m.get('src') or '?'}", f"age_vol:{vol_b}", f"age_m5:{m5_b}",
+                              f"age_min:{fnum(m.get('age_min')):.1f}"])
+    n = int(w.get("age_recheck", 0)) + 1
+    if not CFG.get("AGE_RECHECK") or n > int(CFG["AGE_RECHECK_MAX"]):
+        return False
+    pf = SRC["pf"] if "pf" in SRC else None
+    min_age = fnum(pf_cfg(st).get("PF_MIN_AGE_MIN"), 3.0) if pf else 3.0
+    wait = max(0.0, (min_age - fnum(m.get("age_min"))) * 60) + float(CFG["AGE_RECHECK_PAD_SEC"])
+    st.processed.pop(mint, None)
+    st.watch[mint] = {"seen": now, "sym": str(m.get("symbol", "?"))[:12], "src": "age_recheck", "prio": True,
+                      "not_before": now + wait, "age_recheck": n}
+    write_event("Filter", "age_requeue", f"{m.get('symbol')} troppo giovane ({fnum(m.get('age_min')):.1f} min): "
+                f"ricontrollo tra {wait:.0f} s (tentativo {n})", {"mint": mint, "vol_band": vol_b, "m5_band": m5_b,
+                                                                   "liq": m.get("liq"), "vol_h1": m.get("vol_h1")})
+    return True
+
+
+def age_ckpt_tick(o, price, now):
+    """Shadow age_only: PnL a 5/15/60 min dall'ingresso con i prezzi gia letti (prima lettura dopo ogni soglia)."""
+    if o.get("tag") != "age_only" or fnum(price) <= 0 or fnum(o.get("price")) <= 0:
+        return
+    ck = o.setdefault("ckpt", {})
+    held = (now - fnum(o.get("t"), now)) / 60
+    for k in (5, 15, 60):
+        if str(k) not in ck and held >= k:
+            ck[str(k)] = round((price / fnum(o["price"]) - 1) * 100, 2)
+
+
 def add_watch(st, mint, sym, src, prio=False):
     """v8.3: prio=True (trending) -> analizzato per primo e mai sfrattato da una nuova pool. Le fonti secondarie
     (nuove pool, pump.fun) hanno un limite (WATCH_NEW_MAX): oltre, esce la piu vecchia non prioritaria."""
@@ -3546,6 +3599,7 @@ def apply_market_tick(o, m, now):
     o["last_price"], o["last_ok"] = m["price"], now
     if m.get("liq_known", True):  # v8.5: liquidita assente = dato mancante, non rug
         o["liq"], o["liq_ts"] = max(m["liq"], 1.0), now
+    age_ckpt_tick(o, m["price"], now)   # compito 21
     fe_ = o.get("fe") if isinstance(o.get("fe"), dict) else o.get("entry_features")
     if isinstance(fe_, dict):
         age_gate_tick(fe_, m["price"], now)   # compito 10: ingresso ritardato, solo misura
@@ -3781,7 +3835,8 @@ def record_outcome(st, keys, pnl_pct, rug, src, now=None):
         learn_shadow_step(st, key, now)
 
 
-MEASURE_ONLY_KEYS = {"narrative_relax", "rugcheck_down", "bundle_established", "buysell_relax", "score_band"}
+MEASURE_ONLY_KEYS = {"narrative_relax", "rugcheck_down", "bundle_established", "buysell_relax", "score_band",
+                     "age_only"}   # compito 21: scarti solo per eta, solo misura
 # v8.5e (analisi di Mark, decisione Kiwi 08:47): fascia di punteggio sotto soglia = acquisto PAPER a meta size;
 # acquisti/vendite 5m appena sotto il minimo = solo shadow buysell_relax.
 CFG.setdefault("SCORE_BAND", True)
@@ -4240,10 +4295,16 @@ async def filter_agent(st, http, q_out):
                 w = st.watch[mint]
                 w["liq_max"] = max(fnum(w.get("liq_max")), m["liq"])  # v7: per vedere una rimozione LP in corso
                 m["liq_max"], m["src"] = w["liq_max"], w.get("src", "")
+                if fnum(w.get("not_before")) > now:   # compito 21: in attesa dell'eta minima
+                    continue
                 if m["vol_h1"] < CFG["MIN_VOLUME_H1"]:
                     continue
                 st.watch.pop(mint, None)
                 st.processed[mint] = now
+                if w.get("age_recheck"):   # compito 21: ricontrollo completo (prefiltro, sicurezza, cluster, Analyst)
+                    write_event("Filter", "age_recheck", f"{m['symbol']} ricontrollo dopo l'eta minima "
+                                f"({fnum(m.get('age_min')):.1f} min, tentativo {w['age_recheck']})",
+                                {"mint": mint, "age_min": m.get("age_min"), "liq": m["liq"], "vol_h1": m["vol_h1"]})
                 st.stats["volume_ok"] += 1
                 if mint in CASE_MINTS:   # v8.5: caso aperto = solo osservazione, mai acquisto (neanche paper)
                     reject(st, mint, m["symbol"], "caso aperto in osservazione (nessun acquisto)", cat="caso aperto",
@@ -4272,6 +4333,8 @@ async def filter_agent(st, http, q_out):
                     if fails:
                         st.stats["prefilter_reject"] = st.stats.get("prefilter_reject", 0) + 1
                         reject(st, mint, m["symbol"], "prefiltro: " + ", ".join(fails), cat="prefiltro " + fails[0])
+                        if fails == ["PF_MIN_AGE_MIN"]:   # compito 21: solo troppo giovane = rimandare, non chiudere
+                            age_requeue(st, http, mint, m, w, now)
                         continue
                 ok, reason, cat, sec = await security_check(st, http, mint, m, cache)
                 if not ok:
@@ -6956,6 +7019,8 @@ def _close_shadow_row(st, mint, sh, pnl, rug, why, now=None):
            "invalid_for_learning": (sh.get("inv_why") or "no_price") if sh.get("np_invalid") else ""}
     _lag = dict(sh.get("_lag") or {})   # v8.6 (A)
     fe = dict(sh.get("fe") or {})  # v8.1
+    if sh.get("ckpt"):
+        fe["ckpt_pnl"] = dict(sh["ckpt"])   # compito 21: PnL a 5/15/60 min (shadow age_only)
     age_gate_close(fe, 0.0 if rug else sh.get("last_price"), sh.get("price"))   # compito 10: solo misura
     fe.update(fast_exit_fields(sh, now, pnl))   # compito 6: uscita veloce simulata, solo misura
     if fe and sh.get("_lagx"):
