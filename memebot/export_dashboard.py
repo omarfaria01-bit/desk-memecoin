@@ -106,6 +106,94 @@ except Exception:
     pass
 events = events[-60:][::-1]
 
+# ---- trade ombra (shadow): stessa logica di web/server.py (aperti da state.json, chiusi da shadow_trades.csv)
+import re
+REMOVED = "[nome rimosso]"
+_LEET = str.maketrans({"0": "o", "1": "i", "!": "i", "3": "e", "4": "a", "@": "a", "5": "s", "$": "s", "7": "t", "8": "b"})
+# sottostringhe (dopo normalizzazione e rimozione di tutto cio che non e lettera)
+_SUBSTR = ["nigg", "nigga", "negro", "faggot", "fagot", "kike", "chink", "tranny", "trannie", "retard",
+           "wetback", "beaner", "raghead", "towelhead", "sandnigg", "coonass", "spearchucker", "porchmonkey",
+           "frocio", "ricchion", "culattone", "finocchio", "negr", "zingar", "terrone", "mongoloid", "spastic",
+           "kaffir", "kafir", "paki", "golliwog", "jigaboo", "pickaninny"]
+_SUB_RE = re.compile("|".join(sorted(map(re.escape, _SUBSTR), key=len, reverse=True)))
+# parole intere (troppo corte per la sottostringa)
+_WORD_RE = re.compile(r"(?<![a-z])(fag|fags|spic|spics|coon|coons|gook|gooks|dyke|dykes|nig|nigs|jap|japs|"
+                      r"chinc|kyke|wop|wops|tard|tards|negri|negre)(?![a-z])")
+
+
+def offensive(s):
+    if not s:
+        return False
+    low = str(s).lower().translate(_LEET)
+    letters = re.sub(r"[^a-z]", "", low)
+    if _SUB_RE.search(letters):
+        return True
+    return bool(_WORD_RE.search(re.sub(r"[^a-z]+", " ", low)))
+
+
+def clean_sym(s):
+    s = "" if s is None else str(s)[:40]
+    return REMOVED if offensive(s) else s
+
+
+def clean_text(s, syms=()):
+    """Toglie dal testo i simboli offensivi noti e ogni parola offensiva."""
+    if s is None:
+        return ""
+    s = str(s)
+    for sym in syms:
+        if sym and offensive(sym):
+            s = s.replace(sym, REMOVED)
+    return re.sub(r"\S+", lambda m: REMOVED if offensive(m.group(0)) else m.group(0), s)
+
+
+def _f(x, d=0.0):
+    try:
+        return float(x)
+    except Exception:
+        return d
+
+
+def _shadow():
+    try:
+        ow = []
+        for mint, sh in (st.get("shadow_trades") if isinstance(st.get("shadow_trades"), dict) else {}).items():
+            if not isinstance(sh, dict):
+                continue
+            cost = _f(sh.get("cost"))
+            gross = _f(sh.get("tokens")) * _f(sh.get("last_price"))
+            val = 0.0
+            if gross > 0:
+                liq = max(_f(sh.get("liq"), 1.0), 1.0)
+                imp = gross / (liq / 2 + gross)
+                slip = min(max(CFG["SLIPPAGE_MULT"] * gross / liq, 0.0), 0.5)
+                val = max(0.0, gross * (1 - imp) * (1 - slip) * (1 - CFG["FEE_PCT"] / 100)
+                          - CFG["PRIORITY_FEE_SOL"] * CFG["SOL_USD_FALLBACK"])
+            pnl = ((val + _f(sh.get("realized"))) / cost - 1) * 100 if cost > 0 else 0.0
+            ow.append({"sym": clean_sym(sh.get("sym")), "pnl": round(pnl, 2), "peak": round(_f(sh.get("peak_pct")), 2),
+                       "min": max(0, int((now - _f(sh.get("t"), now)) // 60))})
+        ow.sort(key=lambda x: -x["pnl"])
+        rows = []
+        try:
+            with open(os.path.join(D, "shadow_trades.csv"), newline="", encoding="utf-8") as f:
+                rows = list(csv.DictReader(f))
+        except Exception:
+            pass
+        ok = [r for r in rows if str(r.get("valido", "1")).strip() != "0"]
+        rug = lambda r: int(_f(r.get("rug")))
+        closed = [{"t": str(r.get("chiuso", ""))[5:16], "sym": clean_sym(r.get("symbol")), "pnl": round(_f(r.get("pnl_pct")), 2),
+                   "rug": rug(r), "peak": round(_f(r.get("peak_pct")), 2),
+                   "reason": clean_text(str(r.get("motivo_scarto", ""))[:80], [r.get("symbol")]),
+                   "valid": 0 if str(r.get("valido", "1")).strip() == "0" else 1} for r in rows[-40:][::-1]]
+        return {"open": ow[:20], "closed": closed,
+                "stats": {"closed": len(rows), "valid": len(ok), "wins": sum(1 for r in ok if _f(r.get("pnl_pct")) > 0 and not rug(r)),
+                          "rugs": sum(1 for r in ok if rug(r)),
+                          "avg": round(sum(-100.0 if rug(r) else _f(r.get("pnl_pct")) for r in ok) / len(ok), 2) if ok else 0.0}}
+    except Exception:
+        return {"open": [], "closed": [], "stats": {"closed": 0, "valid": 0, "wins": 0, "rugs": 0, "avg": 0.0}}
+
+
+
 s = st.get("stats") or {}
 equity_now = eq[-1][1] if eq else st.get("cash", CFG["START_BALANCE"])
 start = st.get("period_start_equity") or CFG["START_BALANCE"]
@@ -121,6 +209,7 @@ data = {
     "reasons": sorted(((k, v) for k, v in (st.get("reject_reasons") or {}).items()), key=lambda x: -x[1])[:12],
     "eq": eq, "positions": positions, "trades": trades, "events": events,
     "lessons": (st.get("lessons") or [])[-8:][::-1],
+    "shadow": _shadow(),
 }
 out = "const DATA: Data = " + json.dumps(data, ensure_ascii=False, separators=(",", ":")) + ";"
 open(os.path.join(D, "dashboard_data.txt"), "w").write(out + "\n")

@@ -145,14 +145,12 @@ def fetch_csv_trades(no_fetch, refetch=False):
     rows = []
     try:
         for r in csv.DictReader(open(os.path.join(BOT, "trades.csv"))):
-            if str(r.get("valido", "1")).strip() == "0": continue  # righe invalidate
             t = datetime.strptime(r["chiuso"], "%Y-%m-%d %H:%M").replace(tzinfo=TZ).timestamp() - float(r["minutes"] or 0) * 60
             rows.append(dict(mint=r["mint"], t=t, price=None, liq=float(r["liq_entry"] or 0), src="reale",
                              sig="", soft=r.get("soft_flags", "")))
     except FileNotFoundError: pass
     try:
         for r in csv.DictReader(open(os.path.join(BOT, "shadow_trades.csv"))):
-            if str(r.get("valido", "1")).strip() == "0": continue
             try:
                 t = datetime.strptime(r["aperto"], "%Y-%m-%d %H:%M").replace(tzinfo=TZ).timestamp()
                 price = float(r["prezzo_entrata"]); liq = float(r["liq_entrata"])
@@ -267,15 +265,7 @@ def main():
     ap.add_argument("--sample", choices=["survivor", "newpools"], default="survivor")
     ap.add_argument("--no-fetch", action="store_true")
     ap.add_argument("--refetch", action="store_true", help="riscarica (gentile, 6 s) le candele dei trade del bot incomplete")
-    ap.add_argument("--bot-dir", default=None, help="cartella con trades.csv/shadow_trades.csv (copia /tmp del mirror; dopo 31/10 08:52 /workspace/memebot e' vecchio)")
-    ap.add_argument("--np-dir", default=None, help="newpools: cartella dati alternativa (es. data/newpools_1031_s1); output con suffisso")
     a = ap.parse_args()
-    global BOT
-    if a.bot_dir: BOT = a.bot_dir
-    np_suffix = ""
-    if a.np_dir:
-        E.NP_DIR = a.np_dir if os.path.isabs(a.np_dir) else os.path.join(HERE, a.np_dir)
-        np_suffix = "_" + os.path.basename(os.path.normpath(E.NP_DIR))
     os.makedirs(CSV_DIR, exist_ok=True)
     trades = load_ohlcv_sample(a.sample)
     bot = fetch_csv_trades(a.no_fetch, a.refetch)
@@ -316,7 +306,7 @@ def main():
            "e' spostato a 1.5xSL (nel codice CRASH_EXIT_PCT=-15 scatterebbe prima); survivor: liquidita' d'ingresso = "
            "liquidita' attuale (look-ahead); trade del bot con hold troncato se i dati finiscono prima di 180 min."]
     txt = "\n".join(md); print(txt)
-    suf = "" if a.sample == "survivor" else "_newpools" + np_suffix
+    suf = "" if a.sample == "survivor" else "_newpools"
     open(os.path.join(HERE, f"results_sl{suf}.md"), "w").write(txt + "\n")
     json.dump(out, open(os.path.join(HERE, f"results_sl{suf}.json"), "w"), indent=1, default=str)
 

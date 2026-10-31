@@ -884,6 +884,15 @@ async def _acquisition(rpc, mint, owner, token_acc, excl):
     return out
 
 
+def _smart_match(full):
+    """v8.5s: incrocio con sources/smart_wallets.json sugli holder GIA scaricati. Mai eccezioni, mai rete."""
+    try:
+        from sources import smart_wallets as _sw
+        return _sw.match(full or {})
+    except Exception as e:  # noqa: BLE001
+        return {"error": type(e).__name__}
+
+
 async def scan(post, mint, rpc_urls=None, exclude=(), token_program=None, cfg=None, log=None):
     """Analisi completa. Ritorna dict (vedi analyze) con 'level'; 'unknown' se dati insufficienti o tempo
     scaduto (il chiamante NON deve trattarlo come ok). Non solleva eccezioni di rete."""
@@ -891,14 +900,16 @@ async def scan(post, mint, rpc_urls=None, exclude=(), token_program=None, cfg=No
     c.update(cfg or {})
     t0 = time.time()
     rpc = _Rpc(post, rpc_urls or RPC_FAST, c["CALL_GAP"])
+    smart = None   # v8.5s: wallet della lista smart money tra gli holder (SHADOW, 0 chiamate in piu)
     unk = lambda why, **k: dict({"level": "unknown", "why": why, "calls": rpc.calls,  # noqa: E731
-                                 "sec": round(time.time() - t0, 1)}, **k)
+                                 "sec": round(time.time() - t0, 1), "smart": smart}, **k)
     excl = set(exclude or [])
     full = {}
     holders, n_hold, swarm = await top_holders(rpc, mint, excl, token_program, int(c["TOP_N"]), c["MIN_PCT"],
                                                full=full)
     if not holders:
         return unk("lista holder non disponibile dalla RPC")
+    smart = _smart_match(full)
     rows = {o: {"o": o, "pct": p, "acc": a, "ntx": None, "src": None, "ts": None, "slot": None}
             for o, p, a in holders}
     sem = asyncio.Semaphore(6)
@@ -989,6 +1000,7 @@ async def scan(post, mint, rpc_urls=None, exclude=(), token_program=None, cfg=No
         if exp.get("added") or exp.get("relinked"):
             res = analyze(list(rows.values()), found_infra, fof, c, swarm=swarm, distributors=distributors)
     res["expand"] = {k: v for k, v in exp.items() if k != "links"}
+    res["smart"] = smart
     res.update(calls=rpc.calls, sec=round(time.time() - t0, 1), holders_total=n_hold, acq_read=done,
                new_infra=sorted(found_infra), distributors=sorted(distributors),
                top_funders=[(s[:6] + ".." + s[-4:], n, infra_label(s, found_infra))

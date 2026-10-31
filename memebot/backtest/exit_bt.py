@@ -403,14 +403,7 @@ def main():
     ap.add_argument("--min-liq", type=float, default=8000); ap.add_argument("--max-age-h", type=float, default=48)
     ap.add_argument("--min-age-h", type=float, default=4)
     ap.add_argument("--extra", action="store_true", help="test extra (trail 10/15, hold 60/180 per LP, young momentum)")
-    ap.add_argument("--np-dir", default=None, help="newpools: cartella dati alternativa (es. data/newpools_1031_s1); output con suffisso")
-    ap.add_argument("--snapshot-only", action="store_true", help="newpools: fa solo lo snapshot ed esce (nessun OHLCV)")
     a = ap.parse_args()
-    global NP_DIR
-    np_suffix = ""
-    if a.np_dir:
-        NP_DIR = a.np_dir if os.path.isabs(a.np_dir) else os.path.join(HERE, a.np_dir)
-        np_suffix = "_" + os.path.basename(os.path.normpath(NP_DIR))
     md = []; allout = {}
     if a.sample == "survivor":
         os.makedirs(OHLCV_DIR, exist_ok=True)
@@ -431,7 +424,6 @@ def main():
         if a.snapshot or not os.path.exists(pf):
             if a.no_fetch: sys.exit("nessuno snapshot newpools")
             snapshot_newpools(a.n_sample)
-            if a.snapshot_only: print("solo snapshot:", NP_DIR); return
         pools = json.load(open(pf))
         ready_at = max(p["created"] for p in pools) + a.min_age_h * 3600
         print(f"pool nel campione: {len(pools)}; tutte pronte (eta' >= {a.min_age_h}h) alle "
@@ -457,7 +449,7 @@ def main():
                   f"pool del campione con riserva >= $8k oggi: {alive}")
             print(mt); md.append(mt); allout["migration"] = dict(checked=len(mig), moved_8k=len(moved), alive_8k=alive)
         md.append("conteggi: " + json.dumps(cnt))
-        outname = "results_newpools" + np_suffix
+        outname = "results_newpools"
     json.dump(allout, open(os.path.join(HERE, outname + ".json"), "w"), indent=1, default=str)
     open(os.path.join(HERE, outname + ".md"), "w").write("\n\n".join(md) + "\n")
     print("scritto", outname + ".md/.json")

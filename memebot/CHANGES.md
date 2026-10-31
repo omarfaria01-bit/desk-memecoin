@@ -972,3 +972,79 @@ Solo `web/server.py` e `web/index.html`; bot, `.env` e modalità PAPER non tocca
   (Caddyfile con hash), `*.tmp*`; "file changed as we read it" non segna più FALLITO. `alert_state.json` escluso dal deploy.
 - Test: `tests/test_v85g_alerts.py` (copia in /tmp). Tutti i 22 test passano (test_narr richiede una copia senza
   narratives.json/events.jsonl, come già prima).
+
+## v8.5h (31/10/2026, ora di Roma) – PnL assurdi a pool svuotata (segnalato da ticher) — solo PAPER
+Causa: quando la pool viene svuotata o sostituita, DexScreener dà un prezzo x10.000 (es. 2,6e-5 → 0,3768) con una
+liquidità falsa; lo shadow faceva la presa di profitto a quel prezzo e chiudeva a +405.686% (NEX Ai 5qHwzQ…),
++183.181% (Grok Ev9GTH…), +8.128% (NEX Ai 9vaJCv…), tutti valido=1.
+- **Uscita per liquidità crollata** (≥ `LIQ_DROP_EXIT_PCT` 50%): la parte non ancora venduta vale 0, sempre rug
+  (shadow: `shadow_decide` → azzera; posizione vera: `zero=True` solo in paper, in live resterebbe la vendita vera).
+  Le prese di profitto già fatte restano. `LIQ_CRASH_ZERO` (default true) per tornare al comportamento di prima.
+- **PnL > `PNL_IMPLAUSIBLE_PCT` (1000%)**: shadow `valido=0`, `invalid_for_learning=pnl_implausibile`, rug=1, fuori da
+  learner_shadow, learner_bonus e learn_adjust. Trade vero: `trades.csv` con nuove colonne `valido`/`invalid_for_learning`,
+  nessun esempio al modello/soglia/segnali; il creatore va comunque in lista nera se l'uscita è per liquidità crollata.
+- **Salto di prezzo** oltre `PRICE_SPIKE_MULT` (20×) in un solo aggiornamento: prezzo non preso (si prende solo una
+  liquidità più bassa = segnale di rug), `last_ok` non avanza → dopo 15 min decide la seconda fonte (Jupiter), come per un
+  prezzo mancante. Nei price_paths resta una riga `ev=spike_ignored`.
+- **Correzione retroattiva una sola volta all'avvio** (`apply_liq_crash_retro`, esito in `liq_crash_retro.json`, dato
+  runtime escluso dal deploy): righe shadow valido=1 con PnL > 1000% → valido=0; righe valido=1 uscite per liquidità
+  crollata → PnL rifatto con la regola nuova (prese di profitto ricostruite dai price_paths ignorando i salti, mai più
+  alto di prima, rug=1); senza percorso prezzi ricostruibile e con massimo ≥ TP → valido=0
+  (`liq_crash_retro_percorso_prezzi_assente`). Stessi esiti corretti/tolti in learner_shadow e learner_bonus.
+- Test: `tests/test_v85h_liq.py` (copia in /tmp, `PYTHONPATH=.`). Tutti i 23 test passano.
+- Rollback: `desk_before_v85h.py` (locale) e `/opt/desk/backups/v85h-<ora>/` sul server (codice + CSV + state).
+
+## v8.6 (31/10/2026, ora di Roma) – idee dai bot open source (A+B+C) + smart wallets v8.5s — solo PAPER, solo misura
+Nessun effetto su acquisti, punteggio, size o uscite, tranne B (pausabile con authority = scarto rigido).
+Nessun codice scaricato eseguito: logica riscritta da zero leggendo i sorgenti.
+- **A – PnL CPMM realistico** (idea hoangduong `exit_fill`): `cpmm_exit` = x·y=k esatto sulla metà della pool che
+  resta dopo le nostre vendite precedenti (drain-aware), slippage 2×size/liq, fee della pool per dex
+  (`CPMM_POOL_FEE_PCT`: pumpfun 1,25%, pumpswap 0,30%, raydium/meteora 0,25%; altrimenti FEE_PCT) e priority fee; la
+  presa di profitto si riempie come LIMITE al gradino (`tp_cap_price`), mai al prezzo oltre. Colonna nuova
+  `pnl_cpmm` in trades.csv e shadow_trades.csv accanto a `pnl_pct` (che resta la formula v8.5h, invariata). Con
+  l'uscita a zero v8.5h la parte residua vale 0 anche qui. Posizioni aperte prima del deploy: partono dal realizzato.
+- **A – latenza d'uscita** (backtest Mark: stop a -12 chiude a mediana -19,6%): per ogni uscita stop/crollo/liquidità,
+  vera e shadow, colonne `stop_level` (livello teorico), `exit_fill` (fill netto % sull'ingresso della vendita finale),
+  `exit_lag_s` (secondi dal primo controllo sotto lo stop alla vendita); in `entry_features` anche `exit_gap_prev_s`
+  (intervallo prima del primo controllo sotto), `exit_mark_pct`, `chk_gap_avg_s`. Frequenza dei controlli INVARIATA.
+- **B – Token-2022** (honeypot): `pausableConfig` con authority = rigido (prima soft). Permanent delegate, transfer hook
+  con programma e account congelati di default erano GIÀ rigidi e restano rigidi (non allentati). Nuovo
+  `t22_flags` (transfer_hook, transfer_hook_auth, default_frozen, permanent_delegate, pausable…) nell'esito del controllo
+  e evento `Executor/t22_flags`.
+- **C – seconda conferma** (idea warp-id CONSECUTIVE_FILTER_MATCHES): `ENTRY_CONFIRM_MODE` shadow,
+  `ENTRY_CONFIRM_SEC` 45: dopo ogni acquisto paper e ogni shadow aperto, 1 chiamata DexScreener: liquidità ≥ 85%,
+  prezzo non sotto -8%, momentum 5m ok, acquisti ≥ vendite 5m. Esito in `entry_features.confirm2` {ok, why, dp, dl},
+  evento `Analyst/confirm2`, contatori `confirm2_ok/ko`. Mai blocca.
+- **v8.5s smart wallets** (patch /workspace/kol_wallets/patch, applicata con apply_patch.py): solo log, 0 chiamate in più.
+- Test: `tests/test_v86.py`, `tests/test_v85s_smart.py`. Tutti i 25 test passano (copia in /tmp, `PYTHONPATH=.`).
+- Rollback: `/opt/desk/backups/v86-<ora>/` (desk.py, sources/honeypot.py, sources/cluster_v2.py, CHANGES.md):
+  ricopiarli in /opt/desk e `systemctl restart desk-memecoin`. Per spegnere solo C: `ENTRY_CONFIRM_MODE`=off.
+
+## v8.7 (31/10/2026, ora di Roma) – dataset Slinky21 + primi scambi pump.fun (D+E+F) — solo PAPER, solo SHADOW
+
+Nessun effetto su acquisti, score, soglie o Learner: solo campi in `entry_features` (trades.csv / shadow_trades.csv).
+
+- **D – seme creatori** (`sources/creator_seed.json`, 47.946 creatori dal corpus Slinky21 CC BY 4.0, 5 giu–14 lug 2026,
+  costruito sul box con `docs/analysis/build_creator_seed.py`): `[lanci, graduati, rug, falliti_dopo_grad]`, letto
+  da `creator_history` prima delle API. Campi: `creator_seed`, `serial_launcher` (>= 10 lanci, 0 graduati: 6.958
+  creatori). Nota: graduated_at quasi assente prima del 19 giu (graduati sottostimati). ~20 MB di RAM.
+- **E – primi scambi** (`sources/smart_trades.py`, endpoint pubblico trade di pump.fun, niente Helius): in background
+  all'ingresso (trade paper e shadow), solo mint `...pump`, max `STX_MAX_PER_H`=30 token/ora e `STX_PAGES`=3 pagine
+  da 100 (oltre: `incompleto`). Campi: `sniper_pct`, `first20_sold_pct`, `dev_first_sell_dt` (+ `stx`), evento
+  `Analyst/early_trades`. Spegnere: `STX_MODE: "off"`.
+- **F – prior pre-addestrato** (`sources/model_prior.json` da `docs/analysis/pretrain_slinky.py`): `p_prior` =
+  sigmoid(b + Σ w·f) sulle 12 feature dell'Analyst. Test fuori campione (dal 4 lug): AUC 0,700 vs regola 0,651;
+  precisione top 10% 13,8% vs base 10,4%. Calibrazione spostata (base 0,25% train vs 10% test): solo ranking.
+- Fix A: `pnl_cpmm` degli shadow aperti prima della v8.6 contava due volte la vendita in corso (es. NEX Ai 111% invece di ~57%): corretto (`just_realized`). Le righe chiuse tra 10:33 e 10:45 con `pnl_cpmm` > `pnl_pct` di molto sono da ignorare.
+- Fix: evento `confirm2` usa `pos_kind` (prima `kind` sovrascriveva il tipo evento).
+- Test: `tests/test_v87.py` + suite completa OK.
+- Rollback: `cp /opt/desk/backups/v87-*/desk.py /opt/desk/ && cp .../sources/creator_history.py /opt/desk/sources/
+  && systemctl restart desk-memecoin` (i file nuovi possono restare: senza hook non vengono letti).
+
+## v8.8 (31/10/2026, 11:13 ora di Roma) - call Discord "Noah Knows Trades" (SHADOW)
+- `sources/discord_calls.py` legge `sources/discord_calls.json` (mint -> call_ts, author, mc_at_call, label, max_x),
+  scritto offline da `/workspace/discord_calls/label_calls.py` (GeckoTerminal/DexScreener, mai Helius).
+- `discord_tag(mint)`: `discord_call=1`, `discord_call_age_min` (minuti call -> vista del bot; negativo = bot prima della call)
+  negli eventi `reject`, in `entry_features` (trade e shadow), sugli shadow (`sh`, evento `shadow_open`, tag `discord:nkt`).
+- Peso nello score 0, nessuna chiamata di rete, nessun credito. Label/max_x (esito futuro) MAI esposti come feature.
+- `DISCORD_CALLS_MODE`: 'shadow' (default) / 'off'. Test: `tests/test_v88_discord.py`.
