@@ -77,6 +77,8 @@ def evaluate(coins, mint, created_ms=None, now=None, cfg=None):
             and 0 < _f(x.get("created_timestamp")) < t0
             and now_ms - _f(x.get("created_timestamp")) >= c["PREV_MIN_AGE_H"] * 3600e3]
     traded = [x for x in prev if _f(x.get("ath_market_cap")) >= c["TRACTION_USD"] or x.get("complete")]
+    # review Claude: usd_market_cap mancante valeva 0 = "morto": ora quel token non entra nel conteggio
+    traded = [x for x in traded if x.get("is_banned") or x.get("usd_market_cap") is not None]
     dead = [x for x in traded if x.get("is_banned")
             or _f(x.get("usd_market_cap")) < c["DEAD_FROM_ATH"] * max(_f(x.get("ath_market_cap")), 1.0)]
     n, nd = len(traded), len(dead)
@@ -138,7 +140,10 @@ async def lookup(get, mint, creator=None, now=None, cfg=None):
             if isinstance(info, dict) and info.get("creator"):
                 mi = {"t": now, "creator": str(info["creator"]), "created": _f(info.get("created_timestamp"))}
             else:
-                mi = {"t": now, "creator": None, "created": 0.0}
+                # review Claude: un errore di rete restava in cache 12 h come "creatore sconosciuto"; ora scade
+                # dopo NEG_CACHE_MIN minuti (il prossimo candidato riprova)
+                mi = {"t": now - c["CACHE_TTL_H"] * 3600 + c.get("NEG_CACHE_MIN", 10) * 60, "creator": None,
+                      "created": 0.0}
             d["mint"][mint] = mi
             _save()
         cr = mi.get("creator") or creator

@@ -45,7 +45,7 @@ def one(mint, score, m=None, sec=None, so=None):
     D.CL2["cache"].clear(); D.CL2["tasks"].clear()
     SC["v"] = score
     st = D.State(); st.threshold = 0.50
-    c = {"mint": mint, "m": dict(m or mk), "sec": sec or {"soft": []}, "filter_ok": True}
+    c = {"mint": mint, "m": dict(m or mk), "sec": sec or {"soft": [], "lp_status": "ok"}, "filter_ok": True}
     if so:
         c.update(shadow_only=so, shadow_keys=["x"])
     return asyncio.run(run([c], st)), st
@@ -123,7 +123,7 @@ async def fake_hp(st, http, mint, size, sec): return dict(HP)
 D.honeypot_check = fake_hp
 D.SRC["honeypot"] = object()
 D.CFG["HONEYPOT_CHECK"] = True
-cb = {"candles": None, "score": 0.47, "soft": ["score_band"], "size_mult": 0.5, "sec": {"soft": []}, "signals": ""}
+cb = {"candles": None, "score": 0.47, "soft": ["score_band"], "size_mult": 0.5, "sec": {"soft": [], "lp_status": "ok"}, "signals": ""}
 mm = dict(mk)
 st = D.State()
 asyncio.run(D._execute_buy(st, Br(), dict(cb), "XB1", mm))

@@ -54,7 +54,7 @@ br = D.PaperBroker(http=RpcHttp([1000] * 10)); assert br.realistic
 assert D.PaperBroker().realistic is False
 st = D.State(); st.cash = 1000.0
 m = {"symbol": "S", "price": 1.0, "liq": 2_000_000.0, "url": ""}
-def cand(): return {"filter_ok": True, "analyst_ok": True, "score": 0.6, "thesis": "t", "features": {}, "sec": {}}
+def cand(): return {"filter_ok": True, "analyst_ok": True, "score": 0.6, "thesis": "t", "features": {}, "sec": {"lp_status": "ok"}}
 # reserve: cash available excludes SOL_RESERVE (0.03 SOL = $3)
 assert abs(asyncio.run(br.cash_usd(st)) - 997.0) < 1e-9
 

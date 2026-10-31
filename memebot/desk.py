@@ -422,11 +422,6 @@ try:
         momentum as _mom  # noqa: E402
     _kol.CALL_GAP = max(getattr(_kol, "CALL_GAP", 0.15), 0.5)   # RPC pubblica condivisa: piano
     SRC = {"fomo": _fomo, "kol": _kol, "theses": _theses, "mom": _mom}
-    try:  # v8.2
-        from sources import cluster_v2 as _cl2, honeypot as _hp  # noqa: E402
-        SRC["cluster2"], SRC["honeypot"] = _cl2, _hp
-    except Exception as _e2:  # noqa: BLE001
-        print(f"v8.2: cluster_v2/honeypot non caricati ({type(_e2).__name__}: {_e2})")
     try:  # v8.5s: lista smart money di Kiwi (SHADOW, solo log)
         from sources import smart_wallets as _sw  # noqa: E402
         SRC["smart"] = _sw
@@ -439,6 +434,13 @@ try:
         print(f"v8.8: discord_calls non caricato ({type(_e4).__name__}: {_e4})")
 except Exception as _e:  # noqa: BLE001
     SRC = {"error": f"{type(_e).__name__}: {_e}"[:160]}
+try:  # v8.2. Review Claude: import separato. Prima stava DENTRO il try di fomo/kol/momentum: se uno di quelli non si
+    # caricava, honeypot e cluster v2 sparivano e l'Executor saltava il controllo honeypot in silenzio.
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from sources import cluster_v2 as _cl2, honeypot as _hp  # noqa: E402
+    SRC["cluster2"], SRC["honeypot"] = _cl2, _hp
+except Exception as _e2:  # noqa: BLE001
+    print(f"v8.2: cluster_v2/honeypot non caricati ({type(_e2).__name__}: {_e2})")
 try:
     from sources.solkeys import on_curve, DEAD_ADDRS  # noqa: E402  v8.4f
 except Exception:  # noqa: BLE001
@@ -741,6 +743,7 @@ class State:
         self.outcomes = deque(maxlen=20)
         self.lessons = deque(maxlen=30)
         self.blacklist = set()
+        self.blacklist_info = {}   # review Claude (compito 13): creatore -> {why, mint, t, exp}
         self.equity_hist = deque(maxlen=3000)
         self.total_start = CFG["START_BALANCE"]   # v6: base del limite di perdita totale
         self.hard_tripped = False
@@ -772,7 +775,7 @@ class State:
             "model": self.model.to_json(), "threshold": self.threshold,
             "threshold_base": CFG["SCORE_THRESHOLD"],
             "outcomes": list(self.outcomes), "lessons": list(self.lessons),
-            "blacklist": sorted(self.blacklist), "equity_hist": list(self.equity_hist)[-1000:],
+            "blacklist": sorted(self.blacklist), "blacklist_info": self.blacklist_info, "equity_hist": list(self.equity_hist)[-1000:],
             "total_start": self.total_start, "hard_tripped": self.hard_tripped,
             "learner_shadow": self.learner_shadow, "shadow_trades": self.shadow_trades,
             "learner_bonus": self.learner_bonus, "labels": self.labels, "post_exit": self.post_exit,
@@ -803,6 +806,12 @@ def load_state():
     st.outcomes.extend(d.get("outcomes", []))
     st.lessons.extend(d.get("lessons", []))
     st.blacklist = set(d.get("blacklist", []))
+    bi = d.get("blacklist_info")
+    st.blacklist_info = bi if isinstance(bi, dict) else {}
+    _t = time.time()
+    for _cr in st.blacklist:   # voci di prima (anche da 'crollo'/'nuovo rischio'): motivo ignoto, scadenza da adesso
+        st.blacklist_info.setdefault(_cr, {"why": "precedente (motivo non registrato)", "mint": None, "t": _t,
+                                           "exp": _t + float(CFG.get("BLACKLIST_TTL_DAYS", 30)) * 86400})
     ls = d.get("learner_shadow")
     st.learner_shadow = ls if isinstance(ls, dict) else {}
     for old, new in (("lp", "lp_unlocked"), ("lp_grave", "lp_unlocked_grave")):  # v7: nome nuovo del segnale LP
@@ -1084,6 +1093,7 @@ def summarize(pairs):
         "buys_m5": int(fnum(tx5.get("buys"))), "sells_m5": int(fnum(tx5.get("sells"))),
         "vol_m5": fnum(vol.get("m5")), "vol_h1_main": fnum(vol.get("h1")),
         "chg_h1": fnum(chg.get("h1")), "chg_m5": fnum(chg.get("m5")),
+        "chg_m5_known": chg.get("m5") is not None,   # review Claude: variazione 5m assente != 0%
         "mcap": fnum(main.get("marketCap") or main.get("fdv")), "url": str(main.get("url", "")),
         "pairs_all": [str(p.get("pairAddress")) for p in pairs if p.get("pairAddress")][:30],   # v8.5
         "twitter": bool(socials & {"twitter", "x"}), "telegram": "telegram" in socials,
@@ -2443,6 +2453,21 @@ def apply_case_watch(st, now=None):
 def case_watch_step(c, m, now):
     """Aggiorna un caso con un dato DexScreener (m=None: nessuna coppia). Restituisce la riga di log."""
     c.setdefault("status", "aperto")
+    if not m:
+        # review Claude: un solo giro senza coppia (429, DexScreener lento) chiudeva il caso come rug per sempre e
+        # scriveva prezzo 0. Ora rug "nessuna coppia" solo dopo CASE_MISS_RUG controlli di fila senza dati.
+        c["miss"] = int(c.get("miss", 0)) + 1
+        row = {"t": datetime.fromtimestamp(now, TZ).strftime("%Y-%m-%d %H:%M"), "id": None, "sym": c["sym"],
+               "price": None, "liq": None, "mcap": None, "chg_h24": None, "from_peak_pct": None,
+               "liq_from_peak_pct": None, "miss": c["miss"]}
+        if c.get("n", 0) >= 1 and c["miss"] >= int(CFG.get("CASE_MISS_RUG", 3)):
+            c["status"], c["end_t"] = "rug", now
+            c["end_why"] = f"nessuna coppia per {c['miss']} controlli di fila"
+        elif now >= c["until"]:
+            c["status"], c["end_t"], c["end_why"] = "chiuso_7g", now, "7 giorni passati (ultimo controllo senza dati)"
+        row["status"] = c["status"]
+        return row
+    c["miss"] = 0
     price, liq = (fnum(m.get("price")), fnum(m.get("liq"))) if m else (0.0, 0.0)
     if m and not m.get("liq_known", True):
         liq = c.get("last_l", 0.0)
@@ -2469,6 +2494,7 @@ def case_watch_step(c, m, now):
 # tra cui iCoin (poi x41). Ora: in watchlist, ricontrollo UNA volta sola dopo la migrazione (entro 6 ore), al massimo
 # CURVE_RECHECK_MAX_H all'ora. Alla ricontrollata il token rientra dall'inizio della pipeline: nessuna eccezione.
 CURVE_WATCH_PATH = os.path.join(DATA_DIR, "curve_watch.json")
+CFG.setdefault("CASE_MISS_RUG", 3)   # review Claude: controlli di fila senza coppia prima di un caso 'rug' 
 CFG.setdefault("CURVE_WATCH", True)
 CFG.setdefault("CURVE_WATCH_TTL_SEC", 6 * 3600)
 CFG.setdefault("CURVE_WATCH_CHECK_SEC", 300)
@@ -2889,9 +2915,7 @@ async def honeypot_check(st, http, mint, size_usd, sec):
                         {"mint": mint, "t22_flags": info["t22_flags"], "hard": list(h)})
     else:
         miss.append("account del mint non letto")
-    # RugCheck (gia letto dal Filter): rug segnalato o authority = rigido
-    if sec.get("rugged"):
-        hard.append("RugCheck: token segnalato come rug")
+    # RugCheck (gia letto dal Filter): un token 'rugged' e gia scartato in security_check (sec non ha quella chiave)
     sol = sol_usd() if sol_known() else 0.0
     lam = int((size_usd / sol if sol > 0 else 0.1) * 1e9)
     q, err = await _hp_quote(http, WSOL, mint, lam)
@@ -3781,7 +3805,8 @@ def record_outcome(st, keys, pnl_pct, rug, src, now=None):
         learn_shadow_step(st, key, now)
 
 
-MEASURE_ONLY_KEYS = {"narrative_relax", "rugcheck_down", "bundle_established", "buysell_relax", "score_band"}
+MEASURE_ONLY_KEYS = {"narrative_relax", "rugcheck_down", "bundle_established", "buysell_relax", "score_band",
+                     "holders_unknown"}   # review Claude: holder non verificati, solo misura
 # v8.5e (analisi di Mark, decisione Kiwi 08:47): fascia di punteggio sotto soglia = acquisto PAPER a meta size;
 # acquisti/vendite 5m appena sotto il minimo = solo shadow buysell_relax.
 CFG.setdefault("SCORE_BAND", True)
@@ -3857,6 +3882,18 @@ CFG.setdefault("BUNDLE_EST_MIN_HOLDERS", 5000)
 CFG.setdefault("RC_DOWN_SIZE_MULT", 0.5)
 PUMP_AMM = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA"
 SYSTEM_PROGRAM = "11111111111111111111111111111111"
+POOL_LOCK_PROGRAMS = {   # programmi proprietari di conti che NON sono holder (curva, pool, locker)
+    "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P": "pump.fun curva",
+    "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA": "PumpSwap",
+    "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8": "Raydium AMM v4",
+    "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C": "Raydium CPMM",
+    "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK": "Raydium CLMM",
+    "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj": "Raydium launchpad",
+    "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo": "Meteora DLMM",
+    "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB": "Meteora pools",
+    "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc": "Orca Whirlpool",
+    "strmRqUCoQUgGUan5YhzUZa6KqdzwX5L6FpUxfmKg5m": "Streamflow (locker)",
+}
 AMM_AUTHORITIES = {"5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1",   # Raydium AMM v4
                    "GpMZbSM2GgvTKHJirzeGfMFoaZ8UR2X7F4v8vHTvxFbL",   # Raydium CPMM
                    "WLHv2UAZm6z4KyaaELi5pjdbJh6RESMva1Rnn8pJVVh"}     # Raydium launchpad
@@ -3903,7 +3940,42 @@ def rc_health(ok, now=None):
     return h["down"]
 
 
-def rc_down_doubts(st, cl, crh=None):
+# review Claude (compito 13): lista nera dei creatori solo per un rug confermato (LP ritirata, token invendibile,
+# nessun prezzo confermato da due fonti), mai per un calo di prezzo ('crollo') o un nuovo rischio RugCheck (che puo
+# essere un dato passeggero). Ogni voce ha motivo, mint, data e scadenza BLACKLIST_TTL_DAYS.
+CFG.setdefault("BLACKLIST_TTL_DAYS", 30)
+BLACKLIST_RUG_REASONS = ("liquidita crollata", "invendibile", "rug", "confermato")
+
+
+def blacklist_creator(st, creator, reason, mint=None, now=None):
+    """Mette il creatore in lista nera SOLO se il motivo e un rug confermato. True se aggiunto/rinnovato."""
+    r = str(reason or "").lower()
+    # parole intere: "RugCheck" (es. "nuovo rischio RugCheck") non deve contare come "rug"
+    if not creator or not any(re.search(rf"\b{k}\b", r) for k in BLACKLIST_RUG_REASONS) or r.startswith("crollo") \
+            or r.startswith("nuovo rischio"):
+        return False
+    if "possibile rug" in r and "confermato" not in r:   # "nessun prezzo da 15 min" senza seconda fonte: non basta
+        return False
+    now = now or time.time()
+    st.blacklist.add(creator)
+    st.blacklist_info[creator] = {"why": str(reason)[:120], "mint": mint, "t": round(now),
+                                  "exp": round(now + float(CFG.get("BLACKLIST_TTL_DAYS", 30)) * 86400)}
+    return True
+
+
+def creator_blacklisted(st, creator, now=None):
+    """True se in lista nera e non scaduto; le voci scadute vengono tolte."""
+    if not creator or creator not in st.blacklist:
+        return False
+    info = st.blacklist_info.get(creator) or {}
+    if fnum(info.get("exp")) and fnum(info.get("exp")) < (now or time.time()):
+        st.blacklist.discard(creator)
+        st.blacklist_info.pop(creator, None)
+        return False
+    return True
+
+
+def rc_down_doubts(st, cl, crh=None, sec=None):
     """Review Claude: dubbi del ripiego che si possono verificare solo nell'Analyst (cluster v2 gia fatto).
     Lista vuota = nessun dubbio. Ogni dato mancante e un dubbio, mai un 'ok'."""
     d = []
@@ -3919,8 +3991,12 @@ def rc_down_doubts(st, cl, crh=None):
     cr = str((crh or {}).get("creator") or "")
     if not cr:
         d.append("creatore non verificabile (lista nera non controllata)")
-    elif cr in st.blacklist:
+    elif creator_blacklisted(st, cr):
         d.append("creatore in lista nera per un rug precedente")
+    else:   # review Claude (compito 13): col ripiego la quota del creatore non era calcolata (creator assente)
+        cpct = sum(fnum(p_) for o, p_ in ((sec or {}).get("rc_holders") or []) if o == cr)
+        if cpct > CFG["MAX_CREATOR_PCT"]:
+            d.append(f"il creatore tiene il {cpct:.1f}% (> {CFG['MAX_CREATOR_PCT']:g}%)")
     return d
 
 
@@ -3985,8 +4061,10 @@ async def rc_fallback(http, mint, m):
     for o, x in zip(uniq, oa):
         if o in AMM_AUTHORITIES or o in (m.get("pairs_all") or []):
             r["knownAccounts"][o] = {"type": "AMM", "name": "pool/authority"}
-        elif x and x.get("owner") not in (SYSTEM_PROGRAM, None):
-            r["knownAccounts"][o] = {"type": "PROGRAM", "name": str(x.get("owner"))[:8]}
+        elif x and x.get("owner") in POOL_LOCK_PROGRAMS:
+            # review Claude (compito 13): esclusi solo curva/pool/locker noti. Prima QUALSIASI account di programma
+            # (vault o PDA di un programma del team) spariva dal top 10 e la concentrazione risultava piu bassa.
+            r["knownAccounts"][o] = {"type": "PROGRAM", "name": POOL_LOCK_PROGRAMS[x.get("owner")]}
     r["topHolders"] = [{"address": a["address"], "owner": o, "uiAmount": fnum(a.get("uiAmount")),
                         "pct": 0.0, "insider": False} for a, o in zip(la, owners)]
     # reti insider: endpoint RugCheck separato (ancora attivo durante il guasto dei report); errore = quota ignota
@@ -4028,13 +4106,22 @@ async def security_check(st, http, mint, m, cache):
     # pump_fun_amm nel report RugCheck. Tutti gli altri token: regola LP >= MIN_LP_LOCKED_PCT.
     lp_name = str((r.get("launchpad") or {}).get("name", "") if isinstance(r.get("launchpad"), dict) else "").lower()
     pump_amm = any("pump" in str(mk.get("marketType", "")).lower() for mk in markets if isinstance(mk, dict))
-    pump_migrated = (mint.endswith("pump") and m["dex"] in ("pumpswap", "pumpfun", "raydium")
+    # review Claude: niente 'raydium'. Da marzo 2025 pump.fun migra su PumpSwap: una pool Raydium di un token pump.fun
+    # recente e creata da terzi e la sua LP si puo ritirare. Va alla regola LP normale (RugCheck lpLockedPct): le
+    # vecchie migrazioni con LP bruciata risultano comunque bloccate al 100%.
+    pump_migrated = (mint.endswith("pump") and m["dex"] in ("pumpswap", "pumpfun")
                      and ("pump" in lp_name or pump_amm))
     # v8.4e (Kiwi 07:07): stato LP per la barriera finale dell'Executor (lp_gate). 'zero' (0% bloccata/bruciata)
     # e 'unknown' (LP non verificabile) = MAI acquisto vero, solo shadow (tag lp_unlocked_zero / lp_unknown).
     lp_status, lp_block, lpmax = ("curve" if m["dex"] == "pumpfun" else "protocol"), None, None
     if m["dex"] != "pumpfun" and not pump_migrated:
         lps = [mk.get("lp") for mk in markets if isinstance(mk, dict) and isinstance(mk.get("lp"), dict)]
+        # review Claude: conta la LP della pool che usiamo (m['pair']), non la migliore tra tutti i mercati: una pool
+        # secondaria bloccata al 100% faceva passare un token con la pool principale senza dati LP (o sbloccata).
+        _main = next((mk for mk in markets if isinstance(mk, dict) and m.get("pair") and mk.get("pubkey") == m.get("pair")),
+                     None)
+        if _main is not None:
+            lps = [_main["lp"]] if isinstance(_main.get("lp"), dict) else []
         if not lps or all(lp.get("lpLockedPct") is None for lp in lps):
             lp_status = "unknown"
             lp_block = ("lp_unknown", "LP non verificabile: stato LP sconosciuto, solo shadow (nessun acquisto)",
@@ -4079,7 +4166,10 @@ async def security_check(st, http, mint, m, cache):
     holders = [h for h in (r.get("topHolders") or [])
                if h.get("address") not in exclude and h.get("owner") not in exclude]
     # v8.4f (review Claude f): indirizzi morti (incinerator) ed exchange noti fuori dal top 10, mostrati a parte
-    supply_ui0 = fnum(tok.get("supply")) / 10 ** int(fnum(tok.get("decimals"))) if tok.get("supply") else 0.0
+    # review Claude: senza 'decimals' int(fnum(None)) = 0 -> offerta grezza (x10^6) e quote ~0%: top 10, wallet
+    # identici, insider e creatore passavano. Senza decimali si usa il 'pct' di RugCheck (supply_ui = 0).
+    _dec_ok = tok.get("decimals") is not None and fnum(tok.get("decimals"), -1) >= 0
+    supply_ui0 = fnum(tok.get("supply")) / 10 ** int(fnum(tok.get("decimals"))) if tok.get("supply") and _dec_ok else 0.0
     _hp = lambda h: (fnum(h.get("uiAmount")) / supply_ui0 * 100 if supply_ui0 > 0 and fnum(h.get("uiAmount")) > 0  # noqa: E731
                      else fnum(h.get("pct")))
     dead_pct, cex_pct, cex_names, keep = 0.0, 0.0, [], []
@@ -4099,9 +4189,11 @@ async def security_check(st, http, mint, m, cache):
         return False, "lista holder non disponibile", "holder non disponibili", None
     # (v5) pcts = [pct]; se tutte <= 1 venivano moltiplicate x100 -> falsi "top 10 al 99%" sui token molto
     # distribuiti. v6: quota = uiAmount / offerta (RugCheck "pct" e gia in percento, usato come riserva)
-    supply_ui = fnum(tok.get("supply")) / 10 ** int(fnum(tok.get("decimals"))) if tok.get("supply") else 0.0
+    supply_ui = fnum(tok.get("supply")) / 10 ** int(fnum(tok.get("decimals"))) if tok.get("supply") and _dec_ok else 0.0
     pcts = [fnum(h.get("uiAmount")) / supply_ui * 100 if supply_ui > 0 and fnum(h.get("uiAmount")) > 0
             else fnum(h.get("pct")) for h in holders]
+    if not any(p_ > 0 for p_ in pcts):   # review Claude: nessuna quota calcolabile = dato mancante, non "0%"
+        return False, "quote dei holder non calcolabili (offerta/decimali/pct mancanti)", "holder non disponibili", None
     top10 = sum(sorted(pcts, reverse=True)[:10])
     t10h = soft_hard(st, "top10")
     if top10 > t10h:
@@ -4140,7 +4232,7 @@ async def security_check(st, http, mint, m, cache):
         elif bp >= CFG["BUNDLE_SOFT_PCT"]:
             soft.append(("bundle", f"reti collegate al {bp:.1f}%"))
     creator = str(r.get("creator") or "")
-    if creator and creator in st.blacklist:
+    if creator and creator_blacklisted(st, creator):
         return False, "creatore in lista nera per un rug precedente", "creatore in lista nera", None
     creator_pct = sum(p for h, p in zip(holders, pcts)
                       if creator and creator in (h.get("owner"), h.get("address")))
@@ -4167,7 +4259,9 @@ async def security_check(st, http, mint, m, cache):
            "is_pump": bool(m["dex"] == "pumpfun" or pump_migrated),
            "cex_pct": round(cex_pct, 2), "cex_names": sorted(set(cex_names))[:5], "dead_pct": round(dead_pct, 2),
            "lp_status": lp_status, "lp_locked_pct": None if lpmax is None else round(lpmax, 2),
-           "rc_down": rc_down, "bundle_established": bundle_est}
+           "rc_down": rc_down, "bundle_established": bundle_est,
+           # review Claude: report RugCheck senza totalHolders -> MIN_HOLDERS verificato dopo con cluster v2
+           "holders_unknown": bool(not rc_down and not total_holders)}
     if rc_down:   # v8.5: ripiego on-chain, ogni dubbio = niente acquisto (shadow rugcheck_down)
         doubt = []
         if r.get("t22_risky"):
@@ -4701,7 +4795,7 @@ async def analyst_agent(st, http, q_in, q_out):
             if (_sec.get("rc_down") or _sec.get("bundle_established")) and not so and score >= gate_thr:
                 _lv = (cl or {}).get("level", "unknown")
                 why_tag = "rugcheck_down" if _sec.get("rc_down") else "bundle_established"
-                doubts = rc_down_doubts(st, cl, crh) if why_tag == "rugcheck_down" else \
+                doubts = rc_down_doubts(st, cl, crh, _sec) if why_tag == "rugcheck_down" else \
                     ([] if _lv in ("ok", "none", "soft") else [f"cluster v2 '{_lv}' (serve ok o soft)"])
                 if doubts:   # v8.5e: 'none' = cluster v2 pulito (accettato anche qui e in rc_down_doubts)
                     reason = f"{'RugCheck giu' if why_tag == 'rugcheck_down' else 'bundle su token affermato'}: " \
@@ -4718,6 +4812,18 @@ async def analyst_agent(st, http, q_in, q_out):
                     smult *= CFG["RC_DOWN_SIZE_MULT"]
                     flags.append("rugcheck_down")
                     signals.append("rugcheck_down")
+            # review Claude: report RugCheck senza totalHolders: MIN_HOLDERS saltato in security_check (e 'holders'
+            # = righe del top, <= 20). Il numero di holder si prende da cluster v2 (gia letto); mancante = niente acquisto.
+            if _sec.get("holders_unknown") and not so and score >= gate_thr:
+                _n = int(fnum((cl or {}).get("holders_total")))
+                if _n < CFG["MIN_HOLDERS"]:
+                    reason = (f"holder totali non nel report RugCheck e cluster v2 ne conta {_n} (< {CFG['MIN_HOLDERS']})"
+                              if _n else "holder totali non verificabili (report RugCheck senza totalHolders, cluster v2 senza conta)")
+                    rej(reason, agent="Analyst", cat="holder non verificati")
+                    if CFG["SHADOW_TRADES"]:
+                        spawn_shadow(st, http, mint, m, ["holders_unknown"], reason, score, flags + ["holders_unknown"],
+                                     tag="holders_unknown", signals=signals)
+                    continue
             if bonus:
                 signals.append(f"bonus:{bonus:.3f}")
             detail = f"punteggio {score:.2f} (soglia {st.threshold:.2f})" + \
@@ -4897,9 +5003,9 @@ async def token_decimals(http, mint):
     try:
         dec = int(d["result"]["value"]["decimals"])
     except Exception:  # noqa: BLE001
-        if not mint.endswith("pump"):
-            return None
-        dec = 6  # i token pump.fun hanno sempre 6 decimali (l'RPC pubblico a volte risponde 429)
+        # review Claude: niente piu 6 'a occhio' per i mint che finiscono in 'pump': un indirizzo vanity non pump.fun
+        # con 9 decimali dava quantita sbagliate di 1000x (falso crollo nel mark). Errore RPC = sconosciuto, riprova.
+        return None
     SIM["dec"][mint] = dec
     return dec
 
@@ -5799,6 +5905,8 @@ def ret5_entry(m, candles=None):
         v = None
     if v and v.get("ret5") is not None:
         return fnum(v["ret5"]), "candele"
+    if not m.get("chg_m5_known", True):   # review Claude: senza candele e senza chg_m5 il ritorno non e noto
+        return None, "nessun dato"
     return fnum(m.get("chg_m5")), "chg_m5"
 
 
@@ -5852,6 +5960,8 @@ def spawn_confirm2(st, http, mint, m, fe, kind):
 def m5_gate(m, candles=None):
     """v8.4f: None se ok, altrimenti il motivo. Nessuna eccezione da bonus KOL, narrativa o trending."""
     r5, src = ret5_entry(m, candles)
+    if r5 is None:   # review Claude: dato mancante = non verificabile, mai 'ok' (prima valeva 0% e passava)
+        return "prezzo a 5 min non verificabile (nessuna candela e nessuna variazione 5m da DexScreener)"
     if r5 < fnum(CFG["MIN_CHANGE_M5_PCT"]):
         return f"prezzo in calo a 5 min ({r5:+.1f}% da {src}, minimo {fnum(CFG['MIN_CHANGE_M5_PCT']):+g}%)"
     return None
@@ -5873,6 +5983,8 @@ def lp_gate(c):
     lpp = sec.get("lp_locked_pct")
     if stt in ("ok", "partial") and lpp is not None and fnum(lpp) < LP_ZERO_MAX_PCT:
         return "lp_unlocked_zero"
+    if stt is None:   # review Claude: stato LP mai calcolato = sconosciuto, mai 'ok'
+        return "lp_unknown"
     return None
 
 
@@ -5991,6 +6103,11 @@ async def _execute_buy(st, broker, c, mint, m):
                 return
             if _rcd:
                 RC_HEALTH["fb_ok"] += 1
+    elif CFG["HONEYPOT_CHECK"]:
+        # review Claude: controllo honeypot richiesto ma modulo non caricato = niente acquisto (mai 'ok' per assenza)
+        reject(st, mint, m["symbol"], "controllo honeypot non disponibile (modulo honeypot non caricato)",
+               agent="Executor", cat="honeypot non verificato")
+        return
     elif (c.get("sec") or {}).get("rc_down"):
         # review Claude: con HONEYPOT_CHECK spento (config.json) o il modulo honeypot non caricato il blocco sopra
         # non gira, e con lui il requisito "GoPlus ok + honeypot pulito" del ripiego: si comprava con i soli
@@ -6234,6 +6351,9 @@ OVR_GLOBAL_MAP["MARK_NOROUTE_CONFIRM"] = "MARK_NOROUTE_CONFIRM"   # senza questa
 OVR_LIMITS.update({"LIQ_CRASH_CONFIRM": (1.0, 4.0)})   # review Claude (compito 4)
 OVR_INT_KEYS |= {"LIQ_CRASH_CONFIRM"}
 OVR_GLOBAL_MAP["LIQ_CRASH_CONFIRM"] = "LIQ_CRASH_CONFIRM"
+OVR_LIMITS.update({"BLACKLIST_TTL_DAYS": (7.0, 180.0)})   # review Claude (compito 13)
+OVR_INT_KEYS |= {"BLACKLIST_TTL_DAYS"}
+OVR_GLOBAL_MAP["BLACKLIST_TTL_DAYS"] = "BLACKLIST_TTL_DAYS"
 OVR_LIMITS.update({"CLUSTER_FAM_HARD_N": (3.0, 5.0)})   # review Claude (compito 2)
 OVR_INT_KEYS |= {"CLUSTER_FAM_HARD_N"}
 OVR_STR_KEYS["CLUSTER_FAM_MODE"] = ("shadow", "on")
@@ -6472,8 +6592,7 @@ def learn_from_trade(st, p, pnl, reason):
         if abs(st.threshold - old) > 1e-9:
             lesson(st, f"win rate {wr * 100:.0f}% sugli ultimi {len(st.outcomes)}: soglia {old:.2f} -> "
                        f"{st.threshold:.2f}")
-    if p.get("creator") and any(k in reason for k in ("liquidita crollata", "crollo", "nuovo rischio")):
-        st.blacklist.add(p["creator"])
+    if p.get("creator") and blacklist_creator(st, p["creator"], reason, p.get("mint") or p.get("symbol")):
         lesson(st, f"creatore di {p['symbol']} in lista nera ({reason})")
     elif y == 0:
         weak = [k for k in FEATURES if (p.get("features") or {}).get(k, 0) < 0.5]
@@ -6574,8 +6693,8 @@ async def _sell_position(st, broker, mint, reason, fraction=1.0, zero=False, mar
             f"{t['minutes']} min\nMotivo: {reason}")
     rug = bool(zero or "rug" in reason or "invendibile" in reason or is_rug_event(reason, t["minutes"]))
     if _bad:   # v8.5h: solo la lista nera del creatore (pool svuotata = rug), nessun esempio per il Learner
-        if p.get("creator") and "liquidita crollata" in reason:
-            st.blacklist.add(p["creator"])
+        if p.get("creator"):
+            blacklist_creator(st, p["creator"], reason, mint)
         log(st, "Learner", "warn", f"{p['symbol']}: PnL {t['pnl_pct']:+.0f}% non credibile, escluso dal Learner",
             mint=mint)
         save_state(st, force=True)
