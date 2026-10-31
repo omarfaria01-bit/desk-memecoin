@@ -22,3 +22,5 @@ gmgn_key*
 id.json
 keypair*
 !.env.example
+retro_cache/
+retro_labels_summary.json

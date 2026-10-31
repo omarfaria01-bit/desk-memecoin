@@ -3805,6 +3805,32 @@ def record_outcome(st, keys, pnl_pct, rug, src, now=None):
         learn_shadow_step(st, key, now)
 
 
+# compito 12 (Claude): etichette notturne di tools/retro_label.py (data/retro_labels.jsonl). Il Learner NON le usa finche
+# RETRO_LABELS_IN_LEARNING e falso (default): l'attivazione e collegamento sono decisione del reviewer.
+CFG.setdefault("RETRO_LABELS_IN_LEARNING", False)
+RETRO_LABELS_PATH = os.path.join(DATA_DIR, "data", "retro_labels.jsonl")
+
+
+def retro_labels_load(path=None, max_rows=20000):
+    """Righe valide di retro_labels.jsonl ([] se il flag e spento o il file manca). 'positive' solo se win e non cattivo."""
+    if not CFG.get("RETRO_LABELS_IN_LEARNING"):
+        return []
+    out = []
+    try:
+        with open(path or RETRO_LABELS_PATH) as f:
+            for line in f:
+                try:
+                    r = json.loads(line)
+                except ValueError:
+                    continue
+                if r.get("label") in ("win", "loss", "rug"):
+                    r["positive"] = bool(r.get("positive")) and r.get("label") == "win" and not r.get("bad")
+                    out.append(r)
+    except OSError:
+        return []
+    return out[-max_rows:]
+
+
 MEASURE_ONLY_KEYS = {"narrative_relax", "rugcheck_down", "bundle_established", "buysell_relax", "score_band",
                      "holders_unknown",   # review Claude: holder non verificati, solo misura
                      "sample"}   # compito 11: campioni degli scarti, solo misura
