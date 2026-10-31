@@ -50,6 +50,19 @@ def _fee_pct(tf):
     return best if best > 0 else 0.01   # fee presente ma senza un numero leggibile: la si conta comunque
 
 
+def lp_pct_from_dex(dex_list, pair=None):
+    """v8.10: LP bruciata (burn_percent) della pool che il bot usa. Review Claude: prima era il MASSIMO tra tutte le
+    pool, quindi una pool secondaria bruciata faceva passare la principale sbloccata. Ora: la pool con id/indirizzo
+    == pair; se non si riconosce, il valore PIU BASSO noto (prudente). None = nessun burn_percent (mai 0%)."""
+    rows = [d for d in (dex_list or []) if isinstance(d, dict)]
+    if pair:
+        for d in rows:
+            if pair in (d.get("id"), d.get("pair"), d.get("address"), d.get("pool")):
+                return float(d["burn_percent"]) if d.get("burn_percent") is not None else None
+    pcts = [float(d["burn_percent"]) for d in rows if d.get("burn_percent") is not None]
+    return min(pcts) if pcts else None
+
+
 def verdict(r, cfg=None):
     """r = result[mint] di GoPlus. -> (hard[], soft[], flags[], fee_pct)."""
     c = dict(CFG, **(cfg or {}))
@@ -144,7 +157,7 @@ async def check(session, mint, cfg=None, now=None):
         return {"level": "unknown", "why": "GoPlus: token non ancora analizzato (campi vuoti)", "flags": []}
     hard, soft, flags, fee = verdict(res, c)
     out = {"level": "hard" if hard else "ok", "why": "; ".join(hard or soft), "hard": hard, "soft": soft,
-           "flags": flags, "fee_pct": fee}
+           "flags": flags, "fee_pct": fee, "dex": res.get("dex")}
     _cache[mint] = (now, out)
     for k in [k for k, v in _cache.items() if now - v[0] > c["CACHE_SEC"]]:
         _cache.pop(k, None)
