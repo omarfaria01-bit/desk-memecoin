@@ -1445,17 +1445,28 @@ async def scout_pumpportal(st):
                 await ws.send(json.dumps({"method": "subscribeMigration"}))
                 log(st, "Scout", "info", "collegato a pump.fun")
                 backoff = 5
-                async for raw in ws:
+                FAST["subs"], FAST["ws_ok"] = set(), True
+                while True:
+                    try:   # compito 6: timeout corto per aggiornare le iscrizioni ai trade anche senza messaggi
+                        raw = await asyncio.wait_for(ws.recv(), timeout=float(CFG["FAST_POLL_SEC"]))
+                    except asyncio.TimeoutError:
+                        raw = None
+                    await fast_ws_sync(ws, st)
+                    if raw is None:
+                        continue
                     try:
                         msg = json.loads(raw)
                         mint = msg.get("mint")
                         if mint and "migrat" in str(msg.get("txType", "")).lower():
                             mig_note(mint)   # compito 10: ora della migrazione (nessuna chiamata in piu)
+                        if fast_ws_msg(st, msg):   # trade di un mint in posizione: solo uscite veloci (shadow)
+                            continue
                         if mint:
                             add_watch(st, mint, msg.get("symbol") or "?", "pump.fun")
                     except Exception:  # noqa: BLE001
                         continue
         except Exception as e:  # noqa: BLE001
+            FAST["ws_ok"], FAST["subs"] = False, set()   # compito 6: i mint pump.fun passano al polling
             log(st, "Scout", "warn", f"pump.fun disconnesso ({type(e).__name__}), riprovo tra {backoff}s")
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, 120)
@@ -4881,6 +4892,171 @@ def tp_cap_price(price, pnl, rung):
 STOPISH = ("stop loss", "stop a pareggio", "crollo a", "liquidita crollata")
 
 
+# ---------------------------------------------------------------- compito 6 (Claude): uscite veloci, SOLO misura
+# Lo stop a -12% chiude in media a -19,6% perche il controllo arriva tardi (posizioni ogni 15 s x 2 conferme, shadow
+# ogni 30 s; exit_lag_s ~30 s). Qui SL/TP1/trailing si valutano a OGNI prezzo: trade PumpPortal per i token pump.fun
+# (websocket gia aperto), polling DexScreener ogni FAST_POLL_SEC per gli altri (o se il websocket e giu). Conferma =
+# 2 prezzi sotto il livello ad almeno FAST_EXIT_CONFIRM_SEC di distanza; salti oltre PRICE_SPIKE_MULT ignorati.
+# FAST_EXIT_MODE 'shadow' = registra fast_exit_* accanto all'uscita vera, NESSUN cambio delle uscite; 'off' = niente.
+CFG.setdefault("FAST_EXIT_MODE", "shadow")
+CFG.setdefault("FAST_EXIT_CONFIRM_SEC", 3.0)
+CFG.setdefault("FAST_POLL_SEC", 5.0)
+CFG.setdefault("FAST_WS_STALE_SEC", 60.0)
+FAST = {"ws_ok": False, "subs": set(), "last_sync": 0.0, "ws_last": {}, "ticks": 0}
+
+
+def fast_on():
+    return str(CFG.get("FAST_EXIT_MODE", "shadow")) != "off"
+
+
+def fast_targets(st):
+    """{mint: (kind, oggetto)} di posizioni vere e shadow aperti."""
+    out = {k: ("real", v) for k, v in st.positions.items()}
+    out.update({k: ("shadow", v) for k, v in st.shadow_trades.items() if k not in out})
+    return out
+
+
+def fast_levels(o):
+    eff = o.get("eff") or {}
+    stop = fnum(eff.get("stop_base"), fnum(o.get("stop_dyn_on"), CFG["STOP_LOSS_PCT"])) if eff.get("stop_base") is not None \
+        else fnum(o.get("stop_dyn_on"), CFG["STOP_LOSS_PCT"])
+    tp1 = fnum(eff.get("tp1"), min(CFG["TP1_PCT"], CFG["TAKE_PROFIT_PCT"]))
+    stage = int(o.get("tp_stage", 0))
+    stop_eff = max(stop, min(CFG["BREAKEVEN_PCT"], tp1 - 1)) if stage >= 1 else stop
+    return stop_eff, tp1, fnum(eff.get("trail_start"), CFG["TRAIL_ACTIVATE_PCT"]), \
+        fnum(eff.get("trail_dist"), CFG["TRAIL_DISTANCE_PCT"]), stage
+
+
+def fast_tick(o, px, ts):
+    """Un prezzo (trade o polling). Registra in o['fast_exit'] la PRIMA uscita che sarebbe scattata (stop o
+    trailing, confermata da 2 prezzi ad almeno FAST_EXIT_CONFIRM_SEC) e in o['fast_tp1'] il primo TP1. Mai eccezioni."""
+    try:
+        if not fast_on() or fnum(px) <= 0:
+            return None
+        entry = fnum(o.get("quote_price")) or fnum(o.get("price"))
+        if entry <= 0:
+            return None
+        fx = o.setdefault("_fx", {"last": None, "peak": 0.0, "t_stop": None, "t_trail": None, "t_tp": None})
+        if fx["last"] and price_spike(fx["last"], px):
+            return None
+        fx["last"] = px
+        pnl = (px / entry - 1) * 100
+        fx["peak"] = max(fx["peak"], pnl, fnum(o.get("peak_pct")))
+        stop, tp1, ta, td, stage = fast_levels(o)
+        conf = float(CFG["FAST_EXIT_CONFIRM_SEC"])
+
+        def confirmed(key, cond):
+            if not cond:
+                fx[key] = None
+                return False
+            if fx[key] is None:
+                fx[key] = ts
+                return conf <= 0
+            return ts - fx[key] >= conf
+        if o.get("fast_exit") is None:
+            why = None
+            if confirmed("t_stop", pnl <= stop):
+                why = "stop"
+            elif confirmed("t_trail", fx["peak"] >= ta and pnl <= fx["peak"] - td):
+                why = "trailing"
+            if why:
+                o["fast_exit"] = {"why": why, "px": px, "ts": round(ts, 2), "pnl": round(pnl, 2),
+                                  "level": round(stop if why == "stop" else fx["peak"] - td, 2)}
+        if stage == 0 and o.get("fast_tp1") is None and confirmed("t_tp", pnl >= tp1):
+            o["fast_tp1"] = {"px": px, "ts": round(ts, 2), "pnl": round(pnl, 2)}
+        FAST["ticks"] += 1
+        return o.get("fast_exit")
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def fast_feed(st, mint, px, ts=None, src="poll"):
+    ts = ts or time.time()
+    if src == "ws":
+        FAST["ws_last"][mint] = ts
+    for d in (st.positions, st.shadow_trades):
+        o = d.get(mint)
+        if o is not None:
+            fast_tick(o, px, ts)
+
+
+def fast_ws_msg(st, msg, now=None):
+    """Trade PumpPortal di un mint seguito -> prezzo $ = solAmount/tokenAmount x SOL. True se il messaggio era un trade."""
+    if str(msg.get("txType", "")).lower() not in ("buy", "sell"):
+        return False
+    mint = msg.get("mint")
+    if mint not in FAST["subs"]:
+        return True
+    sol, tok = fnum(msg.get("solAmount")), fnum(msg.get("tokenAmount"))
+    if sol > 0 and tok > 0 and sol_known():
+        fast_feed(st, mint, sol / tok * sol_usd(), now, src="ws")
+    return True
+
+
+def fast_subs_diff(st, subs):
+    """(da iscrivere, da togliere): solo token pump.fun in posizione o in shadow."""
+    want = {k for k in fast_targets(st) if str(k).endswith("pump")} if fast_on() else set()
+    return sorted(want - subs), sorted(subs - want)
+
+
+async def fast_ws_sync(ws, st, now=None):
+    now = now or time.time()
+    if now - FAST["last_sync"] < float(CFG["FAST_POLL_SEC"]):
+        return
+    FAST["last_sync"] = now
+    add, rem = fast_subs_diff(st, FAST["subs"])
+    if add:
+        await ws.send(json.dumps({"method": "subscribeTokenTrade", "keys": add}))
+        FAST["subs"] |= set(add)
+    if rem:
+        await ws.send(json.dumps({"method": "unsubscribeTokenTrade", "keys": rem}))
+        FAST["subs"] -= set(rem)
+
+
+def fast_poll_targets(st, now=None):
+    """Mint da leggere col polling: non pump.fun, oppure pump.fun senza trade dal websocket da FAST_WS_STALE_SEC."""
+    now = now or time.time()
+    out = []
+    for k in fast_targets(st):
+        ws_fresh = FAST["ws_ok"] and k in FAST["subs"] and now - fnum(FAST["ws_last"].get(k), 0.0) < CFG["FAST_WS_STALE_SEC"]
+        if not ws_fresh:
+            out.append(k)
+    return out
+
+
+async def fast_poll_agent(st, http):
+    """Polling DexScreener (gratis) ogni FAST_POLL_SEC per i mint non coperti dal websocket: al massimo 30 mint per
+    chiamata, cioe ~12 chiamate/min con meno di 30 posizioni+shadow. Nessuna chiamata Helius."""
+    while True:
+        await asyncio.sleep(float(CFG["FAST_POLL_SEC"]))
+        if not fast_on():
+            continue
+        try:
+            tg = fast_poll_targets(st)
+            if not tg:
+                continue
+            market = await dex_batch(http, tg[:30])
+            now = time.time()
+            for mint, pairs in market.items():
+                m = summarize(pairs) if pairs else None
+                if m and m["price"] > 0:
+                    fast_feed(st, mint, m["price"], now, src="poll")
+        except Exception as e:  # noqa: BLE001
+            log(st, "Risk", "warn", f"uscite veloci (polling): errore {type(e).__name__}, continuo")
+
+
+def fast_exit_fields(o, close_ts, close_pnl):
+    """Alla chiusura: uscita veloce simulata accanto a quella vera. lag positivo = la veloce arrivava prima."""
+    fx = o.get("fast_exit") or {}
+    tp = o.get("fast_tp1") or {}
+    out = {"fast_exit_why": fx.get("why"), "fast_exit_fill": fx.get("pnl"), "fast_exit_level": fx.get("level"),
+           "fast_exit_lag_s": round(close_ts - fnum(fx.get("ts")), 1) if fx.get("ts") else None,
+           "fast_exit_gain_pct": round(fnum(fx.get("pnl")) - fnum(close_pnl), 2) if fx.get("pnl") is not None
+           and close_pnl is not None else None,
+           "fast_tp1_pnl": tp.get("pnl"), "fast_ticks_mode": CFG.get("FAST_EXIT_MODE")}
+    return {k: v for k, v in out.items() if v is not None}
+
+
 def exit_lag_fields(o, reason, value, tokens_sold, now=None):
     """v8.6 (A, solo log): per le uscite stop/crollo: livello teorico, fill effettivo netto (% sull'ingresso)
     e secondi dal primo controllo sotto lo stop alla vendita (+ intervallo prima del primo controllo sotto)."""
@@ -6295,6 +6471,7 @@ async def _sell_position(st, broker, mint, reason, fraction=1.0, zero=False, mar
     fe = dict(p.get("entry_features") or {})  # v8.1 (posizioni aperte prima della v8.1: vuoto)
     if fe:
         age_gate_close(fe, 0.0 if zero else p.get("last_price"), p.get("quote_price") or p.get("entry_mark"))
+        fe.update(fast_exit_fields(p, time.time(), pnl / p["cost"] * 100 if p["cost"] else None))   # compito 6
         fe.update({"trough_pct": round(fnum(p.get("trough_pct")), 2), "dyn_stop_hit": p.get("dyn_hit")})
         fe.update(alt_exits(mint, "real", p.get("opened")))   # v8.4f: solo registrato
     t.update(fe_columns(fe))
@@ -6701,6 +6878,7 @@ def _close_shadow_row(st, mint, sh, pnl, rug, why, now=None):
     _lag = dict(sh.get("_lag") or {})   # v8.6 (A)
     fe = dict(sh.get("fe") or {})  # v8.1
     age_gate_close(fe, 0.0 if rug else sh.get("last_price"), sh.get("price"))   # compito 10: solo misura
+    fe.update(fast_exit_fields(sh, now, pnl))   # compito 6: uscita veloce simulata, solo misura
     if fe and sh.get("_lagx"):
         fe.update(sh["_lagx"])
     if fe:
@@ -7417,6 +7595,7 @@ async def main():
             "Analyst": lambda: analyst_agent(st, http, q_an, q_ex),
             "Executor": lambda: executor_agent(st, broker, q_ex),
             "Risk": lambda: risk_agent(st, http, broker),
+            "Uscite veloci": lambda: fast_poll_agent(st, http),   # compito 6: solo misura (FAST_EXIT_MODE)
             "Learner": lambda: shadow_agent(st, http),
             "Shadow": lambda: shadow_trade_agent(st, http),
             "Recap": lambda: recap_agent(st),
