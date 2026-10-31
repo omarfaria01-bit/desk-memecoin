@@ -200,6 +200,9 @@ CFG = {
     # v8.4c (BNB "Broke Nigga Baddie"): ticker di grandi asset/exchange su un mint NON ufficiale = blocco nel Filter
     # (storico: impostore HYPE shadow -92.6%, BNB cattivo; nessun impostore vincente). 'block' oppure 'off'
     "TICKER_IMPOSTOR_ACTION": "block",
+    "CREATOR_HISTORY": True,         # v8.4e: storico del creatore (pump.fun gratis, cache 12 h): soft graduale, hard >=5/70%
+    "STALL_RESET_SEC": 180,          # v8.4d: ciclo fermo oltre 3 min (pausa processo/macchina) = "nessun prezzo" riparte
+    "NOPRICE_MAX_WAIT": 15,          # v8.4d: tentativi (~2 min l'uno) con seconda fonte giu prima di "dati non validi"
     # v8.2: etichette 'bad_cluster'/'suspected_rug' diventano 'rug' se il prezzo crolla dal massimo o la LP sparisce
     "RUG_PROMOTE_DROP_PCT": 50.0,
     "RUG_PROMOTE_LIQ_DROP_PCT": 50.0,
@@ -402,6 +405,11 @@ try:  # v8.4: GoPlus Security (API pubblica senza chiave)
     SRC["goplus"] = _gp
 except Exception as _e6:  # noqa: BLE001
     print(f"v8.4: goplus non caricato ({type(_e6).__name__})")
+try:  # v8.4e: storico del creatore (API pubblica pump.fun, cache 12 h, niente Helius)
+    from sources import creator_history as _crh  # noqa: E402
+    SRC["crh"] = _crh
+except Exception as _e7:  # noqa: BLE001
+    print(f"v8.4e: creator_history non caricato ({type(_e7).__name__})")
 try:
     from sources import project_check as _proj  # noqa: E402  (v8)
     SRC["proj"] = _proj
@@ -1361,6 +1369,12 @@ def soft_hard(st, flag):
     return _learned(CFG[spec["hard"]], (st.learner_shadow.get(flag + "_grave") or {}).get("hard_d", 0.0), spec["lim"])
 
 
+# v8.4e (Kiwi 07:07): LP per niente bloccata/bruciata (< 0.5%, cioe "0%") o stato LP sconosciuto = MAI acquisto
+# vero (ne size ridotta, ne narrativa/KOL, ne override/Learner/deep review): solo shadow. Costanti, non in CFG.
+LP_ZERO_MAX_PCT = 0.5
+LP_GATE_KEYS = frozenset({"lp_unlocked_zero", "lp_unknown"})
+
+
 def base_flags(flags):
     """Segnali distinti (lp_unlocked + lp_unlocked_grave contano come uno solo per SOFT_MAX_FLAGS)."""
     return sorted({f[:-6] if f.endswith("_grave") else f for f in flags})
@@ -1537,6 +1551,80 @@ async def cluster_scan(st, http, mint, sec):
     return res
 
 
+# ----------------------------------------------------------------------- v8.4d: "nessun prezzo" verificato
+# 31/10: 17 shadow chiusi insieme a -100% "possibile rug" alle 01:04:02 dopo una pausa di ~25 min del processo
+# (nessun log tra 00:38:35 e 01:03:54): tutti i token erano vivi (DexScreener). Ora: (a) dopo una pausa del ciclo
+# il conteggio "nessun prezzo" riparte da adesso; (b) prima di -100/rug serve la conferma di una seconda fonte
+# (Jupiter price v3, gratis); se anche lei non risponde si riprova, e dopo NOPRICE_MAX_WAIT tentativi lo shadow
+# si chiude come DATI NON VALIDI (al prezzo noto, non rug, mai usato dal Learner).
+LOOP_LAST = {}
+
+
+def stall_reset(st, name, objs, now=None):
+    """Ritorna i secondi di pausa se il ciclo 'name' e rimasto fermo oltre STALL_RESET_SEC (e azzera last_ok)."""
+    now = now or time.time()
+    last = LOOP_LAST.get(name)
+    LOOP_LAST[name] = now
+    gap = now - last if last else 0.0
+    if gap <= float(CFG.get("STALL_RESET_SEC", 180)):
+        return 0.0
+    objs = list(objs)
+    for o in objs:
+        o["last_ok"] = max(fnum(o.get("last_ok")), now)
+    if objs:
+        log(st, "Learner" if name == "shadow" else "Risk", "warn",
+            f"ciclo {name} fermo per {gap / 60:.0f} min (pausa del processo/macchina): conteggio 'nessun prezzo' "
+            f"ripartito per {len(objs)}")
+    return gap
+
+
+async def second_price(http, mints):
+    """Seconda fonte prezzi (Jupiter price v3, gratis): {mint: prezzo $} oppure None se la fonte non risponde."""
+    if http is None or not mints:
+        return None
+    out = {}
+    for i in range(0, len(mints), 50):
+        chunk = list(mints)[i:i + 50]
+        d = await http.get("https://lite-api.jup.ag/price/v3?ids=" + ",".join(chunk),
+                           headers={"Accept": "application/json"})
+        if not isinstance(d, dict):
+            return None
+        for mt in chunk:
+            v = fnum((d.get(mt) or {}).get("usdPrice")) if isinstance(d.get(mt), dict) else 0.0
+            if v > 0:
+                out[mt] = v
+    return out
+
+
+async def verify_no_price(st, http, items, now=None):
+    """items {mint: shadow/posizione} senza prezzo da 15 min -> {mint: 'alive' | 'wait' | 'invalid' | 'dead'}.
+    alive = prezzo dalla seconda fonte (aggiornato); dead = la seconda fonte risponde ma senza prezzo (rug possibile);
+    wait = seconda fonte non disponibile, riprova tra ~2 min; invalid = troppi tentativi senza nessuna fonte."""
+    now = now or time.time()
+    if not items:
+        return {}
+    px = await second_price(http, list(items))
+    out = {}
+    for mt, o in items.items():
+        if px is not None and px.get(mt):
+            o["last_price"], o["last_ok"], o["np_alive"] = px[mt], now, int(o.get("np_alive", 0)) + 1
+            o.pop("np_wait", None)
+            out[mt] = "alive"
+        elif px is not None:
+            o["np_src"] = "jupiter"
+            out[mt] = "dead"
+        else:
+            o["np_wait"] = int(o.get("np_wait", 0)) + 1
+            if o["np_wait"] >= int(CFG.get("NOPRICE_MAX_WAIT", 15)):
+                out[mt] = "invalid"
+            else:
+                o["last_ok"] = now - 900 + 120
+                out[mt] = "wait"
+    log(st, "Learner", "noprice", "nessun prezzo da 15 min, seconda fonte: " +
+        ", ".join(f"{(o.get('sym') or o.get('symbol') or mt[:6])} {out[mt]}" for mt, o in items.items()))
+    return out
+
+
 # ----------------------------------------------------------------------- v8.4c: honeypot sconosciuto, ticker impostori
 HP_RETRY = {}   # mint -> tentativi dopo un honeypot 'sconosciuto' (in memoria)
 
@@ -1577,10 +1665,56 @@ OFFICIAL_MINTS = {   # mint ufficiali su Solana (gli unici ammessi con questi ti
 }
 
 
-def ticker_impostor(symbol, mint):
-    """v8.4c: ticker di un grande asset/exchange su un mint non ufficiale -> ticker, altrimenti None."""
-    t = re.sub(r"[^A-Z0-9]", "", str(symbol or "").upper())
-    return t if t in MAJOR_TICKERS and mint not in OFFICIAL_MINTS else None
+# v8.4d: nomi scritti per esteso dei grandi asset/exchange (confronto esatto dopo la normalizzazione, con prefissi
+# "THE"/"WRAPPED" e suffissi "COIN"/"TOKEN"/"ONSOL..." ammessi): "Bitcoin" (HytpiyuR..pump) era passato come simbolo
+MAJOR_NAMES = {"BITCOIN", "ETHEREUM", "ETHER", "SOLANA", "BINANCE", "BINANCECOIN", "TETHER", "USDCOIN", "RIPPLE",
+               "DOGECOIN", "CARDANO", "TRON", "TONCOIN", "AVALANCHE", "POLKADOT", "CHAINLINK", "LITECOIN",
+               "BITCOINCASH", "STELLAR", "HYPERLIQUID", "JUPITER", "PUMPFUN", "COINBASE", "KRAKEN", "BYBIT",
+               "KUCOIN", "BITGET", "OKX", "MEXC", "SUI"}
+_NAME_SUFFIX = ("TOKEN", "COIN", "ONSOLANA", "ONSOL")
+# v8.4d: ticker/nomi di AZIONI (non bloccati: solo annotati negli eventi 'ticker_azione' con l'esito)
+STOCK_TICKERS = {"AAPL", "APPLE", "NVDA", "NVIDIA", "TSLA", "TESLA", "MSFT", "MICROSOFT", "AMZN", "AMAZON", "GOOGL",
+                 "GOOG", "GOOGLE", "ALPHABET", "META", "NFLX", "NETFLIX", "AMD", "INTC", "INTEL", "COIN", "MSTR",
+                 "MICROSTRATEGY", "GME", "GAMESTOP", "AMC", "PLTR", "PALANTIR", "SPY", "QQQ", "SPX", "NIO"}
+
+
+def _norm_tk(x):
+    return re.sub(r"[^A-Z0-9]", "", str(x or "").upper())
+
+
+def ticker_impostor(symbol, mint, name=None):
+    """v8.4c: ticker di un grande asset/exchange su un mint non ufficiale -> ticker, altrimenti None.
+    v8.4d: anche simbolo o nome scritti per esteso (Bitcoin, Ethereum, Solana, Binance, Tether...)."""
+    if mint in OFFICIAL_MINTS:
+        return None
+    for raw in (symbol, name):
+        t = _norm_tk(raw)
+        if not t:
+            continue
+        if t in MAJOR_TICKERS or t in MAJOR_NAMES:
+            return t
+        x = re.sub(r"^(?:THE|WRAPPED)", "", t)
+        cands = {x} | {x[:-len(sf)] for sf in _NAME_SUFFIX if x.endswith(sf) and len(x) > len(sf)}
+        if any(c in MAJOR_NAMES or (c in MAJOR_TICKERS and len(c) >= 3) for c in cands):
+            return t
+    return None
+
+
+def stock_ticker(symbol, name=None):
+    """v8.4d: ticker o nome di un'azione (AAPL, Apple...) -> ticker normalizzato, altrimenti None. Solo annotazione."""
+    for raw in (symbol, name):
+        t = _norm_tk(raw)
+        if t in STOCK_TICKERS:
+            return t
+    return None
+
+
+def note_stock_outcome(kind, sym, mint, pnl, why, name=None):
+    tk = stock_ticker(sym, name)
+    if tk:
+        write_event("Learner", "ticker_azione", f"{kind} {sym} (ticker azione {tk}) chiuso {pnl:+.1f}%: {why}",
+                    {"mint": mint, "ticker": tk, "pnl_pct": round(fnum(pnl), 2), "kind": kind})
+    return tk
 
 
 # ----------------------------------------------------------------------- v8.2: cluster v2, honeypot, etichette
@@ -1630,6 +1764,14 @@ LABEL_SEEDS = [
              "nuovi finanziati da MEXC 0.2-4 h prima di comprare nei primi 47 min, quote simili 1.3-2.9% = 11.1%; "
              "GMGN: phishing 13.65%, bundler 2.73%, top10 26.74%. v8.4: regola CEX-fresh = HARD; eta 14 g = "
              "penalita forte."},
+    {"id": "hyperchan-2026-10-31-rug", "mint": "3ApVr1xphYMpi9dn3rpqU4hwvpmCQDVwxET1rdCDpump", "sym": "HYPERCHAN",
+     "label": "rug", "pnl_pct": None, "rug": True,   # trade paper (+6.4%, 30/10 20:06) e shadow gia registrati: niente doppio conteggio
+     "note": "RUG (Kiwi, 31/10 07:04), 6a lezione negativa: GMGN alle 07:02 prezzo -99.84%, liquidita $1.33k, mcap "
+             "$2.58k, storico creatore 'Rug pull' 51.73% (stima Kiwi ~55%). Schema: 59 dei 60 holder controllati "
+             "finanziati da un solo wallet BXTDKd (gruppo stimato ~148 wallet al 14.3%); v8.4c la dava soft. "
+             "Shadow 00:04 chiuso a -100 alle 01:04 = DATO NON VALIDO (pausa processo): GeckoTerminal dava -55% "
+             "alle 00:45 e ~-43% alle 01:00-01:05; il rug completo e arrivato dopo. v8.4e: regola 'un solo "
+             "finanziatore >= 50% dei controllati' = HARD. MAI controllo pulito o vincente."},
 ]
 
 
@@ -2476,6 +2618,8 @@ def record_outcome(st, keys, pnl_pct, rug, src, now=None):
 def learn_shadow_step(st, key, now=None):
     """Al massimo un passo all'ora per segnale, solo con >= LEARN_SHADOW_MIN_N esiti. Ritorna l'azione o None."""
     now = now or time.time()
+    if key in LP_GATE_KEYS:  # v8.4e (Kiwi): regola LP 0%/sconosciuta bloccata, il Learner la misura e basta
+        return None
     e = _ls(st, key)
     sts = shadow_stats(e["hist"])
     if sts["n"] < CFG["LEARN_SHADOW_MIN_N"] or now - e["last_adj"] < CFG["LEARN_STEP_SEC"]:
@@ -2553,13 +2697,25 @@ async def security_check(st, http, mint, m, cache):
     pump_amm = any("pump" in str(mk.get("marketType", "")).lower() for mk in markets if isinstance(mk, dict))
     pump_migrated = (mint.endswith("pump") and m["dex"] in ("pumpswap", "pumpfun", "raydium")
                      and ("pump" in lp_name or pump_amm))
+    # v8.4e (Kiwi 07:07): stato LP per la barriera finale dell'Executor (lp_gate). 'zero' (0% bloccata/bruciata)
+    # e 'unknown' (LP non verificabile) = MAI acquisto vero, solo shadow (tag lp_unlocked_zero / lp_unknown).
+    lp_status, lp_block, lpmax = ("curve" if m["dex"] == "pumpfun" else "protocol"), None, None
     if m["dex"] != "pumpfun" and not pump_migrated:
         lps = [mk.get("lp") for mk in markets if isinstance(mk, dict) and isinstance(mk.get("lp"), dict)]
-        if not lps:
-            return False, "LP non verificabile", "LP non verificabile", None
+        if not lps or all(lp.get("lpLockedPct") is None for lp in lps):
+            lp_status = "unknown"
+            lp_block = ("lp_unknown", "LP non verificabile: stato LP sconosciuto, solo shadow (nessun acquisto)",
+                        "LP non verificabile")
+            lps = []
         # lpLockedPct di RugCheck conta sia la LP bloccata sia quella bruciata
-        lpmax = max(fnum(lp.get("lpLockedPct")) for lp in lps)
-        if lpmax < CFG["MIN_LP_LOCKED_PCT"]:
+        lpmax = max(fnum(lp.get("lpLockedPct")) for lp in lps) if lps else None
+        if lpmax is not None and lpmax < LP_ZERO_MAX_PCT:
+            lp_status = "zero"
+            lp_block = ("lp_unlocked_zero", f"LP per niente bloccata o bruciata ({lpmax:.0f}%): solo shadow, "
+                        f"mai acquisto", "LP sbloccata 0%")
+        elif lpmax is not None:
+            lp_status = "ok" if lpmax >= CFG["MIN_LP_LOCKED_PCT"] else "partial"
+        if lpmax is not None and lp_status == "partial":
             # v7: LP sbloccata = SOFT. HARD solo se estremo: quasi tutta sbloccata E in mano al creatore,
             # oppure rimozione della liquidita gia iniziata.
             creator = str(r.get("creator") or "")
@@ -2651,7 +2807,11 @@ async def security_check(st, http, mint, m, cache):
            "token_meta": {k: (r.get("tokenMeta") or {}).get(k) for k in ("name", "symbol", "uri", "mutable",
                                                                            "updateAuthority")}
            if isinstance(r.get("tokenMeta"), dict) else None,
-           "is_pump": bool(m["dex"] == "pumpfun" or pump_migrated)}
+           "is_pump": bool(m["dex"] == "pumpfun" or pump_migrated),
+           "lp_status": lp_status, "lp_locked_pct": None if lpmax is None else round(lpmax, 2)}
+    if lp_block:  # v8.4e: prima di ogni altro esito "soft": niente acquisto, shadow col tag dedicato
+        sec.update(severe=lp_block[0], shadow_keys=[lp_block[0]], lp_block=lp_block[0])
+        return False, lp_block[1], lp_block[2], sec
     if severe:  # soglia grave di un segnale soft: scarto (con shadow trade per imparare)
         f0, why, cat = severe[0]
         sec.update(severe=f0, shadow_keys=[f + "_grave" for f, _, _ in severe],
@@ -2706,9 +2866,10 @@ async def filter_agent(st, http, q_out):
                 if m["price"] <= 0 or m["liq"] <= 0 or m["liq"] < CFG["MIN_LIQUIDITY_USD"]:
                     reject(st, mint, m["symbol"], f"liquidita ${m['liq']:,.0f} troppo bassa", cat="liquidita bassa")
                     continue
-                imp = ticker_impostor(m["symbol"], mint) if CFG.get("TICKER_IMPOSTOR_ACTION") == "block" else None
+                imp = ticker_impostor(m["symbol"], mint, m.get("name")) \
+                    if CFG.get("TICKER_IMPOSTOR_ACTION") == "block" else None
                 if imp:   # v8.4c: prima di ogni chiamata a pagamento (cluster, honeypot, Birdeye)
-                    reject(st, mint, m["symbol"], f"ticker {imp} di un grande asset/exchange ma mint non ufficiale "
+                    reject(st, mint, m["symbol"], f"ticker/nome {imp} di un grande asset/exchange ma mint non ufficiale "
                            f"(impostore)", cat="ticker impostore")
                     if CFG["SHADOW_TRADES"]:
                         spawn_shadow(st, http, mint, m, ["ticker_impostor"], f"ticker impostore {imp}", 0.0, [],
@@ -2725,6 +2886,12 @@ async def filter_agent(st, http, q_out):
                 ok, reason, cat, sec = await security_check(st, http, mint, m, cache)
                 if not ok:
                     reject(st, mint, m["symbol"], reason, cat=cat)
+                    if sec and sec.get("lp_block"):  # v8.4e: LP 0%/sconosciuta: shadow sempre, mai Analyst/acquisto
+                        if CFG["SHADOW_TRADES"]:
+                            spawn_shadow(st, http, mint, m, [sec["lp_block"]], reason, 0.0, [],
+                                         tag=sec["lp_block"], signals=[f"src:{m.get('src') or '?'}",
+                                                                       "reason:" + sec["lp_block"]])
+                        continue
                     if CFG["SHADOW_TRADES"] and sec and sec.get("severe"):
                         # v6: nessun acquisto possibile; l'Analyst valuta solo se aprire uno shadow trade
                         await q_out.put({"mint": mint, "m": m, "sec": sec, "filter_ok": True,
@@ -3091,6 +3258,27 @@ async def analyst_agent(st, http, q_in, q_out):
                     pen += soft_pen(st, flag)
                     score -= soft_pen(st, flag)
                     smult *= soft_size(st, flag)
+            # v8.4e (Kiwi): storico del creatore, solo per i candidati a un acquisto vero (2 chiamate pump.fun
+            # gratuite per creatore nuovo, poi cache). 'unknown' = nessun effetto.
+            if CFG.get("CREATOR_HISTORY", True) and "crh" in SRC and not so and score >= st.threshold \
+                    and str(mint).endswith("pump") and callable(getattr(http, "get", None)):
+                crh = await SRC["crh"].lookup(http.get, mint, (c.get("sec") or {}).get("creator") or None)
+                signals.append(f"creator:{crh['level']}:{crh.get('dead', 0)}/{crh.get('prev', 0)}")
+                if crh["level"] != "unknown":
+                    log(st, "Analyst", "creator", f"{m['symbol']} {crh['why']} -> {crh['level']}", mint=mint,
+                        level=crh["level"], prev=crh.get("prev"), dead=crh.get("dead"), share=crh.get("share"),
+                        creator=str(crh.get("creator") or "")[:6])
+                if crh["level"] == "hard":
+                    reason = f"storico del creatore: {crh['why']}"
+                    rej(reason, agent="Analyst", cat="creatore seriale")
+                    if CFG["SHADOW_TRADES"]:
+                        spawn_shadow(st, http, mint, m, ["creator_serial"], reason, score, flags + ["creatore"],
+                                     tag="creator_serial", signals=signals)
+                    continue
+                if crh["level"] == "soft" and fnum(crh.get("pen")) > 0:
+                    score -= fnum(crh["pen"])
+                    pen += fnum(crh["pen"])
+                    flags.append("creatore")
             if bonus:
                 signals.append(f"bonus:{bonus:.3f}")
             detail = f"punteggio {score:.2f} (soglia {st.threshold:.2f})" + \
@@ -3767,7 +3955,35 @@ async def executor_agent(st, broker, q_in):
             log(st, "Executor", "error", f"errore ({type(e).__name__}: {e}), continuo")
 
 
+def lp_gate(c):
+    """v8.4e (Kiwi 07:07): barriera finale, indipendente da punteggio, soft, Learner, override, narrativa/KOL e
+    deep review. Ritorna la chiave di blocco ('lp_unlocked_zero' / 'lp_unknown') o None. Nessun CFG modificabile."""
+    sec = c.get("sec")
+    if not isinstance(sec, dict):
+        return "lp_unknown"
+    if sec.get("lp_block") in LP_GATE_KEYS:
+        return sec["lp_block"]
+    stt = sec.get("lp_status")
+    if stt == "zero":
+        return "lp_unlocked_zero"
+    if stt == "unknown":
+        return "lp_unknown"
+    lpp = sec.get("lp_locked_pct")
+    if stt in ("ok", "partial") and lpp is not None and fnum(lpp) < LP_ZERO_MAX_PCT:
+        return "lp_unlocked_zero"
+    return None
+
+
 async def _execute_buy(st, broker, c, mint, m):
+    g = lp_gate(c)
+    if g:
+        reject(st, mint, m["symbol"], f"LP {'0% bloccata/bruciata' if g == 'lp_unlocked_zero' else 'sconosciuta'}: "
+               f"mai acquisto vero, solo shadow", agent="Executor", cat="LP sbloccata 0%" if g == "lp_unlocked_zero"
+               else "LP non verificabile")
+        if CFG["SHADOW_TRADES"]:
+            spawn_shadow(st, getattr(broker, "http", None), mint, m, [g], "Executor: barriera LP", 0.0,
+                         list(c.get("soft") or []), tag=g, signals=[f"src:{m.get('src') or '?'}", "reason:" + g])
+        return
     if st.paused:
         reject(st, mint, m["symbol"], "pausa per limite di perdita", agent="Executor", cat="pausa")
         return
@@ -4370,6 +4586,7 @@ async def _sell_position(st, broker, mint, reason, fraction=1.0, zero=False, mar
     st.closed.append(t)
     write_trade(t)
     st.cooldown[mint] = time.time() + CFG["COOLDOWN_MIN"] * 60
+    note_stock_outcome("trade", p["symbol"], mint, t["pnl_pct"], reason)   # v8.4d: azioni solo annotate
     post_exit_start(st, mint, "real", p["symbol"], p.get("quote_price") or p.get("entry_mark"), p.get("last_price"),
                     reason, (fe or {}).get("stop_applied"), (fe or {}).get("dyn_stop_shadow"))
     log(st, "Risk", "sell", f"CHIUDE {p['symbol']} {t['pnl_pct']:+.1f}% (${pnl:+.2f}): {reason}", mint=mint,
@@ -4424,7 +4641,17 @@ async def risk_agent(st, http, broker):
             market = {}
             if st.positions:
                 pe_r = [k for k, v in st.post_exit.items() if v.get("kind") == "real" and k not in st.positions]
+                stall_reset(st, "risk", st.positions.values())   # v8.4d
                 market = await dex_batch(http, list(st.positions.keys()) + pe_r)
+                _now = time.time()
+                _stale = {}
+                for _k, _p in st.positions.items():
+                    _mm = summarize(market[_k]) if _k in market else None
+                    if not (_mm and _mm["price"] > 0) and _now - fnum(_p.get("last_ok"), _now) > 900:
+                        _stale[_k] = _p
+                for _k, _vd in (await verify_no_price(st, http, _stale, _now)).items():   # v8.4d: seconda fonte
+                    if _vd == "invalid":   # posizione: mai vendita a zero senza conferma, si continua ad aspettare
+                        _stale[_k]["np_wait"], _stale[_k]["last_ok"] = 0, _now - 900 + 120
                 for mint, p in list(st.positions.items()):
                     if mint in market:  # v8.1: price path (stessi dati, nessuna chiamata in piu)
                         try:
@@ -4642,7 +4869,9 @@ SHADOW_FIELDS = ["aperto", "chiuso", "symbol", "mint", "motivo_scarto", "chiavi"
                  "rug", "tag", "signals",
                  # v8.1
                  "atr_1m_10", "stop_applied", "dyn_stop_shadow", "size_mult",
-                 "dyn_tp1", "dyn_trail_act", "dyn_trail_dist", "entry_features"]
+                 "dyn_tp1", "dyn_trail_act", "dyn_trail_dist", "entry_features",
+                 # v8.4d: 0 = dati non validi (es. nessun prezzo per un problema nostro), il Learner non li usa
+                 "valido"]
 
 
 def ensure_shadow_csv():
@@ -4668,7 +4897,8 @@ def write_csv_row(path, row):
 
 def shadow_tag(keys, flags):
     ks = list(keys) + list(flags or [])
-    for k, tag in (("cluster", "cluster"), ("lp_unlocked", "lp_unlocked"), ("analyst_momentum", "analyst_momentum")):
+    for k, tag in (("lp_unlocked_zero", "lp_unlocked_zero"), ("lp_unknown", "lp_unknown"),
+                   ("creator_serial", "creator_serial"), ("cluster", "cluster"), ("lp_unlocked", "lp_unlocked"), ("analyst_momentum", "analyst_momentum")):
         if any(x.startswith(k) for x in ks):
             return tag
     return "score" if list(keys) == ["score"] else "soft"
@@ -4691,7 +4921,8 @@ def _close_shadow_row(st, mint, sh, pnl, rug, why, now=None):
            "score": sh["score"], "soglia": sh["thr"], "prezzo_entrata": sh["price"], "liq_entrata": round(sh["liq_entry"]),
            "rt_cost_pct": sh["rt"], "quote_src": sh.get("src", "formula"), "pnl_pct": round(pnl, 2),
            "peak_pct": round(sh.get("peak_pct", 0.0), 2), "minuti": int((now - sh["t"]) / 60), "uscita": why,
-           "rug": int(bool(rug or pnl <= -50)), "tag": sh.get("tag", ""), "signals": "|".join(sh.get("signals") or [])}
+           "rug": int(bool(rug or pnl <= -50)) if not sh.get("np_invalid") else 0, "tag": sh.get("tag", ""),
+           "signals": "|".join(sh.get("signals") or []), "valido": 0 if sh.get("np_invalid") else 1}
     fe = dict(sh.get("fe") or {})  # v8.1
     if fe:
         fe.update({"trough_pct": round(fnum(sh.get("trough_pct")), 2), "dyn_stop_hit": sh.get("dyn_hit")})
@@ -4701,6 +4932,11 @@ def _close_shadow_row(st, mint, sh, pnl, rug, why, now=None):
         post_exit_start(st, mint, "shadow", sh["sym"], sh.get("price"), sh.get("last_price"), why,
                         fe.get("stop_applied"), fe.get("dyn_stop_shadow"), now)
     st.stats["shadow_closed"] += 1
+    note_stock_outcome("shadow", sh["sym"], mint, pnl, why)   # v8.4d: azioni solo annotate
+    if sh.get("np_invalid"):   # v8.4d: dati non validi: il Learner non li usa
+        write_event("Learner", "shadow_invalid", f"shadow {sh['sym']} chiuso come DATI NON VALIDI ({why})",
+                    {"mint": mint, "keys": sh["keys"]})
+        return
     record_outcome(st, sh["keys"], pnl, rug, "shadow", now)
     record_signals(st, mint, row["signals"], pnl, rug, shadow=True)
     write_event("Learner", "shadow_close", f"shadow {sh['sym']} chiuso {pnl:+.1f}%: {why}",
@@ -4790,7 +5026,10 @@ def shadow_decide(sh, now=None):
     sh["stop_hits"] = sh["stop_hits"] + 1 if pnl <= stop_eff else 0
     held = (now - sh["t"]) / 60
     if now - sh["last_ok"] > 900:
-        return "nessun prezzo da 15 min, possibile rug", 1.0, True, True
+        if sh.get("np_invalid"):   # v8.4d: nessuna fonte prezzi: dati non validi, al prezzo noto, non rug
+            return "DATI NON VALIDI: nessun prezzo da nessuna fonte (non rug)", 1.0, False, False
+        return ("nessun prezzo da 15 min, possibile rug" + (" (confermato da Jupiter)" if sh.get("np_src") else ""),
+                1.0, True, True)
     if sh["liq_entry"] > 0 and sh["liq"] < sh["liq_entry"] * (1 - CFG["LIQ_DROP_EXIT_PCT"] / 100):
         drop = (1 - sh["liq"] / sh["liq_entry"]) * 100
         why = f"liquidita crollata del {drop:.0f}%"
@@ -4842,6 +5081,7 @@ async def shadow_trade_agent(st, http):
             continue
         try:
             # v8.1: gli shadow gia chiusi (seguiti 180 min) viaggiano nella stessa chiamata (30 token per chiamata)
+            stall_reset(st, "shadow", st.shadow_trades.values())   # v8.4d
             market = await dex_batch(http, list(st.shadow_trades.keys()) + pe)
             now = time.time()
             post_exit_update(st, {k: v for k, v in market.items() if k in pe}, now)
@@ -4850,7 +5090,13 @@ async def shadow_trade_agent(st, http):
                     m = summarize(market[mint])
                     if m["price"] > 0:
                         sh["last_price"], sh["liq"], sh["last_ok"] = m["price"], max(m["liq"], 1.0), now
+                        sh.pop("np_wait", None), sh.pop("np_src", None)
                         path_tick(mint, "shadow", m["price"], m["liq"], mark_pnl_pct(sh), now=now)
+            stale = {k: v for k, v in st.shadow_trades.items() if now - fnum(v.get("last_ok"), now) > 900}
+            for mint, vd in (await verify_no_price(st, http, stale, now)).items():   # v8.4d: seconda fonte
+                if vd == "invalid":
+                    st.shadow_trades[mint]["np_invalid"] = True
+            for mint, sh in list(st.shadow_trades.items()):
                 dec = shadow_decide(sh, now)
                 deep_queue_peak(mint, sh["sym"], sh.get("peak_pct", 0.0), sh.get("links"), sh.get("url", ""), "shadow")
                 await shadow_apply(st, http, mint, sh, dec, now)

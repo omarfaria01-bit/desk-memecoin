@@ -57,7 +57,7 @@ assert ok and sec["soft"] == ["lp_unlocked"], sec                      # LP 30% 
 ok, why, cat, sec = check(report(lp=10, mtype="raydium"), mint="XYZ", dex="raydium")
 assert ok and sec["soft"] == ["lp_unlocked", "lp_unlocked_grave"], sec  # v7: LP 10% -> soft pesante
 ok, why, cat, sec = check(report(lp=0, mtype="raydium"), mint="XYZ", dex="raydium")
-assert ok and "lp_unlocked_grave" in sec["soft"], sec                  # v7: LP 0% senza creatore -> soft
+assert not ok and sec["lp_block"] == "lp_unlocked_zero", sec            # v8.4e: LP 0% = solo shadow, mai acquisto
 ok, why, cat, sec = check(report(mint_auth="AUTH", nets=[net(5)], gid=6))
 assert not ok and cat == "mint non revocata" and sec is None           # HARD invariato
 ok, why, cat, sec = check(report(risks=[{"name": "Single holder ownership", "level": "danger"}]))

@@ -66,7 +66,10 @@ def check(r, m=None, st=None):
 ok, why, cat, sec = check(rep(30))
 assert ok and sec["soft"] == ["lp_unlocked"], (why, sec)
 ok, why, cat, sec = check(rep(0, holders=[{"owner": "OTHER", "pct": 99.0}]))
-assert ok and sec["soft"] == ["lp_unlocked", "lp_unlocked_grave"], why
+# v8.4e (Kiwi 07:07): LP 0% = MAI acquisto, solo shadow lp_unlocked_zero (prima: soft lp_unlocked + grave)
+assert not ok and sec["lp_block"] == "lp_unlocked_zero" and sec["shadow_keys"] == ["lp_unlocked_zero"], why
+ok, why, cat, sec = check(rep(10, holders=[{"owner": "OTHER", "pct": 99.0}]))
+assert ok and sec["soft"] == ["lp_unlocked", "lp_unlocked_grave"], why   # tra 0% e 50%: invariato
 ok, why, cat, sec = check(rep(2, holders=[{"owner": "CR", "address": "A", "pct": 95.0}]))
 assert not ok and cat == "LP in mano al creatore" and sec is None, why
 ok, why, cat, sec = check(rep(30), m={"dex": "raydium", "liq": 50_000.0, "liq_max": 100_000.0})

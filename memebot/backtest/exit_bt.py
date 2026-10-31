@@ -91,7 +91,10 @@ def fetch_ohlcv(p, odir=None):
         params = {"aggregate": 1, "limit": 1000, "currency": "usd", "token": "base"}
         if before: params["before_timestamp"] = before
         d = get(f"/networks/solana/pools/{p['address']}/ohlcv/minute", params)
-        lst = (d or {}).get("data", {}).get("attributes", {}).get("ohlcv_list", []) if d else []
+        if d is None:  # 429/errore persistente (o 404): NON salvare un file vuoto, si riprova al prossimo giro
+            if rows: break
+            return []
+        lst = d.get("data", {}).get("attributes", {}).get("ohlcv_list", [])
         if not lst: break
         for r in lst: rows[int(r[0])] = [float(v) for v in r[1:6]]
         oldest = min(int(r[0]) for r in lst)
@@ -317,6 +320,79 @@ def report(trades, label, dead_penalty=False):
     for name in RULES: print("  ", name, "uscite:", out[f"{name}/uscite"])
     return txt, out
 
+
+# ---------------- test extra (richiesti da Kiwi) ----------------
+def pool_meta(addrs, cache_fn, no_fetch=False):
+    """GeckoTerminal pools/multi (30 per richiesta): locked_liquidity_percentage, mint, reserve attuale. Cache su file."""
+    meta = json.load(open(cache_fn)) if os.path.exists(cache_fn) else {}
+    todo = [a for a in addrs if a not in meta]
+    if not no_fetch:
+        for i in range(0, len(todo), 30):
+            d = get("/networks/solana/pools/multi/" + ",".join(todo[i:i+30]))
+            if d is None: print("  meta: fetch fallito, uso parziale"); break
+            for x in d.get("data", []):
+                at = x["attributes"]; ll = at.get("locked_liquidity_percentage")
+                meta[at["address"]] = dict(locked=float(ll) if ll not in (None, "") else None,
+                                           mint=x["relationships"]["base_token"]["data"]["id"].split("_", 1)[-1],
+                                           reserve_now=float(at.get("reserve_in_usd") or 0))
+            json.dump(meta, open(cache_fn, "w"), indent=1)
+    return meta
+
+def with_(R, **kw):
+    R = dict(R); R.update(kw); return R
+
+def extra_tests(trades, pools, meta, label):
+    full = {p["address"][:6]: p for p in pools}
+    lines = [f"## Test extra - {label} ({len(trades)} trade)"]; out = {}
+    BL = RULES["B_live"]
+    def addr(t): return full[t["pool"]]["address"]
+    def unlocked(t):
+        m = meta.get(addr(t)); 
+        if not m or m["locked"] is None: return None
+        return m["locked"] < 50
+    known = [t for t in trades if unlocked(t) is not None]
+    n_unl = sum(1 for t in known if unlocked(t))
+    lines.append(f"LP lock (GeckoTerminal locked_liquidity_percentage, valore ATTUALE non all'ingresso; <50% = non bloccata): "
+                 f"noto per {len(known)}/{len(trades)} trade, non bloccata {n_unl}, bloccata {len(known)-n_unl}")
+    def run_mixed(R_unl, R_lock):
+        res = []
+        for t in trades:
+            R = R_unl if unlocked(t) else R_lock
+            r, m, why = simulate(t["bars"], t["i0"], R); res.append((t["t_entry"], r))
+        res.sort(); return [x[1] for x in res]
+    cfgs = [("B_live (trail 15%, hold 180)", lambda: run_set(trades, BL)[0]),
+            ("B_live trail 10%", lambda: run_set(trades, with_(BL, trail_dist=0.10))[0]),
+            ("B_live trail 10% attivo da TP1 (+30%)", lambda: run_set(trades, with_(BL, trail_dist=0.10, trail_act=0.30))[0]),
+            ("B_live hold 60 per LP non bloccata, 180 altrimenti", lambda: run_mixed(with_(BL, max_hold=60), BL)),
+            ("B_live hold 60 per TUTTI", lambda: run_set(trades, with_(BL, max_hold=60))[0]),
+            ("B_live trail 10% + hold 60 LP non bloccata", lambda: run_mixed(with_(BL, trail_dist=0.10, max_hold=60), with_(BL, trail_dist=0.10)))]
+    lines += HDR
+    for name, f in cfgs:
+        s = stats(f()); out[name] = s; lines.append(fmt(name, s))
+    # young momentum: eta' del token (pool) all'ingresso < 6h; tutti i trade hanno gia' il segnale di volume in accelerazione
+    young = [t for t in trades if (t["t_entry"] - full[t["pool"]]["created"]) / 3600 < 6]
+    old = [t for t in trades if t not in young]
+    lines += ["", f"Young momentum (eta' < 6h all'ingresso + volume in accelerazione) vs resto, regole B_live: {len(young)} vs {len(old)} trade"] + HDR
+    for name, sub in (("young <6h", young), ("resto >=6h", old)):
+        s = stats(run_set(sub, BL)[0]); out["young/" + name] = s; lines.append(fmt(name, s))
+    txt = "\n".join(lines); print(txt)
+    return txt, out
+
+def migration_check(pools, meta, no_fetch=False):
+    """Per i token del campione: la pool piu' liquida oggi e' un'altra (migrazione)? tokens/multi con top_pools."""
+    mints = sorted({m["mint"] for a, m in meta.items() if a in {p["address"] for p in pools}})
+    res = {}
+    if no_fetch: return res
+    for i in range(0, len(mints), 30):
+        d = get("/networks/solana/tokens/multi/" + ",".join(mints[i:i+30]), {"include": "top_pools"})
+        if d is None: break
+        inc = {x["id"]: x["attributes"] for x in d.get("included", []) if x.get("type") == "pool"}
+        for x in d.get("data", []):
+            mint = x["attributes"]["address"]
+            tops = [inc.get(y["id"], {}) for y in x.get("relationships", {}).get("top_pools", {}).get("data", [])]
+            res[mint] = [(t.get("address"), float(t.get("reserve_in_usd") or 0)) for t in tops if t]
+    return res
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sample", choices=["survivor", "newpools"], default="survivor")
@@ -326,6 +402,7 @@ def main():
     ap.add_argument("--min-pools", type=int, default=40); ap.add_argument("--max-pools", type=int, default=60)
     ap.add_argument("--min-liq", type=float, default=8000); ap.add_argument("--max-age-h", type=float, default=48)
     ap.add_argument("--min-age-h", type=float, default=4)
+    ap.add_argument("--extra", action="store_true", help="test extra (trail 10/15, hold 60/180 per LP, young momentum)")
     a = ap.parse_args()
     md = []; allout = {}
     if a.sample == "survivor":
@@ -339,6 +416,9 @@ def main():
         t, o = report(trades, f"Campione SURVIVOR (liquidita' attuale >= ${a.min_liq:.0f})"); md.append(t); allout["survivor"] = o
         allout["survivor_counts"] = cnt
         outname = "results_survivor"
+        if a.extra:
+            meta = pool_meta([p["address"] for p in pools], os.path.join(DATA, "pool_meta.json"), a.no_fetch)
+            t, o = extra_tests(trades, pools, meta, "SURVIVOR"); md.append(t); allout["extra"] = o
     else:
         pf = os.path.join(NP_DIR, "pools.json")
         if a.snapshot or not os.path.exists(pf):
@@ -359,6 +439,15 @@ def main():
         lt = [x for x in trades if addr_liq.get(x["pool"], 0) >= a.min_liq]
         t, o = report(lt, f"NEWPOOLS, solo pool con riserva >= ${a.min_liq:.0f} allo snapshot (eta' pochi minuti, prima dell'ingresso)")
         md.append(t); allout["liq_at_snap"] = o
+        if a.extra:
+            meta = pool_meta([p["address"] for p in pools], os.path.join(NP_DIR, "pool_meta.json"), a.no_fetch)
+            t, o = extra_tests(trades, pools, meta, "NEWPOOLS"); md.append(t); allout["extra"] = o
+            mig = migration_check(pools, meta, a.no_fetch)
+            moved = {k: v for k, v in mig.items() if v and v[0][0] not in {p["address"] for p in pools} and v[0][1] >= 8000}
+            alive = sum(1 for p in pools if meta.get(p["address"], {}).get("reserve_now", 0) >= 8000)
+            mt = (f"Migrazioni/sopravvivenza: token controllati {len(mig)}; con pool principale diversa e riserva >= $8k oggi: {len(moved)}; "
+                  f"pool del campione con riserva >= $8k oggi: {alive}")
+            print(mt); md.append(mt); allout["migration"] = dict(checked=len(mig), moved_8k=len(moved), alive_8k=alive)
         md.append("conteggi: " + json.dumps(cnt))
         outname = "results_newpools"
     json.dump(allout, open(os.path.join(HERE, outname + ".json"), "w"), indent=1, default=str)

@@ -774,3 +774,65 @@ mano: la gestiscono le regole d'uscita normali (incluso il ricontrollo cluster d
   (147 wallet, 14,4%) era sotto il 15% del "gruppo enorme"; le stelle da 8–12 di Bubblemaps non si vedono col solo primo
   finanziatore dei primi 60. Honeypot "sconosciuto" per il bug GoPlus.
 - Test: `tests/test_v84.py` §18–20; `tests/test_v82.py` e §13 di test_v84 con quote sintetiche identiche adattati.
+
+## Aggiornamento 31/10/2026 (mattina) – v8.4d: "nessun prezzo" dopo le pause, nomi dei grandi asset
+
+**Cosa era successo.** Alle 01:04 17 shadow (9 aperti dopo mezzanotte + 8 più vecchi) sono stati chiusi
+tutti insieme a -100% come "nessun prezzo da 15 min, possibile rug". Su DexScreener erano tutti vivi
+(liquidità $17k–$3,5M); HYPERCHAN in quel momento valeva circa -43% (il rug è arrivato dopo).
+Causa nostra: il processo/la macchina si ferma per ~20-30 min a intervalli regolari (buchi nel
+heartbeat di run.log); alla ripresa `last_ok` era vecchio di oltre 15 min e il primo `dex_batch`
+vuoto bastava a chiudere a zero.
+
+**Correzioni.**
+- `stall_reset`: se un loop (shadow o risk) è rimasto fermo più di `STALL_RESET_SEC` (180 s),
+  il conteggio dei 15 min riparte da zero (warn nel log).
+- `verify_no_price`: prima di scrivere -100/rug il prezzo viene riverificato con una seconda fonte
+  gratuita (Jupiter price v3, a blocchi di 50). Vivo → prezzo aggiornato; assente su Jupiter → chiusura
+  "(confermato da Jupiter)"; Jupiter non risponde → attesa (al massimo `NOPRICE_MAX_WAIT` = 15 giri),
+  poi lo shadow chiude come **DATI NON VALIDI** al prezzo noto, con rug=0 e senza passare dal Learner.
+  Le posizioni (paper) non vengono mai vendute a zero senza conferma.
+- Nuova colonna `valido` in shadow_trades.csv. Le 17 righe delle 01:04 sono state marcate `valido=0`,
+  `rug=0`, uscita con prefisso "DATI NON VALIDI (pausa processo, token vivo)"; dallo state sono stati tolti
+  i loro esiti nel Learner (17 in learner_shadow, 16 in learner_bonus).
+- Blocco ticker impostori esteso ai **nomi** e ai simboli scritti per esteso dei grandi asset (Bitcoin,
+  Ethereum, Solana, Binance, Tether, USD Coin, ... anche "Wrapped …", "The … Token", "...coin"): solo match
+  esatto, quindi "Bitcoin Cat" o "Solana Cat" passano. I mint ufficiali passano.
+- Ticker di azioni (AAPL/Apple, NVDA, TSLA, ...) **non bloccati**: il loro esito viene solo annotato
+  (evento Learner `ticker_azione`), sia per gli shadow sia per i trade paper.
+- HYPERCHAN è in revisione: nei commenti dei test non è più indicato come controllo pulito.
+- Test: tests/test_v84.py §21–22.
+
+## Aggiornamento 31/10/2026 (mattina) – v8.4e: HYPERCHAN rug, un solo finanziatore, storico creatore, LP 0%
+
+**HYPERCHAN (3ApVr1xp…pump) = RUG**, 6ª lezione negativa (seed `hyperchan-2026-10-31-rug`, etichetta `rug`,
+pnl None: trade paper +6,4% e shadow già registrati, niente doppio conteggio). GMGN 07:02: -99,84%, liquidità
+$1,33k, mcap $2,58k, storico creatore "Rug pull" 51,73%. Schema: 59 dei 60 holder controllati finanziati da un solo
+wallet, BXTDKd (gruppo stimato ~148 wallet al 14,3%). Lo shadow delle 00:04 chiuso a -100 alle 01:04 resta **non
+valido**: GeckoTerminal (5m) dava -55% alle 00:45 e ~-43% alle 01:00–01:05; il rug completo è arrivato dopo.
+HYPERCHAN non è più un controllo pulito/vincente da nessuna parte (test §13 ora si aspetta HARD).
+
+- **cluster_v2, un solo finanziatore** (HARD): il finanziatore diretto più frequente (exchange noti esclusi, hub
+  inclusi) copre ≥ 50% dei holder controllati e almeno 10 wallet. Calibrazione sui 60 controllati: BNB 60/60
+  (hub 36MESj), PILLSEY 60/60 (hub 9Ja2iw), HYPERCHAN 59/60 (BXTDKd) → hard; Bonnie massimo 1 wallet per
+  finanziatore (1 solo wallet nuovo con finanziatore), DESSA 1 (+3 KuCoin esclusi), CATE 5, GLITCH 5 (+7 MEXC
+  esclusi), BEAST 5 → la regola non scatta (CATE e GLITCH restano hard per le regole v8.4). Il "pulito" sintetico resta.
+- **Storico del creatore** (`sources/creator_history.py`, API pubblica pump.fun: `coins-v2/{mint}` e
+  `coins-v2/user-created-coins/{creator}`, 2 chiamate per creatore nuovo, cache 12 h in
+  `sources/creator_history_cache.json`, escluso dal sync; niente Helius). Solo per i candidati a un acquisto vero.
+  Precedenti = token creati prima, vecchi ≥ 24 h, che hanno davvero tradato (ATH ≥ $15k o migrati); morti/rug =
+  oggi < 10% dell'ATH o bannati. HARD con ≥ 5 precedenti e ≥ 70% morti/rug (shadow `creator_serial`); soft
+  graduale dal 50% (penalità fino a 0,04, pesata per n/5). I lanci mai partiti (~90% per i deployer seriali,
+  anche quelli di Bonnie e iCoin, vincenti) sono contati a parte e non pesano: con il conteggio "grezzo" Bonnie
+  (46/49 morti) e iCoin sarebbero stati hard. Storico su 45 creatori degli shadow: nessuno hard; Bonnie 2/3 (soft
+  ~0,02), iCoin 8/14, PILLY/TYGR 10/17, SSI 5/13. BEAST, PILLSEY, GLITCH, DESSA: creatori al primo token (nessun
+  effetto). HYPERCHAN, BNB, AgenC: sconosciuti a pump.fun → `unknown`, nessun effetto.
+- **LP per niente bloccata/bruciata (Kiwi 07:07)**: LP < 0,5% ("0%") → MAI acquisto vero, solo shadow con tag
+  `lp_unlocked_zero`; LP non verificabile (nessun dato LP) → come honeypot sconosciuto: shadow `lp_unknown`, nessun
+  acquisto (prima: scarto senza shadow). Il Filter apre lo shadow direttamente (senza Analyst); in più una
+  barriera finale `lp_gate` nell'Executor, prima di ogni ordine, indipendente da punteggio, segnali soft, size,
+  narrativa/KOL, deep review e override. Il Learner non modifica nulla con questi esiti (`LP_GATE_KEYS`), le soglie
+  sono costanti fuori da CFG/override. Tra 0% e 50% nulla cambia (soft `lp_unlocked`/`lp_unlocked_grave`, estremi
+  creatore/rimozione hard). Storico: 10 token con LP 0% erano passati come soft (nessuno comprato; 3 shadow: STONK -0,5/-0,7%, TREND -40,9%).
+- Test: `tests/test_v84e.py` (nuovo); `test_v7`/`test_v6_soft` (LP 0% ora shadow-only), `test_v82`/`test_v84 §13`
+  (regola un solo finanziatore disattivata dove si provano altre regole; HYPERCHAN sintetico = hard).

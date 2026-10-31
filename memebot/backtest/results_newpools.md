@@ -46,4 +46,23 @@
 | C15 [meta0] | 0 | - | - | - | - | - | - | - |
 | C15 [meta1] | 0 | - | - | - | - | - | - | - |
 
+## Test extra - NEWPOOLS (3 trade)
+LP lock (GeckoTerminal locked_liquidity_percentage, valore ATTUALE non all'ingresso; <50% = non bloccata): noto per 3/3 trade, non bloccata 0, bloccata 3
+| Set | Trade | Win | Medio/trade | Mediana | Totale (somma) | MaxDD (somma) | Compost. 10%/trade | MaxDD compost. |
+|---|---|---|---|---|---|---|---|---|
+| B_live (trail 15%, hold 180) | 3 | 0% | -15.0% | -15.0% | -45% | -45% | -4.4% | -4.4% |
+| B_live trail 10% | 3 | 0% | -15.0% | -15.0% | -45% | -45% | -4.4% | -4.4% |
+| B_live trail 10% attivo da TP1 (+30%) | 3 | 0% | -15.0% | -15.0% | -45% | -45% | -4.4% | -4.4% |
+| B_live hold 60 per LP non bloccata, 180 altrimenti | 3 | 0% | -15.0% | -15.0% | -45% | -45% | -4.4% | -4.4% |
+| B_live hold 60 per TUTTI | 3 | 0% | -14.7% | -15.0% | -44% | -44% | -4.3% | -4.3% |
+| B_live trail 10% + hold 60 LP non bloccata | 3 | 0% | -15.0% | -15.0% | -45% | -45% | -4.4% | -4.4% |
+
+Young momentum (eta' < 6h all'ingresso + volume in accelerazione) vs resto, regole B_live: 3 vs 0 trade
+| Set | Trade | Win | Medio/trade | Mediana | Totale (somma) | MaxDD (somma) | Compost. 10%/trade | MaxDD compost. |
+|---|---|---|---|---|---|---|---|---|
+| young <6h | 3 | 0% | -15.0% | -15.0% | -45% | -45% | -4.4% | -4.4% |
+| resto >=6h | 0 | - | - | - | - | - | - | - |
+
+Migrazioni/sopravvivenza: token controllati 97; con pool principale diversa e riserva >= $8k oggi: 2; pool del campione con riserva >= $8k oggi: 1
+
 conteggi: {"pools": 100, "not_ready": 0, "no_ohlcv": 0, "short": 68, "no_signal": 29, "liq_skip": 0, "trades": 3, "stale_trades": 0}

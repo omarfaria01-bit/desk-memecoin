@@ -13,3 +13,20 @@
 | C15 [tutti] | 43 | 51% | +6.1% | +0.4% | +264% | -138% | +27.5% | -13.2% |
 | C15 [meta0] | 25 | 44% | +5.5% | -15.3% | +138% | -132% | +12.8% | -12.6% |
 | C15 [meta1] | 18 | 61% | +7.0% | +10.0% | +126% | -36% | +13.0% | -3.6% |
+
+## Test extra - SURVIVOR (43 trade)
+LP lock (GeckoTerminal locked_liquidity_percentage, valore ATTUALE non all'ingresso; <50% = non bloccata): noto per 40/43 trade, non bloccata 1, bloccata 39
+| Set | Trade | Win | Medio/trade | Mediana | Totale (somma) | MaxDD (somma) | Compost. 10%/trade | MaxDD compost. |
+|---|---|---|---|---|---|---|---|---|
+| B_live (trail 15%, hold 180) | 43 | 49% | +6.5% | -3.4% | +277% | -113% | +29.3% | -10.8% |
+| B_live trail 10% | 43 | 49% | +4.6% | -3.4% | +196% | -113% | +20.4% | -10.8% |
+| B_live trail 10% attivo da TP1 (+30%) | 43 | 49% | +4.6% | -3.4% | +197% | -113% | +20.5% | -10.8% |
+| B_live hold 60 per LP non bloccata, 180 altrimenti | 43 | 49% | +5.9% | -3.4% | +252% | -133% | +26.2% | -12.6% |
+| B_live hold 60 per TUTTI | 43 | 37% | +3.6% | -3.6% | +156% | -189% | +14.8% | -17.4% |
+| B_live trail 10% + hold 60 LP non bloccata | 43 | 49% | +4.0% | -3.4% | +171% | -133% | +17.5% | -12.6% |
+
+Young momentum (eta' < 6h all'ingresso + volume in accelerazione) vs resto, regole B_live: 43 vs 0 trade
+| Set | Trade | Win | Medio/trade | Mediana | Totale (somma) | MaxDD (somma) | Compost. 10%/trade | MaxDD compost. |
+|---|---|---|---|---|---|---|---|---|
+| young <6h | 43 | 49% | +6.5% | -3.4% | +277% | -113% | +29.3% | -10.8% |
+| resto >=6h | 0 | - | - | - | - | - | - | - |

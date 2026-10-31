@@ -5,7 +5,7 @@ from sources import cluster_v2 as CV, honeypot as HP
 D.CFG["SIGNALS_ENABLED"] = False; D.CFG["PROJECT_CHECK"] = False
 
 A = CV.analyze
-NOUNI = {"UNIFORM_HARD_WALLETS": 999, "UNIFORM_HARD_PCT": 999, "STAR_HARD_N": 999}   # v8.4c: regole a parte
+NOUNI = {"UNIFORM_HARD_WALLETS": 999, "UNIFORM_HARD_PCT": 999, "STAR_HARD_N": 999, "SINGLE_FUNDER_MIN": 999}   # v8.4c/e: regole a parte
 KRAKEN = "6LY1" + "x" * 36 + "zkzF"          # indirizzo che corrisponde a un pattern CEX noto (Kraken)
 
 

@@ -17,6 +17,7 @@ Cosa fa (per un mint):
 Ritorna metriche + livello 'none' | 'soft' | 'hard' (funzione pura `analyze`, testabile senza rete).
 """
 import asyncio
+from collections import Counter
 import base64
 import json
 import os
@@ -103,6 +104,11 @@ CFG = {
     # v8.4c: cluster a stella = un solo finanziatore (non exchange noto) di >= STAR_MIN_WALLETS holder controllati
     "STAR_MIN_WALLETS": 8,
     "STAR_HARD_N": 3,            # HARD: >= 3 stelle distinte (BNB su Bubblemaps: 5-6 stelle da 8-12); 1-2 = soft
+    # v8.4e (HYPERCHAN rug 31/10): un SOLO finanziatore diretto (non exchange noto) per >= 50% dei holder
+    # controllati (e >= 10 wallet) = HARD. Storico sui 60 controllati: BNB 60/60 (hub 36MESj), PILLSEY 60/60
+    # (hub 9Ja2iw), HYPERCHAN 59/60 (BXTDKd) -> HARD; Bonnie max 1, DESSA 3 (KuCoin), CATE 5, GLITCH 7 (MEXC),
+    # BEAST 5 -> nessun effetto.
+    "SINGLE_FUNDER_SHARE": 0.5, "SINGLE_FUNDER_MIN": 10,
     # v8.4: stima della dimensione reale del gruppo maggiore sui holder letti ma senza controllo del funder
     "EST_ENABLED": True,
     "EST_MIN_RATE": 0.5,         # si estende solo se nel campione controllato il pattern e dominante (>= 50%)
@@ -112,7 +118,7 @@ CFG = {
     # con quote simili 1-5%: tipico di un solo operatore che ritira da CEX su tanti wallet
     "CEXF_MAX_DELAY_H": 6.0, "CEXF_EARLY_H": 3.0, "CEXF_MIN_PCT": 1.0, "CEXF_MAX_PCT": 5.0,
     "CEXF_MIN_N": 4, "CEXF_CV": 0.5,
-    "CEXF_HARD_PCT": 10.0,       # stesso exchange, >= 4 wallet, somma >= 10% = HARD (GLITCH 11.1%; controlli HYPERCHAN/Bonnie 0%)
+    "CEXF_HARD_PCT": 10.0,       # stesso exchange, >= 4 wallet, somma >= 10% = HARD (GLITCH 11.1%; Bonnie 0%; HYPERCHAN in revisione)
     "CEXF_SOFT_PCT": 6.0,        # tutti gli exchange insieme >= 6% = soft forte
     # v8.4: quota dei top holder che hanno ricevuto i token con un trasferimento (non comprati): proxy gratuito
     # dei "phishing/flagged wallet" di GMGN, segnale aggiuntivo
@@ -236,6 +242,27 @@ def star_clusters(rows, infra=None, cfg=None):
         if len(v) >= c["STAR_MIN_WALLETS"]:
             out.append((s, len(v), round(sum(v), 3)))
     return sorted(out, key=lambda x: -x[1])
+
+
+def single_funder(rows, infra=None, cfg=None):
+    """v8.4e: finanziatore diretto piu frequente (exchange noti esclusi, hub inclusi) tra i holder controllati
+    (ntx letto, non 'ext') -> (funder, n, controllati, quota 0-1)."""
+    c = dict(CFG)
+    c.update(cfg or {})
+    checked = [r for r in rows if r.get("ntx") is not None and not r.get("ext")]
+    by = Counter()
+    for r in checked:
+        s = r.get("src")
+        if not s:
+            continue
+        lab = infra_label(s, infra or {}) or ""
+        if lab and not lab.startswith("hub"):
+            continue
+        by[s] += 1
+    if not checked or not by:
+        return (None, 0, len(checked), 0.0)
+    f, n = by.most_common(1)[0]
+    return (f, n, len(checked), round(n / len(checked), 3))
 
 
 def analyze(rows, infra=None, funder_of_funder=None, cfg=None, swarm=None, distributors=None):
@@ -459,6 +486,10 @@ def analyze(rows, infra=None, funder_of_funder=None, cfg=None, swarm=None, distr
     if uni_n >= c["UNIFORM_HARD_WALLETS"] or (uni_n >= c["UNIFORM_HARD_MIN_N"] and uni_pct >= c["UNIFORM_HARD_PCT"]):
         why.append(f"{uni_n} top holder con quote uniformi (+-5%, dal #{uni_s + 1}) al {uni_pct:.1f}%: sciame di wallet")
     stars = star_clusters(rows, infra, c)
+    sf = single_funder(rows, infra, c)
+    if sf[1] >= c["SINGLE_FUNDER_MIN"] and sf[3] >= c["SINGLE_FUNDER_SHARE"]:
+        why.append(f"un solo finanziatore ({str(sf[0])[:6]}) per {sf[1]} dei {sf[2]} holder controllati "
+                   f"({sf[3] * 100:.0f}%)")
     if len(stars) >= c["STAR_HARD_N"]:
         why.append(f"{len(stars)} cluster a stella (un finanziatore -> {', '.join(str(x[1]) for x in stars[:6])} wallet)")
     if why:
@@ -498,7 +529,8 @@ def analyze(rows, infra=None, funder_of_funder=None, cfg=None, swarm=None, distr
             # compatibilita con il formato v7 (signals/log)
             "networks": len(tg), "net_pct": linked_pct, "wallets": linked_n,
             "uniform": {"wallets": uni_n, "pct": uni_pct, "from_rank": uni_s + 1},
-            "stars": [(x[0][:6], x[1], x[2]) for x in stars[:8]]}
+            "stars": [(x[0][:6], x[1], x[2]) for x in stars[:8]],
+            "single_funder": {"funder": str(sf[0] or "")[:6], "wallets": sf[1], "checked": sf[2], "share": sf[3]}}
 
 
 

@@ -266,7 +266,8 @@ for i in range(90):   # stesso schema, funder non letto (oltre WALLET_TOP_N)
 r = C.analyze(rows)
 assert r["hub_burst"] and r["max_group_wallets"] == 60 and r["est_group_wallets"] == 150, r
 assert r["level"] == "hard" and "stimat" in r["why"], r["why"]
-r0 = C.analyze(rows, cfg={"HUB_BURST_MIN": 999, "UNIFORM_HARD_WALLETS": 999, "UNIFORM_HARD_PCT": 999})  # senza le regole
+r0 = C.analyze(rows, cfg={"HUB_BURST_MIN": 999, "UNIFORM_HARD_WALLETS": 999, "UNIFORM_HARD_PCT": 999,
+                              "SINGLE_FUNDER_MIN": 999})  # senza le regole
 assert r0["level"] != "hard" and not r0["hub_burst"]
 # GLITCH: 5 wallet nuovi da MEXC poco prima di comprare al lancio, quote 1.3-2.9% = 11.1%
 g = [{"o": "L0", "pct": 0.5, "ntx": 50, "acq": {"ts": t0, "slot": 1, "swap": True}}]
@@ -285,13 +286,15 @@ assert C.analyze(dd)["level"] == "none"
 dn = [dict(x, ntx=(5 if i < 52 else 150) if i < 60 else None) for i, x in enumerate(dd)]
 rn = C.analyze(dn)
 assert rn["level"] == "soft" and "nuovi" in rn["why"] and rn["fresh_share"] >= C.CFG["FRESH_SOFT"], rn
-# controllo vincente HYPERCHAN (trade +6.4%, picco +46%): un funder per 59 wallet nuovi al 6.5% = soft, MAI hard
+# HYPERCHAN (v8.4e: RUG il 31/10, -99.84%; 6a lezione negativa, MAI controllo pulito/vincente):
+# un solo finanziatore per 59 dei 60 holder controllati = HARD (regola v8.4e 'un solo finanziatore >= 50%')
 hy = [{"o": f"h{i}", "pct": 0.17 * (i + 1) ** -0.2, "ntx": 5, "src": "HubX", "ts": t0 + i * 3000,
        "acq": {"ts": t0 + i * 3000 + 7200 + i * 37, "slot": i * 9000, "swap": True}} for i in range(59)]
 hy += [{"o": f"z{i}", "pct": 0.05, "ntx": None, "acq": {"ts": t0 + 900000 + i * 977, "slot": 9e6 + i * 5000, "swap": True}}
        for i in range(91)]
 rh = C.analyze(hy)
-assert rh["level"] == "soft", rh
+assert rh["level"] == "hard" and "un solo finanziatore" in rh["why"], rh
+assert rh["single_funder"]["wallets"] == 59 and rh["single_funder"]["checked"] == 59, rh["single_funder"]
 # regola combinata v8.4b (8% / 12%, prima 10% / 15%): tipo CATE piu debole = hard; sotto soglia = soft
 _cex = "5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhLEfqhAF"   # Binance (INFRA_FUNDERS)
 def _combo(each, ncex):
@@ -430,7 +433,7 @@ assert D.ticker_impostor("HYPE", "Dn9ucMxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump") ==
 assert D.ticker_impostor("HYPE", "98sMhvDwXj1RQi5c5Mndm3vPe9cBqPrbLaufMXFNMh5g") is None
 assert D.ticker_impostor("BNB", "9gP2kCy3wA1ctvYWQk75guqXuHfrEomqydHLtcTCqiLa") is None
 assert D.ticker_impostor("USDC", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v") is None
-for ok_sym in ("HYPERCHAN", "Bonnie", "DESSA", "BNBX", "SOLANA", "PILLSEY", "BEAST"):
+for ok_sym in ("HYPERCHAN", "Bonnie", "DESSA", "BNBX", "PILLSEY", "BEAST"):
     assert D.ticker_impostor(ok_sym, "Zzzz1111111111111111111111111111111111pump") is None, ok_sym
 assert D.CFG["TICKER_IMPOSTOR_ACTION"] == "block"
 print("ticker impostori OK")
@@ -460,5 +463,100 @@ ids = {x["id"]: x for x in D.LABEL_SEEDS}
 assert ids["bnb-2026-10-30"]["label"] == "cluster" and ids["bnb-2026-10-30"]["pnl_pct"] is None
 assert "CATTIVO" in ids["bnb-2026-10-30"]["note"] and "MAI esempio pulito" in ids["bnb-2026-10-30"]["note"]
 print("lezione BNB OK")
+
+# ---- 21. v8.4d: nomi per esteso dei grandi asset (Bitcoin HytpiyuR..pump passato come analyst_momentum)
+FAKE_M = "HytpiyuR3sVXGB5UqoqrnThCPH2X1tWxxxxxxxxpump"
+for sym, name in (("Bitcoin", "Bitcoin"), ("BTCX", "Bitcoin"), ("ETHEREUM", "x"), ("Solana", None), ("BINANCE", None),
+                  ("Tether", None), ("tok", "Wrapped Bitcoin"), ("SOLCOIN", None), ("x", "The Ethereum Token"),
+                  ("Dogecoin", None), ("XRP", None), ("cat", "Binance Coin"), ("usdcoin", None)):
+    assert D.ticker_impostor(sym, FAKE_M, name), (sym, name)
+for sym, name in (("PUMPCAT", "Pump Cat"), ("BITCAT", "Bitcoin Cat"), ("SOLCAT", "Solana Cat"), ("HYPERCHAN", "HyperChan"),
+                  ("Bonnie", "Bonnie"), ("ETHAN", "Ethan"), ("TRONALD", "Tronald Dump"), ("AAPL", "Apple"),
+                  ("Apple", "Apple Inc"), ("NVDA", "Nvidia")):
+    assert D.ticker_impostor(sym, FAKE_M, name) is None, (sym, name)
+assert D.ticker_impostor("Bitcoin", "3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh", "Wrapped Bitcoin") is None   # ufficiale
+assert D.ticker_impostor("USDC", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "USD Coin") is None
+# azioni: NON bloccate, solo annotate
+assert D.stock_ticker("AAPL") == "AAPL" and D.stock_ticker("Apple") == "APPLE" and D.stock_ticker("x", "Nvidia") == "NVIDIA"
+assert D.stock_ticker("PUMPCAT", "Pump Cat") is None
+_ev = []
+_ow = D.write_event
+D.write_event = lambda *a, **k: _ev.append(a)
+assert D.note_stock_outcome("shadow", "AAPL", "5Afz2m", 38.15, "trailing") == "AAPL" and _ev and _ev[0][1] == "ticker_azione"
+assert D.note_stock_outcome("shadow", "PUMPCAT", "x", 1.0, "y") is None and len(_ev) == 1
+D.write_event = _ow
+print("nomi impostori e ticker azioni OK")
+
+# ---- 22. v8.4d: "nessun prezzo" dopo una pausa del processo e con seconda fonte
+st22 = D.State()
+D.LOOP_LAST.clear()
+t_ = time.time()
+a_ = {"sym": "A", "last_ok": t_ - 1600}
+assert D.stall_reset(st22, "shadow", [a_], now=t_ - 1500) == 0.0          # primo giro: nessun confronto
+assert D.stall_reset(st22, "shadow", [a_], now=t_) >= 1400 and a_["last_ok"] == t_   # 25 min di pausa: riparte
+assert D.stall_reset(st22, "shadow", [a_], now=t_ + 30) == 0.0
+class FakeHttp:
+    def __init__(self, resp): self.resp, self.urls = resp, []
+    async def get(self, url, headers=None):
+        self.urls.append(url); return self.resp
+def _sh(): return {"sym": "S", "last_ok": t_ - 1000, "last_price": 1.0}
+alive, dead = _sh(), _sh()
+fh = FakeHttp({"MA": {"usdPrice": 2.5}})
+vd = asyncio.run(D.verify_no_price(st22, fh, {"MA": alive, "MD": dead}, now=t_))
+assert vd == {"MA": "alive", "MD": "dead"} and alive["last_price"] == 2.5 and alive["last_ok"] == t_, vd
+assert "lite-api.jup.ag/price/v3" in fh.urls[0] and len(fh.urls) == 1
+w = _sh()
+for i in range(D.CFG["NOPRICE_MAX_WAIT"] - 1):
+    assert asyncio.run(D.verify_no_price(st22, FakeHttp(None), {"MW": w}, now=t_)) == {"MW": "wait"}
+    assert t_ - w["last_ok"] < 900                                        # nessuna chiusura in attesa
+assert asyncio.run(D.verify_no_price(st22, FakeHttp(None), {"MW": w}, now=t_)) == {"MW": "invalid"}
+# chiusura come DATI NON VALIDI: non rug, al prezzo noto, nessun esito al Learner
+base = {"t": t_ - 3600, "sym": "S", "reason": "r", "keys": ["analyst_momentum"], "flags": [], "score": 0.0, "thr": 0.5,
+        "price": 1.0, "liq_entry": 5e4, "liq": 5e4, "rt": 2.0, "peak_pct": 0.0, "last_ok": t_ - 1000, "stop_hits": 0,
+        "tokens": 100.0, "tokens_entry": 100.0, "cost": 100.0, "realized": 0.0, "last_price": 0.9,
+        "entry_mark": 1.0, "tp_stage": 0}
+sh_inv = dict(base, np_invalid=True)
+dec = D.shadow_decide(sh_inv, t_)
+assert dec[0].startswith("DATI NON VALIDI") and dec[2] is False and dec[3] is False, dec
+_rec = []
+_oro, _ors, _ocsv = D.record_outcome, D.record_signals, D.write_csv_row
+D.record_outcome = lambda *a, **k: _rec.append(a)
+D.record_signals = lambda *a, **k: _rec.append(a)
+_rows22 = []
+D.write_csv_row = lambda path, row: _rows22.append(row)
+D._close_shadow_row(st22, "MINV", sh_inv, -10.0, False, dec[0], t_)
+assert not _rec and _rows22[-1]["valido"] == 0 and _rows22[-1]["rug"] == 0
+sh_dead = dict(base, np_src="jupiter")
+dd_ = D.shadow_decide(sh_dead, t_)
+assert dd_[3] is True and "confermato" in dd_[0]
+D._close_shadow_row(st22, "MDEAD", sh_dead, -100.0, True, dd_[0], t_)
+assert _rec and _rows22[-1]["valido"] == 1 and _rows22[-1]["rug"] == 1
+D.record_outcome, D.record_signals, D.write_csv_row = _oro, _ors, _ocsv
+assert "valido" in D.SHADOW_FIELDS
+# giro completo del loop shadow dopo 25 min di pausa: DexScreener vuoto, Jupiter vivo -> nessuna chiusura a -100
+st23 = D.State()
+st23.shadow_trades["MLIVE"] = dict(base, t=time.time() - 1700, last_ok=time.time() - 1600, last_price=1.0)
+st23.shadow_trades["MLIVE2"] = dict(base, t=time.time() - 1700, last_ok=time.time() - 1600, last_price=1.0)
+D.LOOP_LAST.clear()
+D.LOOP_LAST["shadow"] = time.time() - 1600
+_calls = {"n": 0}
+_osleep, _odb, _osave = D.asyncio.sleep, D.dex_batch, D.save_state
+async def _sl(_s):
+    _calls["n"] += 1
+    if _calls["n"] > 2:
+        raise SystemExit
+async def _db(http, mints): return {}
+D.asyncio.sleep, D.dex_batch, D.save_state = _sl, _db, (lambda st: None)
+_closed = []
+_ocl = D._close_shadow_row
+D._close_shadow_row = lambda st, mint, sh, pnl, rug, why, now=None: _closed.append((mint, pnl, why))
+try:
+    asyncio.run(D.shadow_trade_agent(st23, FakeHttp({"MLIVE": {"usdPrice": 1.01}})))
+except SystemExit:
+    pass
+D.asyncio.sleep, D.dex_batch, D.save_state, D._close_shadow_row = _osleep, _odb, _osave, _ocl
+assert not _closed, _closed
+assert set(st23.shadow_trades) == {"MLIVE", "MLIVE2"} and time.time() - st23.shadow_trades["MLIVE2"]["last_ok"] < 120   # stall_reset
+print("nessun prezzo: pausa + seconda fonte + dati non validi OK")
 
 print("TUTTI I TEST v8.4 OK")
