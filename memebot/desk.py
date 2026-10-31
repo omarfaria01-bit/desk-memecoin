@@ -4013,9 +4013,16 @@ class SolanaBroker:
         log(st, "Executor", "info", f"wallet {self.pub[:4]}...{self.pub[-4:]} collegato: {bal / 1e9:.4f} SOL "
                                     f"(SOL a ${solp:,.2f})")
         if self.mode == "live":
-            st.cash = await self.cash_usd(st)
-            if st.period_start_equity == CFG["START_BALANCE"] and not st.positions:
-                st.period_start_equity = st.cash
+            # v8.5: cassa dal saldo appena letto (cash_usd su errore restituisce st.cash = START_BALANCE)
+            st.cash = max(0.0, bal / 1e9 - CFG["SOL_RESERVE"]) * solp
+            if st.cash <= 0:
+                raise RuntimeError(f"wallet senza SOL oltre la riserva ({CFG['SOL_RESERVE']} SOL)")
+            if not st.positions and not st.closed and st.total_start == CFG["START_BALANCE"]:
+                # v8.5: primo avvio live (stato nuovo): TUTTE le basi dei limiti dal saldo vero, non dai 1000 $
+                # di partenza. Prima solo period_start_equity: con 50 $ nel wallet scattava subito HARD_STOP
+                # (-95%), con piu di ~1430 $ il -30% arrivava molto oltre.
+                st.total_start = st.day_start_equity = st.period_start_equity = st.cash
+                log(st, "Risk", "info", f"live: basi dei limiti di perdita dal wallet ${st.cash:,.2f}")
         await self.resolve_pending(st)
 
     async def rpc(self, method, params):
