@@ -3396,6 +3396,23 @@ def is_rug_event(reason, minutes):
 CFG.setdefault("LIQ_CRASH_ZERO", True)
 CFG.setdefault("PNL_IMPLAUSIBLE_PCT", 1000.0)
 CFG.setdefault("PRICE_SPIKE_MULT", 20.0)
+# review Claude (compito 4): "liquidita crollata" (che con LIQ_CRASH_ZERO azzera e segna rug) solo dopo
+# LIQ_CRASH_CONFIRM letture DISTINTE di fila sotto la soglia: una sola lettura (liquidita 0 passeggera, coppia
+# sbagliata al passaggio curva -> pool) dava -100/rug a un token vivo.
+CFG.setdefault("LIQ_CRASH_CONFIRM", 2)
+
+
+def liq_crash_confirmed(o):
+    """True se la liquidita e sotto LIQ_DROP_EXIT_PCT dall'ingresso in LIQ_CRASH_CONFIRM letture distinte di fila.
+    Conta una lettura per aggiornamento (liq_ts), mai due volte lo stesso dato vecchio."""
+    le = fnum(o.get("liq_entry"))
+    if le <= 0 or fnum(o.get("liq"), le) >= le * (1 - CFG["LIQ_DROP_EXIT_PCT"] / 100):
+        o.pop("liq_drop_n", None), o.pop("liq_drop_ts", None)
+        return False
+    ts = o.get("liq_ts")
+    if ts is None or ts != o.get("liq_drop_ts"):
+        o["liq_drop_n"], o["liq_drop_ts"] = int(o.get("liq_drop_n", 0)) + 1, ts
+    return o["liq_drop_n"] >= max(1, int(CFG.get("LIQ_CRASH_CONFIRM", 2)))
 
 
 def pnl_implausible(pnl_pct):
@@ -3418,11 +3435,11 @@ def apply_market_tick(o, m, now):
     if price_spike(o.get("last_price"), m["price"]):
         o["spike_n"] = int(o.get("spike_n", 0)) + 1
         if m.get("liq_known", True) and fnum(m.get("liq")) < fnum(o.get("liq"), 1.0):
-            o["liq"] = max(fnum(m.get("liq")), 1.0)
+            o["liq"], o["liq_ts"] = max(fnum(m.get("liq")), 1.0), now
         return False
     o["last_price"], o["last_ok"] = m["price"], now
     if m.get("liq_known", True):  # v8.5: liquidita assente = dato mancante, non rug
-        o["liq"] = max(m["liq"], 1.0)
+        o["liq"], o["liq_ts"] = max(m["liq"], 1.0), now
     return True
 
 
@@ -5936,6 +5953,9 @@ OVR_INT_KEYS |= {"BIRDEYE_MIN_HOLDERS", "BIRDEYE_TREND_SEC", "BIRDEYE_RESERVE_CU
 OVR_LIMITS.update({"MARK_NOROUTE_CONFIRM": (2.0, 6.0)})   # v8.5
 OVR_INT_KEYS |= {"MARK_NOROUTE_CONFIRM"}
 OVR_GLOBAL_MAP["MARK_NOROUTE_CONFIRM"] = "MARK_NOROUTE_CONFIRM"   # senza questa riga la chiave era ignorata
+OVR_LIMITS.update({"LIQ_CRASH_CONFIRM": (1.0, 4.0)})   # review Claude (compito 4)
+OVR_INT_KEYS |= {"LIQ_CRASH_CONFIRM"}
+OVR_GLOBAL_MAP["LIQ_CRASH_CONFIRM"] = "LIQ_CRASH_CONFIRM"
 OVR_LIMITS.update({"CLUSTER_FAM_HARD_N": (3.0, 5.0)})   # review Claude (compito 2)
 OVR_INT_KEYS |= {"CLUSTER_FAM_HARD_N"}
 OVR_STR_KEYS["CLUSTER_FAM_MODE"] = ("shadow", "on")
@@ -6428,7 +6448,7 @@ async def risk_agent(st, http, broker):
                         elif time.time() - p["last_ok"] > 900:
                             await sell_position(st, broker, mint, "nessun prezzo da 15 min, possibile rug",
                                                 zero=broker.mode == "paper")
-                        elif p["liq_entry"] > 0 and p["liq"] < p["liq_entry"] * (1 - CFG["LIQ_DROP_EXIT_PCT"] / 100):
+                        elif liq_crash_confirmed(p):
                             drop = (1 - p["liq"] / p["liq_entry"]) * 100
                             await sell_position(st, broker, mint, f"liquidita crollata del {drop:.0f}%",   # v8.5h
                                                 zero=broker.mode == "paper" and bool(CFG["LIQ_CRASH_ZERO"]))
@@ -6783,7 +6803,7 @@ def shadow_decide(sh, now=None):
             return "DATI NON VALIDI: nessun prezzo da nessuna fonte (non rug)", 1.0, False, False
         return ("nessun prezzo da 15 min, possibile rug" + (" (confermato da Jupiter)" if sh.get("np_src") else ""),
                 1.0, True, True)
-    if sh["liq_entry"] > 0 and sh["liq"] < sh["liq_entry"] * (1 - CFG["LIQ_DROP_EXIT_PCT"] / 100):
+    if liq_crash_confirmed(sh):
         drop = (1 - sh["liq"] / sh["liq_entry"]) * 100
         why = f"liquidita crollata del {drop:.0f}%"
         if CFG["LIQ_CRASH_ZERO"]:   # v8.5h: parte non venduta a 0, sempre rug

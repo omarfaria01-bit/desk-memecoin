@@ -99,6 +99,23 @@ Q["res"] = ({"outAmount": "95000000"}, None)
 pnl = asyncio.run(D.shadow_apply(st, H(), "S2", sh, dec, now))
 assert pnl is not None and pnl > -50, pnl
 
+# ---- liquidita crollata (LIQ_CRASH_ZERO = -100/rug): servono letture DISTINTE di fila, mai una sola
+o = {"liq_entry": 5e4, "liq": 5e4, "last_price": 0.01}
+D.apply_market_tick(o, {"price": 0.01, "liq": 0.0, "liq_known": True}, now)          # 1a lettura a 0
+assert not D.liq_crash_confirmed(o) and not D.liq_crash_confirmed(o)                 # stesso dato: non conta due volte
+D.apply_market_tick(o, {"price": 0.01, "liq": 4e4, "liq_known": True}, now + 30)     # torna normale: azzera
+assert not D.liq_crash_confirmed(o) and "liq_drop_n" not in o
+D.apply_market_tick(o, {"price": 0.01, "liq": 100.0, "liq_known": True}, now + 60)
+assert not D.liq_crash_confirmed(o)
+D.apply_market_tick(o, {"price": 0.01, "liq": 90.0, "liq_known": True}, now + 90)    # 2a lettura distinta: rug
+assert D.liq_crash_confirmed(o)
+sh = shadow(liq=5e4); sh["liq_ts"] = now
+D.apply_market_tick(sh, {"price": 0.0095, "liq": 1.0, "liq_known": True}, now + 1)
+assert D.shadow_decide(sh, now + 1) is None or "liquidita" not in D.shadow_decide(sh, now + 1)[0]
+D.apply_market_tick(sh, {"price": 0.0095, "liq": 1.0, "liq_known": True}, now + 31)
+d2 = D.shadow_decide(sh, now + 31)
+assert d2 and "liquidita crollata" in d2[0] and d2[3] is True, d2
+
 # ---- prefiltro: prezzo mancante a 60 min = nessun esito (riprova), mai -100
 if "pf" in D.SRC:
     D.CFG["PF_LEARN"] = False
