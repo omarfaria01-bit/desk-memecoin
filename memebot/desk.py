@@ -899,6 +899,8 @@ def summarize(pairs):
     return {
         "vol_h1": vol_h1, "price": fnum(main.get("priceUsd")),
         "liq": fnum((main.get("liquidity") or {}).get("usd")),
+        # v8.5: campo liquidita assente (opzionale su DexScreener) != liquidita 0: chi lo legge tiene il valore precedente
+        "liq_known": (main.get("liquidity") or {}).get("usd") is not None,
         "dex": str(main.get("dexId", "?")), "pair": str(main.get("pairAddress", "")),
         "symbol": str(base.get("symbol", "?"))[:12], "name": str(base.get("name", ""))[:40],
         "buys_h1": int(fnum(tx.get("buys"))), "sells_h1": int(fnum(tx.get("sells"))),
@@ -4940,7 +4942,9 @@ async def risk_agent(st, http, broker):
                         if mint in market:
                             m = summarize(market[mint])
                             if m["price"] > 0:
-                                p["last_price"], p["liq"], p["last_ok"] = m["price"], max(m["liq"], 1.0), time.time()
+                                p["last_price"], p["last_ok"] = m["price"], time.time()
+                                if m.get("liq_known", True):  # v8.5: liquidita assente = dato mancante, non rug
+                                    p["liq"] = max(m["liq"], 1.0)
                         if getattr(broker, "realistic", False):
                             try:  # v6: valore di uscita dal preventivo Jupiter reale (ogni MARK_QUOTE_SEC)
                                 await broker.refresh_mark(mint, p)
@@ -5365,7 +5369,9 @@ async def shadow_trade_agent(st, http):
                 if mint in market:
                     m = summarize(market[mint])
                     if m["price"] > 0:
-                        sh["last_price"], sh["liq"], sh["last_ok"] = m["price"], max(m["liq"], 1.0), now
+                        sh["last_price"], sh["last_ok"] = m["price"], now
+                        if m.get("liq_known", True):  # v8.5: liquidita assente = dato mancante, non rug
+                            sh["liq"] = max(m["liq"], 1.0)
                         sh.pop("np_wait", None), sh.pop("np_src", None)
                         path_tick(mint, "shadow", m["price"], m["liq"], mark_pnl_pct(sh), now=now)
             stale = {k: v for k, v in st.shadow_trades.items() if now - fnum(v.get("last_ok"), now) > 900}
