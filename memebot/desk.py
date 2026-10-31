@@ -559,6 +559,73 @@ try:
 except Exception:  # noqa: BLE001
     pass
 TREND_INFO = {}   # v8.3: mint -> ultimo risultato dell'aggregatore trending (score, fonti, rank)
+# ---- compito 10 (Claude): anti-dump dopo la migrazione, SOLO misura. I dati di Mark (790 migrazioni, ottobre) dicono
+# che il 44-52% dei trade crolla <= -50% in una candela 1m, di solito 5-15 min dopo la migrazione. Qui si registra
+# l'eta dalla migrazione all'ingresso e cosa sarebbe successo entrando solo dopo ENTRY_MIN_AGE_TEST minuti.
+MIGRATED = {}   # mint -> ts della migrazione (evento PumpPortal)
+CFG.setdefault("ENTRY_MIN_AGE_MODE", "shadow")      # 'shadow' = registra, 'off' = niente. Nessun blocco degli ingressi.
+CFG.setdefault("ENTRY_MIN_AGE_TEST", [10, 15, 20])  # eta minime provate (minuti dalla migrazione)
+
+
+def mig_note(mint, now=None):
+    MIGRATED[mint] = now or time.time()
+    if len(MIGRATED) > 5000:
+        for k in sorted(MIGRATED, key=MIGRATED.get)[:1000]:
+            MIGRATED.pop(k, None)
+
+
+def min_since_migration(mint, m, now=None):
+    """(minuti dalla migrazione, fonte) o (None, motivo). Fonte 'ws' = evento PumpPortal; 'pool' = eta della coppia
+    PumpSwap/Raydium di un token pump.fun (creata alla migrazione). Token in curva o non pump.fun = None."""
+    now = now or time.time()
+    if mint in MIGRATED:
+        return round((now - MIGRATED[mint]) / 60, 2), "ws"
+    if not str(mint).endswith("pump"):
+        return None, "non pump.fun"
+    if m.get("dex") == "pumpfun":
+        return None, "in curva"
+    if m.get("dex") in ("pumpswap", "raydium") and m.get("age_min") is not None:
+        return round(fnum(m["age_min"]), 2), "pool"
+    return None, "sconosciuta"
+
+
+def age_gate_tick(fe, price, now=None):
+    """Per ogni eta X in ENTRY_MIN_AGE_TEST non ancora raggiunta all'ingresso: minimo del prezzo prima di X e prezzo
+    al momento in cui il token compie X minuti dalla migrazione. Solo dati gia letti, mai eccezioni."""
+    try:
+        m0, t0 = fe.get("min_since_migration"), fe.get("mig_t0")
+        if m0 is None or t0 is None or fnum(price) <= 0 or CFG.get("ENTRY_MIN_AGE_MODE") == "off":
+            return
+        now = now or time.time()
+        age = fnum(m0) + (now - fnum(t0)) / 60
+        g = fe.setdefault("age_gate", {})
+        for x in CFG.get("ENTRY_MIN_AGE_TEST") or []:
+            if fnum(m0) >= x:
+                continue
+            k = str(int(x))
+            e = g.setdefault(k, {"low": price, "px": None})
+            if e["px"] is None:
+                e["low"] = min(fnum(e["low"], price), price)
+                if age >= x:
+                    e["px"], e["at_min"] = price, round((now - fnum(t0)) / 60, 1)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def age_gate_close(fe, exit_price, entry_price):
+    """Alla chiusura: per ogni X, pnl dell'ingresso ritardato (stessa uscita, prezzo all'eta X, senza costi) e calo
+    massimo evitato prima di X. Non raggiunta = il trade ritardato non sarebbe partito."""
+    try:
+        for k, e in (fe.get("age_gate") or {}).items():
+            ep, low = fnum(entry_price), fnum(e.get("low"))
+            e["pre_low_pct"] = round((low / ep - 1) * 100, 2) if ep > 0 and low > 0 else None
+            if e.get("px"):
+                e["pnl_delayed_pct"] = round((fnum(exit_price) / fnum(e["px"]) - 1) * 100, 2)
+                e["skipped"] = False
+            else:
+                e["pnl_delayed_pct"], e["skipped"] = None, True
+    except Exception:  # noqa: BLE001
+        pass
 LAST_SRC = {}     # v8.3: mint -> fonte che l'ha messo in watchlist (registrata negli scarti)
 
 
@@ -1382,6 +1449,8 @@ async def scout_pumpportal(st):
                     try:
                         msg = json.loads(raw)
                         mint = msg.get("mint")
+                        if mint and "migrat" in str(msg.get("txType", "")).lower():
+                            mig_note(mint)   # compito 10: ora della migrazione (nessuna chiamata in piu)
                         if mint:
                             add_watch(st, mint, msg.get("symbol") or "?", "pump.fun")
                     except Exception:  # noqa: BLE001
@@ -2968,6 +3037,13 @@ async def entry_features(st, http, mint, m, signals=None, candles=None, soft=Non
         fe = dict(fe, error=type(e).__name__)
     v87_fields(st, http, mint, m, fe, allow_fetch)
     fe.update(discord_tag(mint))   # v8.8: call NKT (SHADOW, nessun effetto)
+    try:   # compito 10 (Claude): solo misura, dati gia letti
+        msm, msrc = min_since_migration(mint, m)
+        fe.update({"min_since_migration": msm, "mig_src": msrc, "mig_t0": round(time.time(), 1),
+                   "bs5": round(fnum(m.get("buys_m5")) / max(1, int(fnum(m.get("sells_m5")))), 3),
+                   "top10": (SEC_LAST.get(mint) or {}).get("top10")})
+    except Exception:  # noqa: BLE001
+        pass
     return fe
 
 
@@ -3387,6 +3463,9 @@ def apply_market_tick(o, m, now):
     o["last_price"], o["last_ok"] = m["price"], now
     if m.get("liq_known", True):  # v8.5: liquidita assente = dato mancante, non rug
         o["liq"] = max(m["liq"], 1.0)
+    fe_ = o.get("fe") if isinstance(o.get("fe"), dict) else o.get("entry_features")
+    if isinstance(fe_, dict):
+        age_gate_tick(fe_, m["price"], now)   # compito 10: ingresso ritardato, solo misura
     return True
 
 
@@ -4022,7 +4101,8 @@ async def security_check(st, http, mint, m, cache):
             RC_HEALTH["fb_skip"] += 1
             sec.update(severe="rugcheck_down", shadow_keys=["rugcheck_down"], soft=["rugcheck_down"] + sec["soft"])
             return False, "RugCheck giu, ripiego on-chain con dubbi: " + "; ".join(doubt), "RugCheck giu (dubbio)", sec
-    SEC_LAST[mint] = {"rc_holders": sec["rc_holders"][:5], "supply": supply_ui or None, "ts": time.time()}  # v8.4f
+    SEC_LAST[mint] = {"rc_holders": sec["rc_holders"][:5], "supply": supply_ui or None, "ts": time.time(),  # v8.4f
+                      "top10": sec.get("top10")}   # compito 10: concentrazione nell'entry_features
     if len(SEC_LAST) > 3000:
         for k in sorted(SEC_LAST, key=lambda k: SEC_LAST[k]["ts"])[:500]:
             SEC_LAST.pop(k, None)
@@ -6214,6 +6294,7 @@ async def _sell_position(st, broker, mint, reason, fraction=1.0, zero=False, mar
     t.update({f"f_{k}": (p.get("features") or {}).get(k) for k in FEATURES})
     fe = dict(p.get("entry_features") or {})  # v8.1 (posizioni aperte prima della v8.1: vuoto)
     if fe:
+        age_gate_close(fe, 0.0 if zero else p.get("last_price"), p.get("quote_price") or p.get("entry_mark"))
         fe.update({"trough_pct": round(fnum(p.get("trough_pct")), 2), "dyn_stop_hit": p.get("dyn_hit")})
         fe.update(alt_exits(mint, "real", p.get("opened")))   # v8.4f: solo registrato
     t.update(fe_columns(fe))
@@ -6619,6 +6700,7 @@ def _close_shadow_row(st, mint, sh, pnl, rug, why, now=None):
            "invalid_for_learning": (sh.get("inv_why") or "no_price") if sh.get("np_invalid") else ""}
     _lag = dict(sh.get("_lag") or {})   # v8.6 (A)
     fe = dict(sh.get("fe") or {})  # v8.1
+    age_gate_close(fe, 0.0 if rug else sh.get("last_price"), sh.get("price"))   # compito 10: solo misura
     if fe and sh.get("_lagx"):
         fe.update(sh["_lagx"])
     if fe:
