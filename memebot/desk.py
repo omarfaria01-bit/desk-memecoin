@@ -987,19 +987,34 @@ class Http:
                 await asyncio.sleep(gap - dt)
             self.last[host] = time.time()
 
-    async def get(self, url, headers=None):
-        await self._wait(url)
-        try:
-            async with self.s.get(url, headers=headers) as r:
-                if r.status == 429:
-                    self.last429[urlparse(url).netloc] = time.time()
-                    await asyncio.sleep(20)
-                    return None
-                if r.status != 200:
-                    return None
-                return await r.json(content_type=None)
-        except Exception:  # noqa: BLE001
-            return None
+    async def get(self, url, headers=None, retries=2):
+        # v8.10: un 429 e' "rallenta e riprova", non un'interruzione: backoff (Retry-After se c'e', altrimenti
+        # crescente) e ritenta prima di arrendersi, cosi un singolo limite di frequenza non fa scattare
+        # rc_health() come se il servizio fosse giu.
+        host = urlparse(url).netloc
+        for attempt in range(retries + 1):
+            await self._wait(url)
+            try:
+                async with self.s.get(url, headers=headers) as r:
+                    if r.status == 429:
+                        self.last429[host] = time.time()
+                        if attempt < retries:
+                            wait = fnum(r.headers.get("Retry-After")) or 5.0 * (attempt + 1)
+                            await asyncio.sleep(min(wait, 30.0))
+                            continue
+                        return None
+                    if r.status >= 500 and attempt < retries:
+                        await asyncio.sleep(2.0 * (attempt + 1))
+                        continue
+                    if r.status != 200:
+                        return None
+                    return await r.json(content_type=None)
+            except Exception:  # noqa: BLE001
+                if attempt < retries:
+                    await asyncio.sleep(2.0 * (attempt + 1))
+                    continue
+                return None
+        return None
 
     async def post(self, url, body, headers=None, tier="core"):
         if urlparse(url).netloc in PUBLIC_RPC_HOSTS:   # v8.2: Helius prima, pubblico come ripiego
@@ -4035,13 +4050,24 @@ async def security_check(st, http, mint, m, cache):
     lp_status, lp_block, lpmax = ("curve" if m["dex"] == "pumpfun" else "protocol"), None, None
     if m["dex"] != "pumpfun" and not pump_migrated:
         lps = [mk.get("lp") for mk in markets if isinstance(mk, dict) and isinstance(mk.get("lp"), dict)]
-        if not lps or all(lp.get("lpLockedPct") is None for lp in lps):
+        no_data = not lps or all(lp.get("lpLockedPct") is None for lp in lps)
+        if no_data and rc_down and CFG.get("GOPLUS_CHECK") and SRC.get("goplus"):
+            # v8.10: RugCheck giu -> un secondo host indipendente (GoPlus Solana, gratis) per lo stato LP, cosi
+            # il ripiego non dipende solo da RugCheck. Mai un 'ok' se GoPlus non ha un burn_percent per il token.
+            gp = await SRC["goplus"].check(getattr(http, "s", http), mint)
+            lpmax = SRC["goplus"].lp_pct_from_dex(gp.get("dex"))
+            no_data = lpmax is None
+            if not no_data:   # v8.10: per misurare quanti scarti 'LP unknown' il ripiego GoPlus evita davvero
+                st.stats["rc_down_lp_goplus"] = st.stats.get("rc_down_lp_goplus", 0) + 1
+        if no_data:
             lp_status = "unknown"
             lp_block = ("lp_unknown", "LP non verificabile: stato LP sconosciuto, solo shadow (nessun acquisto)",
                         "LP non verificabile")
             lps = []
-        # lpLockedPct di RugCheck conta sia la LP bloccata sia quella bruciata
-        lpmax = max(fnum(lp.get("lpLockedPct")) for lp in lps) if lps else None
+        # lpLockedPct di RugCheck (o il burn_percent di GoPlus, quando RugCheck e giu) conta sia la LP
+        # bloccata sia quella bruciata
+        if lpmax is None:
+            lpmax = max(fnum(lp.get("lpLockedPct")) for lp in lps) if lps else None
         if lpmax is not None and lpmax < LP_ZERO_MAX_PCT:
             lp_status = "zero"
             lp_block = ("lp_unlocked_zero", f"LP per niente bloccata o bruciata ({lpmax:.0f}%): solo shadow, "
@@ -4172,7 +4198,11 @@ async def security_check(st, http, mint, m, cache):
         doubt = []
         if r.get("t22_risky"):
             doubt.append("Token-2022 con estensioni " + ",".join(r["t22_risky"][:3]))
-        if lp_status != "protocol":
+        if lp_status not in ("protocol", "ok", "partial"):
+            # v8.10: 'ok'/'partial' sono i nuovi stati raggiungibili col ripiego (RugCheck o, quando RugCheck
+            # e' giu, GoPlus hanno un burn_percent reale per quella pool): passano anche loro, come 'protocol'.
+            # 'curva' (pump.fun non migrato) e 'unknown' restano un dubbio come prima; 'zero' e' gia bloccato
+            # a parte, in modo piu preciso, da lp_block qui sotto (qui e' ridondante ma non cambia l'esito).
             doubt.append(f"LP non verificata bruciata/bloccata (stato {lp_status})")
         if not r.get("topHolders"):
             doubt.append("top 10 non calcolato")

@@ -50,6 +50,14 @@ def _fee_pct(tf):
     return best if best > 0 else 0.01   # fee presente ma senza un numero leggibile: la si conta comunque
 
 
+def lp_pct_from_dex(dex_list):
+    """v8.10: quota massima di LP bloccata/bruciata (burn_percent) tra le pool note a GoPlus per il token.
+    None = GoPlus non ha un burn_percent per nessuna pool (dato assente, mai interpretato come 0%)."""
+    pcts = [float(d["burn_percent"]) for d in (dex_list or [])
+            if isinstance(d, dict) and d.get("burn_percent") is not None]
+    return max(pcts) if pcts else None
+
+
 def verdict(r, cfg=None):
     """r = result[mint] di GoPlus. -> (hard[], soft[], flags[], fee_pct)."""
     c = dict(CFG, **(cfg or {}))
@@ -141,7 +149,7 @@ async def check(session, mint, cfg=None, now=None):
         return {"level": "unknown", "why": f"GoPlus non disponibile ({err})", "flags": []}
     hard, soft, flags, fee = verdict(res, c)
     out = {"level": "hard" if hard else "ok", "why": "; ".join(hard or soft), "hard": hard, "soft": soft,
-           "flags": flags, "fee_pct": fee}
+           "flags": flags, "fee_pct": fee, "dex": res.get("dex")}
     _cache[mint] = (now, out)
     for k in [k for k, v in _cache.items() if now - v[0] > c["CACHE_SEC"]]:
         _cache.pop(k, None)
