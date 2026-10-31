@@ -118,6 +118,11 @@ Token con nomi o loghi di aziende e personaggi famosi (es. LEGO, AMAZON, BEAST/M
 ## 18) Cluster nei trade shadow — segnalato da Kiwi
 Brilliant (2Tx6L2Qk…, 31/10 13:15, shadow per rugcheck_down, poi −99%) aveva un cluster di wallet collegati al **31,85%** (bubblemap). Verifica che il controllo cluster giri anche quando RugCheck è giù e che una quota così alta sia un hard reject; registra `cluster_pct` in `entry_features` di ogni riga shadow, così possiamo misurarlo. Branch `claude/cluster-shadow`.
 
+## 19) Notifica Telegram per ogni ingresso shadow — richiesta di Kiwi (piccolo)
+A ogni nuova riga shadow aperta invia su Telegram (usa il canale e il token già esistenti, **mai stampare o loggare il token**): simbolo, CA (mint completo, copiabile), motivo per cui è entrato in shadow o scarto (`motivo_scarto`, chiavi), score/soglia, liquidità, prezzo di entrata e link a dexscreener/gmgn. Prefisso chiaro "👻 SHADOW (nessun acquisto reale)". Alla chiusura, un breve messaggio con il PnL e il motivo di uscita.
+- Volume: circa 250 righe al giorno. Aggiungi un'opzione `SHADOW_TG_NOTIFY` (on di default) e un limite anti-flood (raggruppa se più di 1 al minuto).
+- Branch `claude/shadow-telegram`; lo controllo io prima del deploy.
+
 ## Dati reali
 
 - Il branch `data-snapshot` (cartella `data/`) contiene una copia notturna dei dati paper reali del bot (trade ombra, trade, equity, eventi, state, price_paths, prior, smart wallets, creator_seed, call Discord etichettate). Niente chiavi.
