@@ -3621,7 +3621,8 @@ def record_outcome(st, keys, pnl_pct, rug, src, now=None):
         learn_shadow_step(st, key, now)
 
 
-MEASURE_ONLY_KEYS = {"narrative_relax", "rugcheck_down", "bundle_established", "buysell_relax", "score_band"}
+MEASURE_ONLY_KEYS = {"narrative_relax", "rugcheck_down", "bundle_established", "buysell_relax", "score_band",
+                     "holders_unknown"}   # review Claude: holder non verificati, solo misura
 # v8.5e (analisi di Mark, decisione Kiwi 08:47): fascia di punteggio sotto soglia = acquisto PAPER a meta size;
 # acquisti/vendite 5m appena sotto il minimo = solo shadow buysell_relax.
 CFG.setdefault("SCORE_BAND", True)
@@ -4021,7 +4022,9 @@ async def security_check(st, http, mint, m, cache):
            "is_pump": bool(m["dex"] == "pumpfun" or pump_migrated),
            "cex_pct": round(cex_pct, 2), "cex_names": sorted(set(cex_names))[:5], "dead_pct": round(dead_pct, 2),
            "lp_status": lp_status, "lp_locked_pct": None if lpmax is None else round(lpmax, 2),
-           "rc_down": rc_down, "bundle_established": bundle_est}
+           "rc_down": rc_down, "bundle_established": bundle_est,
+           # review Claude: report RugCheck senza totalHolders -> MIN_HOLDERS verificato dopo con cluster v2
+           "holders_unknown": bool(not rc_down and not total_holders)}
     if rc_down:   # v8.5: ripiego on-chain, ogni dubbio = niente acquisto (shadow rugcheck_down)
         doubt = []
         if r.get("t22_risky"):
@@ -4568,6 +4571,18 @@ async def analyst_agent(st, http, q_in, q_out):
                     smult *= CFG["RC_DOWN_SIZE_MULT"]
                     flags.append("rugcheck_down")
                     signals.append("rugcheck_down")
+            # review Claude: report RugCheck senza totalHolders: MIN_HOLDERS saltato in security_check (e 'holders'
+            # = righe del top, <= 20). Il numero di holder si prende da cluster v2 (gia letto); mancante = niente acquisto.
+            if _sec.get("holders_unknown") and not so and score >= gate_thr:
+                _n = int(fnum((cl or {}).get("holders_total")))
+                if _n < CFG["MIN_HOLDERS"]:
+                    reason = (f"holder totali non nel report RugCheck e cluster v2 ne conta {_n} (< {CFG['MIN_HOLDERS']})"
+                              if _n else "holder totali non verificabili (report RugCheck senza totalHolders, cluster v2 senza conta)")
+                    rej(reason, agent="Analyst", cat="holder non verificati")
+                    if CFG["SHADOW_TRADES"]:
+                        spawn_shadow(st, http, mint, m, ["holders_unknown"], reason, score, flags + ["holders_unknown"],
+                                     tag="holders_unknown", signals=signals)
+                    continue
             if bonus:
                 signals.append(f"bonus:{bonus:.3f}")
             detail = f"punteggio {score:.2f} (soglia {st.threshold:.2f})" + \
