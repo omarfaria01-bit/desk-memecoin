@@ -263,6 +263,8 @@ CFG = {
     # v8.2: casi gia osservati, registrati una sola volta come esempi per il Learner (vedi LABEL_SEEDS)
     # v6: shadow trade (operazioni ipotetiche, nessun denaro) sui token scartati per un segnale soft o di poco
     "SHADOW_TRADES": True,
+    "SHADOW_TG_NOTIFY": True,         # compito 19: avviso Telegram per ogni ingresso/uscita shadow (raggruppato)
+    "SHADOW_TG_GROUP_SEC": 60,        # anti-flood: al massimo un messaggio ogni tot secondi (righe raggruppate)
     "SHADOW_NEAR_SCORE": 0.05,        # anche i punteggi entro 0.05 sotto la soglia
     "SHADOW_MAX_OPEN": 60,
     "SHADOW_CHECK_SEC": 30,
@@ -903,6 +905,27 @@ def tg_group(key, line, every=600, title=None):
             n.group(key, line, every=every, title=title)
         except Exception:  # noqa: BLE001
             pass
+
+
+def shadow_tg_open(mint, sym, reason, keys, score, thr, liq, price):
+    """Compito 19: avviso Telegram all'apertura di uno shadow trade (nessun acquisto reale). Raggruppato
+    (tg_group, al massimo un messaggio ogni SHADOW_TG_GROUP_SEC) per non fare flood: ~250 righe/giorno."""
+    if not CFG.get("SHADOW_TG_NOTIFY", True):
+        return
+    chiavi = "|".join(keys) if keys else "-"
+    line = (f"{sym} | CA: {mint} | {str(reason)[:160]} ({chiavi}) | punteggio {fnum(score):.3f}/{fnum(thr):.2f} | "
+            f"liq ${fnum(liq):,.0f} | prezzo {fnum(price):.8g} | https://dexscreener.com/solana/{mint} | "
+            f"https://gmgn.ai/sol/token/{mint}")
+    tg_group("shadow_open", line, every=CFG.get("SHADOW_TG_GROUP_SEC", 60),
+              title="👻 SHADOW aperti (nessun acquisto reale)")
+
+
+def shadow_tg_close(mint, sym, pnl, why):
+    """Compito 19: avviso Telegram alla chiusura di uno shadow trade, raggruppato come l'apertura."""
+    if not CFG.get("SHADOW_TG_NOTIFY", True):
+        return
+    line = f"{sym} | CA: {mint} | PnL {fnum(pnl):+.1f}% | {str(why)[:160]}"
+    tg_group("shadow_close", line, every=CFG.get("SHADOW_TG_GROUP_SEC", 60), title="👻 SHADOW chiusi")
 
 
 def discord_tag(mint, now=None):
@@ -6968,6 +6991,7 @@ def _close_shadow_row(st, mint, sh, pnl, rug, why, now=None):
                        if sh.get("cost") and "realized_cpmm" in sh else None)
     row.update({k: _lag.get(k) for k in ("stop_level", "exit_fill", "exit_lag_s")})
     write_csv_row(SHADOW_CSV, row)
+    shadow_tg_close(mint, sh["sym"], pnl, why)
     if sh.get("last_price"):
         post_exit_start(st, mint, "shadow", sh["sym"], sh.get("price"), sh.get("last_price"), why,
                         fe.get("stop_applied"), fe.get("dyn_stop_shadow"), now)
@@ -7054,6 +7078,7 @@ async def open_shadow(st, http, mint, m, keys, reason, score, flags, now=None, t
     write_event("Learner", "shadow_open", f"shadow {m['symbol']} aperto ({'|'.join(keys)}): {reason[:120]}",
                 {"mint": mint, "keys": list(keys), "score": round(score, 4), "rt_cost_pct": round(rt, 2), "tag": tag,
                  **_dc})
+    shadow_tg_open(mint, m["symbol"], reason, keys, score, st.threshold, m["liq"], m["price"])
     return sh
 
 
