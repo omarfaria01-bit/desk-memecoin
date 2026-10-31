@@ -53,6 +53,7 @@ def load(paths):
                         fe = {}
                     rows.append({"mint": r.get("mint", ""), "sym": r.get("symbol", ""), "pnl": pnl, "fe": fe,
                                  "rug": str(r.get("rug", "")).strip().lower() in ("1", "true", "si", "yes"),
+                                 "bad": bad_flagged(r),
                                  "src": path.rsplit("/", 1)[-1]})
         except OSError as e:
             print(f"> file non letto: {path} ({e})", file=sys.stderr)
@@ -64,8 +65,19 @@ def is_crash(r):
     return r["pnl"] <= -50 or r.get("rug", False)
 
 
+BAD_KEY_MARKS = ("_grave", "_hard", "impostor", "honeypot", "t22", "token2022", "blacklist")
+
+
+def bad_flagged(r):
+    """v8.9: token segnato cattivo (lezione negativa o chiave di scarto rigido): mai un esempio positivo."""
+    if r.get("mint", "") in LESSONS:
+        return True
+    keys = str(r.get("chiavi", "") or "").lower().split("|") + [str(r.get("tag", "") or "").lower()]
+    return any(m in k for k in keys for m in BAD_KEY_MARKS)
+
+
 def is_win(r):
-    return r["pnl"] > 0 and not r.get("rug", False)
+    return r["pnl"] > 0 and not r.get("rug", False) and not r.get("bad", False)
 
 
 def feat(r, k):

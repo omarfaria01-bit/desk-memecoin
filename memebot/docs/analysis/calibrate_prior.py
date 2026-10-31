@@ -39,9 +39,19 @@ def logit(p):
     return math.log(p / (1 - p))
 
 
+LESSONS = {"HRJPbDu8h4cH2gT1rKcmzNcvzX1M7jHKogS7zRJkpump", "npz2FhoufQ7pKqhGpaipYWacrAkidyW2yDpVWSvpump",
+           "J5jxG3PFaWpj6BLEQExyC6FSqSvaTKNdQ9G3sZwBpump", "EYqygbhZjP7EbM4fSn8devctnksAvPAD1Bt57XBFpump",
+           "8Xg89xT8Ve34sKiYqYuMs46mycREsCA2F362UscRpump", "3ApVr1xphYMpi9dn3rpqU4hwvpmCQDVwxET1rdCDpump"}
+BAD_KEY_MARKS = ("_grave", "_hard", "impostor", "honeypot", "t22", "token2022", "blacklist")
+
+
 def _is_rug(r):
-    """v8.9: un token segnato rug (o cattivo) non e MAI un esempio positivo, anche con pnl > 0 (TP1 prima del rug)."""
-    return str(r.get("rug", "")).strip().lower() in ("1", "true", "si", "yes")
+    """v8.9: un token segnato rug o cattivo (lezione negativa, chiave di scarto rigido) non e MAI un esempio
+    positivo, anche con pnl > 0 (TP1 prima del rug)."""
+    if str(r.get("rug", "")).strip().lower() in ("1", "true", "si", "yes") or r.get("mint", "") in LESSONS:
+        return True
+    keys = str(r.get("chiavi", "") or "").lower().split("|") + [str(r.get("tag", "") or "").lower()]
+    return any(m in k for k in keys for m in BAD_KEY_MARKS)
 
 
 def load(paths, model=None):
