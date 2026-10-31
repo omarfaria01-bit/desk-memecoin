@@ -68,3 +68,17 @@ Per accelerare il learning: oggi solo una parte dei token scartati viene seguita
 - Output `data/retro_labels.jsonl` (idempotente) con le feature viste al momento + etichetta; nessun token rug o segnalato come cattivo è mai esempio positivo.
 - Il learning lo legge solo come dati in più (flag `RETRO_LABELS_IN_LEARNING`, default off): il reviewer lo attiva dopo il controllo.
 - Nota: quanti mint al giorno, tempo di esecuzione, richieste usate.
+
+## 13) Errori trovati ma non corretti — priorità alta (dopo il 10)
+Dalle tue note (issue #2, #5 e note dei branch). Un fix = un commit, in shadow o dietro flag dove cambia decisioni; controlli positivi mai bloccati, lezioni negative sempre bloccate.
+- **Alta:** `CLUSTER_UNKNOWN_ACTION` = "soft" compra con cluster non verificabile → default `skip` con shadow (aggiorna `test_v82` §6).
+- `MIN_HOLDERS` saltato se manca `totalHolders` (`if total_holders and ...`) anche con RugCheck su → campo mancante = solo shadow, o holder da cluster v2/GoPlus.
+- `decimals` mancante in RugCheck: top10/insider/creatore a ~0% → usa `pct` o scarta.
+- LP: valuta solo il mercato `m["pair"]`; senza dati = `lp_unknown`. `pump_migrated` salta il controllo LP solo se la pool è `pump_fun_amm`/PumpSwap.
+- Import separati: honeypot e cluster v2 non devono spegnersi in silenzio se fallisce un altro import; controllo attivo + modulo assente = niente acquisti.
+- Lista nera creatore solo per rug confermato, con motivo, data e scadenza.
+- Feature E vuota sui migrati (`STX_PAGES`=3, >300 scambi = "incompleto"): sfoglia dalla fine o usa un'altra fonte dei primi scambi, così il compito 10 ha `sniper_pct` & co.
+- Ripiego RugCheck: owner account di programma escluso dal top10 anche se non è un locker; quota creatore non calcolata; verifica unità di `currentHolding` di `/insiders/networks` appena RugCheck è raggiungibile (sul server).
+- Bassa (un commit unico se piccoli): punti 11-18 della issue #2 (campi mancanti che passano i filtri, GoPlus vuoto = unknown, cache errori di `creator_history`, log dei ricontrolli saltati, liquidità su "alive", decimali di ripiego 6 per vanity, `lp_gate` senza `lp_status`, codice morto `sec.get("rugged")`).
+- Non toccare: la parte live (issue #1, limiti in SOL) — il live non è approvato.
+- Prima di iniziare: risolvi il conflitto tra i branch 6 e 10 sul loop `scout_pumpportal` (riga `mig_note` dentro il nuovo loop con `recv()`), in un branch `claude/merge-6-10`.
