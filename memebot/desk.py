@@ -485,7 +485,7 @@ try:
 except Exception as _e88:  # noqa: BLE001
     print(f"v8.7: model_prior non caricato ({type(_e88).__name__})")
 PRIOR_LAST = {}   # mint -> p_prior dell'ultima valutazione dell'Analyst
-STX_STATE = {"t": [], "busy": set()}
+STX_STATE = {"t": [], "busy": set(), "sem": None}
 
 
 def prior_prob(f):
@@ -559,6 +559,73 @@ try:
 except Exception:  # noqa: BLE001
     pass
 TREND_INFO = {}   # v8.3: mint -> ultimo risultato dell'aggregatore trending (score, fonti, rank)
+# ---- compito 10 (Claude): anti-dump dopo la migrazione, SOLO misura. I dati di Mark (790 migrazioni, ottobre) dicono
+# che il 44-52% dei trade crolla <= -50% in una candela 1m, di solito 5-15 min dopo la migrazione. Qui si registra
+# l'eta dalla migrazione all'ingresso e cosa sarebbe successo entrando solo dopo ENTRY_MIN_AGE_TEST minuti.
+MIGRATED = {}   # mint -> ts della migrazione (evento PumpPortal)
+CFG.setdefault("ENTRY_MIN_AGE_MODE", "shadow")      # 'shadow' = registra, 'off' = niente. Nessun blocco degli ingressi.
+CFG.setdefault("ENTRY_MIN_AGE_TEST", [10, 15, 20])  # eta minime provate (minuti dalla migrazione)
+
+
+def mig_note(mint, now=None):
+    MIGRATED[mint] = now or time.time()
+    if len(MIGRATED) > 5000:
+        for k in sorted(MIGRATED, key=MIGRATED.get)[:1000]:
+            MIGRATED.pop(k, None)
+
+
+def min_since_migration(mint, m, now=None):
+    """(minuti dalla migrazione, fonte) o (None, motivo). Fonte 'ws' = evento PumpPortal; 'pool' = eta della coppia
+    PumpSwap/Raydium di un token pump.fun (creata alla migrazione). Token in curva o non pump.fun = None."""
+    now = now or time.time()
+    if mint in MIGRATED:
+        return round((now - MIGRATED[mint]) / 60, 2), "ws"
+    if not str(mint).endswith("pump"):
+        return None, "non pump.fun"
+    if m.get("dex") == "pumpfun":
+        return None, "in curva"
+    if m.get("dex") in ("pumpswap", "raydium") and m.get("age_min") is not None:
+        return round(fnum(m["age_min"]), 2), "pool"
+    return None, "sconosciuta"
+
+
+def age_gate_tick(fe, price, now=None):
+    """Per ogni eta X in ENTRY_MIN_AGE_TEST non ancora raggiunta all'ingresso: minimo del prezzo prima di X e prezzo
+    al momento in cui il token compie X minuti dalla migrazione. Solo dati gia letti, mai eccezioni."""
+    try:
+        m0, t0 = fe.get("min_since_migration"), fe.get("mig_t0")
+        if m0 is None or t0 is None or fnum(price) <= 0 or CFG.get("ENTRY_MIN_AGE_MODE") == "off":
+            return
+        now = now or time.time()
+        age = fnum(m0) + (now - fnum(t0)) / 60
+        g = fe.setdefault("age_gate", {})
+        for x in CFG.get("ENTRY_MIN_AGE_TEST") or []:
+            if fnum(m0) >= x:
+                continue
+            k = str(int(x))
+            e = g.setdefault(k, {"low": price, "px": None})
+            if e["px"] is None:
+                e["low"] = min(fnum(e["low"], price), price)
+                if age >= x:
+                    e["px"], e["at_min"] = price, round((now - fnum(t0)) / 60, 1)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def age_gate_close(fe, exit_price, entry_price):
+    """Alla chiusura: per ogni X, pnl dell'ingresso ritardato (stessa uscita, prezzo all'eta X, senza costi) e calo
+    massimo evitato prima di X. Non raggiunta = il trade ritardato non sarebbe partito."""
+    try:
+        for k, e in (fe.get("age_gate") or {}).items():
+            ep, low = fnum(entry_price), fnum(e.get("low"))
+            e["pre_low_pct"] = round((low / ep - 1) * 100, 2) if ep > 0 and low > 0 else None
+            if e.get("px"):
+                e["pnl_delayed_pct"] = round((fnum(exit_price) / fnum(e["px"]) - 1) * 100, 2)
+                e["skipped"] = False
+            else:
+                e["pnl_delayed_pct"], e["skipped"] = None, True
+    except Exception:  # noqa: BLE001
+        pass
 LAST_SRC = {}     # v8.3: mint -> fonte che l'ha messo in watchlist (registrata negli scarti)
 
 
@@ -1282,10 +1349,15 @@ async def pf_learn(st, http, done):
     if pend:
         market = await dex_batch(http, list({r["mint"] for r in pend}))
         for r in pend:
-            done.add((r["mint"], r["t"]))
             pairs = market.get(r["mint"])
             px = summarize(pairs)["price"] if pairs else 0.0
-            ret = (px / r["m"]["price"] - 1) * 100 if px > 0 else -100.0
+            if px <= 0:
+                # review Claude (compito 4): prezzo assente (429, blocco DexScreener fallito, coppia non restituita)
+                # valeva -100% ed era chiuso per sempre: 30 esiti falsi per un solo errore. Ora si riprova al giro
+                # dopo, fino a max_age di load_pending (3 h); oltre, la valutazione esce senza esito.
+                continue
+            done.add((r["mint"], r["t"]))
+            ret = (px / r["m"]["price"] - 1) * 100
             hist.append([r["fails"], round(max(-100.0, min(ret, 1000.0)), 2), r["t"]])
         del hist[:-600]
     now = time.time()
@@ -1378,15 +1450,28 @@ async def scout_pumpportal(st):
                 await ws.send(json.dumps({"method": "subscribeMigration"}))
                 log(st, "Scout", "info", "collegato a pump.fun")
                 backoff = 5
-                async for raw in ws:
+                FAST["subs"], FAST["ws_ok"] = set(), True
+                while True:
+                    try:   # compito 6: timeout corto per aggiornare le iscrizioni ai trade anche senza messaggi
+                        raw = await asyncio.wait_for(ws.recv(), timeout=float(CFG["FAST_POLL_SEC"]))
+                    except asyncio.TimeoutError:
+                        raw = None
+                    await fast_ws_sync(ws, st)
+                    if raw is None:
+                        continue
                     try:
                         msg = json.loads(raw)
                         mint = msg.get("mint")
+                        if mint and "migrat" in str(msg.get("txType", "")).lower():
+                            mig_note(mint)   # compito 10: ora della migrazione (nessuna chiamata in piu)
+                        if fast_ws_msg(st, msg):   # trade di un mint in posizione: solo uscite veloci (shadow)
+                            continue
                         if mint:
                             add_watch(st, mint, msg.get("symbol") or "?", "pump.fun")
                     except Exception:  # noqa: BLE001
                         continue
         except Exception as e:  # noqa: BLE001
+            FAST["ws_ok"], FAST["subs"] = False, set()   # compito 6: i mint pump.fun passano al polling
             log(st, "Scout", "warn", f"pump.fun disconnesso ({type(e).__name__}), riprovo tra {backoff}s")
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, 120)
@@ -1724,6 +1809,18 @@ def host_pause_alert(now=None):
     return True
 
 
+def watch_pause_shift(st, a, b):
+    """Compito 8 (Claude): la pausa [a, b] non conta per WATCH_TTL_MIN. Sposta in avanti i 'seen' della watchlist della
+    parte di pausa non ancora compensata (piu cicli possono vedere la stessa pausa: mai due volte)."""
+    hp = HOST_PAUSE
+    shift = max(0.0, b - max(a, fnum(hp.get("watch_shift_to"))))
+    hp["watch_shift_to"] = max(fnum(hp.get("watch_shift_to")), b)
+    if shift > 0:
+        for w in st.watch.values():
+            w["seen"] = fnum(w.get("seen"), b) + shift
+    return shift
+
+
 def host_pause_check(st, name, now=None, mono=None):
     """Da chiamare a OGNI giro del ciclo 'name'. Ritorna i secondi di pausa (0 = nessuna)."""
     now, mono = now or time.time(), mono if mono is not None else time.monotonic()
@@ -1736,6 +1833,7 @@ def host_pause_check(st, name, now=None, mono=None):
     if gw <= CFG["HOST_PAUSE_SEC"] and abs(gw - gm) <= CFG["HOST_PAUSE_MONO_JUMP_SEC"]:
         return 0.0
     hp = HOST_PAUSE
+    watch_pause_shift(st, last[0], now)            # compito 8: anche prima del controllo dei doppioni
     hp["hold"] = {"risk": True, "shadow": True}   # primo giro di ogni ciclo dopo la ripresa: solo quotazioni
     if now - hp["last_evt"] < 60:                  # gia registrata dall'altro ciclo
         return gw
@@ -2028,6 +2126,24 @@ async def second_price(http, mints):
     return out
 
 
+async def noprice_route_check(http, mint, o):
+    """Seconda conferma del 'nessun prezzo': preventivo di vendita Jupiter della quantita tenuta (solo lettura).
+    -> 'no_route' | 'route' (percorso c'e: token vivo) | 'unknown' (dati mancanti o errore di rete)."""
+    tok, dec = fnum(o.get("tokens")), o.get("dec")
+    if http is None or tok <= 0 or not hasattr(http, "s"):
+        return "unknown"
+    try:
+        if dec is None:   # shadow aperti con la formula: decimali dalla RPC (salvati per i giri successivi)
+            dec = await token_decimals(http, mint)
+            if dec is None:
+                return "unknown"
+            o["dec"] = dec
+        q, err = await jup_quote(http, mint, WSOL, int(tok * 10 ** int(dec)))
+    except Exception:  # noqa: BLE001
+        return "unknown"
+    return "no_route" if err == "no_route" else ("route" if q else "unknown")
+
+
 async def verify_no_price(st, http, items, now=None):
     """items {mint: shadow/posizione} senza prezzo da 15 min -> {mint: 'alive' | 'wait' | 'invalid' | 'dead'}.
     alive = prezzo dalla seconda fonte (aggiornato); dead = la seconda fonte risponde ma senza prezzo (rug possibile);
@@ -2043,8 +2159,21 @@ async def verify_no_price(st, http, items, now=None):
             o.pop("np_wait", None)
             out[mt] = "alive"
         elif px is not None:
-            o["np_src"] = "jupiter"
-            out[mt] = "dead"
+            # review Claude (compito 4): Jupiter price v3 omette di proposito token nuovi o con poca liquidita, quindi
+            # "assente dal prezzo" da solo non e un rug. 'dead' solo se anche il preventivo di vendita dice
+            # 'no_route'; preventivo valido o errore di rete = attesa (mai -100 su un dato mancante).
+            conf = await noprice_route_check(http, mt, o)
+            if conf == "no_route":
+                o["np_src"] = "jupiter"
+                out[mt] = "dead"
+            else:
+                o["np_wait"] = int(o.get("np_wait", 0)) + 1
+                o["np_route"] = conf
+                if o["np_wait"] >= int(CFG.get("NOPRICE_MAX_WAIT", 15)):
+                    out[mt] = "invalid"
+                else:
+                    o["last_ok"] = now - 900 + 120
+                    out[mt] = "wait"
         else:
             o["np_wait"] = int(o.get("np_wait", 0)) + 1
             if o["np_wait"] >= int(CFG.get("NOPRICE_MAX_WAIT", 15)):
@@ -2968,6 +3097,13 @@ async def entry_features(st, http, mint, m, signals=None, candles=None, soft=Non
         fe = dict(fe, error=type(e).__name__)
     v87_fields(st, http, mint, m, fe, allow_fetch)
     fe.update(discord_tag(mint))   # v8.8: call NKT (SHADOW, nessun effetto)
+    try:   # compito 10 (Claude): solo misura, dati gia letti
+        msm, msrc = min_since_migration(mint, m)
+        fe.update({"min_since_migration": msm, "mig_src": msrc, "mig_t0": round(time.time(), 1),
+                   "bs5": round(fnum(m.get("buys_m5")) / max(1, int(fnum(m.get("sells_m5")))), 3),
+                   "top10": (SEC_LAST.get(mint) or {}).get("top10")})
+    except Exception:  # noqa: BLE001
+        pass
     return fe
 
 
@@ -3005,9 +3141,15 @@ async def stx_task(st, http, mint, m, fe, creator=None):
             mi = (SRC["crh"]._load()["mint"].get(mint) or {})
             created = mi.get("created") or None
             creator = creator or mi.get("creator")
-        r = await SRC["stx"].fetch(http.get, mint, creator, created, {"MAX_PAGES": int(CFG.get("STX_PAGES", 3))})
+        # review Claude (compito 7): una stx_task alla volta. Usa lo stesso host pump.fun (gap 5 s, coda unica in
+        # Http._wait) dello storico creatore, che l'Analyst ASPETTA prima di un acquisto: con piu stx in parallelo
+        # davanti all'Analyst finivano fino a 3 pagine x 5 s per token di sola misura.
+        if STX_STATE.get("sem") is None:
+            STX_STATE["sem"] = asyncio.Semaphore(1)
+        async with STX_STATE["sem"]:
+            r = await SRC["stx"].fetch(http.get, mint, creator, created, {"MAX_PAGES": int(CFG.get("STX_PAGES", 3))})
         fe["stx"] = r
-        for k in ("sniper_pct", "first20_sold_pct", "dev_first_sell_dt"):
+        for k in ("sniper_pct", "first20_sold_pct", "dev_first_sell_dt", "creator_known"):
             fe[k] = r.get(k)
         write_event("Analyst", "early_trades", f"primi scambi {m.get('symbol')}: "
                     + (f"sniper {r.get('sniper_pct')}%, primi20 venduto {r.get('first20_sold_pct')}%, "
@@ -3360,6 +3502,23 @@ def is_rug_event(reason, minutes):
 CFG.setdefault("LIQ_CRASH_ZERO", True)
 CFG.setdefault("PNL_IMPLAUSIBLE_PCT", 1000.0)
 CFG.setdefault("PRICE_SPIKE_MULT", 20.0)
+# review Claude (compito 4): "liquidita crollata" (che con LIQ_CRASH_ZERO azzera e segna rug) solo dopo
+# LIQ_CRASH_CONFIRM letture DISTINTE di fila sotto la soglia: una sola lettura (liquidita 0 passeggera, coppia
+# sbagliata al passaggio curva -> pool) dava -100/rug a un token vivo.
+CFG.setdefault("LIQ_CRASH_CONFIRM", 2)
+
+
+def liq_crash_confirmed(o):
+    """True se la liquidita e sotto LIQ_DROP_EXIT_PCT dall'ingresso in LIQ_CRASH_CONFIRM letture distinte di fila.
+    Conta una lettura per aggiornamento (liq_ts), mai due volte lo stesso dato vecchio."""
+    le = fnum(o.get("liq_entry"))
+    if le <= 0 or fnum(o.get("liq"), le) >= le * (1 - CFG["LIQ_DROP_EXIT_PCT"] / 100):
+        o.pop("liq_drop_n", None), o.pop("liq_drop_ts", None)
+        return False
+    ts = o.get("liq_ts")
+    if ts is None or ts != o.get("liq_drop_ts"):
+        o["liq_drop_n"], o["liq_drop_ts"] = int(o.get("liq_drop_n", 0)) + 1, ts
+    return o["liq_drop_n"] >= max(1, int(CFG.get("LIQ_CRASH_CONFIRM", 2)))
 
 
 def pnl_implausible(pnl_pct):
@@ -3382,11 +3541,14 @@ def apply_market_tick(o, m, now):
     if price_spike(o.get("last_price"), m["price"]):
         o["spike_n"] = int(o.get("spike_n", 0)) + 1
         if m.get("liq_known", True) and fnum(m.get("liq")) < fnum(o.get("liq"), 1.0):
-            o["liq"] = max(fnum(m.get("liq")), 1.0)
+            o["liq"], o["liq_ts"] = max(fnum(m.get("liq")), 1.0), now
         return False
     o["last_price"], o["last_ok"] = m["price"], now
     if m.get("liq_known", True):  # v8.5: liquidita assente = dato mancante, non rug
-        o["liq"] = max(m["liq"], 1.0)
+        o["liq"], o["liq_ts"] = max(m["liq"], 1.0), now
+    fe_ = o.get("fe") if isinstance(o.get("fe"), dict) else o.get("entry_features")
+    if isinstance(fe_, dict):
+        age_gate_tick(fe_, m["price"], now)   # compito 10: ingresso ritardato, solo misura
     return True
 
 
@@ -4022,7 +4184,8 @@ async def security_check(st, http, mint, m, cache):
             RC_HEALTH["fb_skip"] += 1
             sec.update(severe="rugcheck_down", shadow_keys=["rugcheck_down"], soft=["rugcheck_down"] + sec["soft"])
             return False, "RugCheck giu, ripiego on-chain con dubbi: " + "; ".join(doubt), "RugCheck giu (dubbio)", sec
-    SEC_LAST[mint] = {"rc_holders": sec["rc_holders"][:5], "supply": supply_ui or None, "ts": time.time()}  # v8.4f
+    SEC_LAST[mint] = {"rc_holders": sec["rc_holders"][:5], "supply": supply_ui or None, "ts": time.time(),  # v8.4f
+                      "top10": sec.get("top10")}   # compito 10: concentrazione nell'entry_features
     if len(SEC_LAST) > 3000:
         for k in sorted(SEC_LAST, key=lambda k: SEC_LAST[k]["ts"])[:500]:
             SEC_LAST.pop(k, None)
@@ -4045,6 +4208,8 @@ async def security_check(st, http, mint, m, cache):
 async def filter_agent(st, http, q_out):
     cache = {}
     while True:
+        if "filter" in LOOP_MONO:   # v8.9: la pausa del Filter si misura sul solo sleep, non sulla durata del giro
+            LOOP_MONO["filter"] = (time.time(), time.monotonic())   # (un giro lento non e una pausa dell'host)
         await asyncio.sleep(CFG["RECHECK_SEC"])
         now = time.time()
         for d, ttl in ((st.processed, 6 * 3600),):
@@ -4054,6 +4219,7 @@ async def filter_agent(st, http, q_out):
             del st.cooldown[k]
         for k in [k for k, v in cache.items() if now - v[0] > 3600]:
             del cache[k]
+        host_pause_check(st, "filter", now)   # compito 8: una pausa rilevata qui sposta i 'seen' prima della scadenza
         for mint, w in list(st.watch.items()):
             if now - w["seen"] > CFG["WATCH_TTL_MIN"] * 60:
                 st.watch.pop(mint, None)
@@ -4799,6 +4965,171 @@ def tp_cap_price(price, pnl, rung):
 
 
 STOPISH = ("stop loss", "stop a pareggio", "crollo a", "liquidita crollata")
+
+
+# ---------------------------------------------------------------- compito 6 (Claude): uscite veloci, SOLO misura
+# Lo stop a -12% chiude in media a -19,6% perche il controllo arriva tardi (posizioni ogni 15 s x 2 conferme, shadow
+# ogni 30 s; exit_lag_s ~30 s). Qui SL/TP1/trailing si valutano a OGNI prezzo: trade PumpPortal per i token pump.fun
+# (websocket gia aperto), polling DexScreener ogni FAST_POLL_SEC per gli altri (o se il websocket e giu). Conferma =
+# 2 prezzi sotto il livello ad almeno FAST_EXIT_CONFIRM_SEC di distanza; salti oltre PRICE_SPIKE_MULT ignorati.
+# FAST_EXIT_MODE 'shadow' = registra fast_exit_* accanto all'uscita vera, NESSUN cambio delle uscite; 'off' = niente.
+CFG.setdefault("FAST_EXIT_MODE", "shadow")
+CFG.setdefault("FAST_EXIT_CONFIRM_SEC", 3.0)
+CFG.setdefault("FAST_POLL_SEC", 5.0)
+CFG.setdefault("FAST_WS_STALE_SEC", 60.0)
+FAST = {"ws_ok": False, "subs": set(), "last_sync": 0.0, "ws_last": {}, "ticks": 0}
+
+
+def fast_on():
+    return str(CFG.get("FAST_EXIT_MODE", "shadow")) != "off"
+
+
+def fast_targets(st):
+    """{mint: (kind, oggetto)} di posizioni vere e shadow aperti."""
+    out = {k: ("real", v) for k, v in st.positions.items()}
+    out.update({k: ("shadow", v) for k, v in st.shadow_trades.items() if k not in out})
+    return out
+
+
+def fast_levels(o):
+    eff = o.get("eff") or {}
+    stop = fnum(eff.get("stop_base"), fnum(o.get("stop_dyn_on"), CFG["STOP_LOSS_PCT"])) if eff.get("stop_base") is not None \
+        else fnum(o.get("stop_dyn_on"), CFG["STOP_LOSS_PCT"])
+    tp1 = fnum(eff.get("tp1"), min(CFG["TP1_PCT"], CFG["TAKE_PROFIT_PCT"]))
+    stage = int(o.get("tp_stage", 0))
+    stop_eff = max(stop, min(CFG["BREAKEVEN_PCT"], tp1 - 1)) if stage >= 1 else stop
+    return stop_eff, tp1, fnum(eff.get("trail_start"), CFG["TRAIL_ACTIVATE_PCT"]), \
+        fnum(eff.get("trail_dist"), CFG["TRAIL_DISTANCE_PCT"]), stage
+
+
+def fast_tick(o, px, ts):
+    """Un prezzo (trade o polling). Registra in o['fast_exit'] la PRIMA uscita che sarebbe scattata (stop o
+    trailing, confermata da 2 prezzi ad almeno FAST_EXIT_CONFIRM_SEC) e in o['fast_tp1'] il primo TP1. Mai eccezioni."""
+    try:
+        if not fast_on() or fnum(px) <= 0:
+            return None
+        entry = fnum(o.get("quote_price")) or fnum(o.get("price"))
+        if entry <= 0:
+            return None
+        fx = o.setdefault("_fx", {"last": None, "peak": 0.0, "t_stop": None, "t_trail": None, "t_tp": None})
+        if fx["last"] and price_spike(fx["last"], px):
+            return None
+        fx["last"] = px
+        pnl = (px / entry - 1) * 100
+        fx["peak"] = max(fx["peak"], pnl, fnum(o.get("peak_pct")))
+        stop, tp1, ta, td, stage = fast_levels(o)
+        conf = float(CFG["FAST_EXIT_CONFIRM_SEC"])
+
+        def confirmed(key, cond):
+            if not cond:
+                fx[key] = None
+                return False
+            if fx[key] is None:
+                fx[key] = ts
+                return conf <= 0
+            return ts - fx[key] >= conf
+        if o.get("fast_exit") is None:
+            why = None
+            if confirmed("t_stop", pnl <= stop):
+                why = "stop"
+            elif confirmed("t_trail", fx["peak"] >= ta and pnl <= fx["peak"] - td):
+                why = "trailing"
+            if why:
+                o["fast_exit"] = {"why": why, "px": px, "ts": round(ts, 2), "pnl": round(pnl, 2),
+                                  "level": round(stop if why == "stop" else fx["peak"] - td, 2)}
+        if stage == 0 and o.get("fast_tp1") is None and confirmed("t_tp", pnl >= tp1):
+            o["fast_tp1"] = {"px": px, "ts": round(ts, 2), "pnl": round(pnl, 2)}
+        FAST["ticks"] += 1
+        return o.get("fast_exit")
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def fast_feed(st, mint, px, ts=None, src="poll"):
+    ts = ts or time.time()
+    if src == "ws":
+        FAST["ws_last"][mint] = ts
+    for d in (st.positions, st.shadow_trades):
+        o = d.get(mint)
+        if o is not None:
+            fast_tick(o, px, ts)
+
+
+def fast_ws_msg(st, msg, now=None):
+    """Trade PumpPortal di un mint seguito -> prezzo $ = solAmount/tokenAmount x SOL. True se il messaggio era un trade."""
+    if str(msg.get("txType", "")).lower() not in ("buy", "sell"):
+        return False
+    mint = msg.get("mint")
+    if mint not in FAST["subs"]:
+        return True
+    sol, tok = fnum(msg.get("solAmount")), fnum(msg.get("tokenAmount"))
+    if sol > 0 and tok > 0 and sol_known():
+        fast_feed(st, mint, sol / tok * sol_usd(), now, src="ws")
+    return True
+
+
+def fast_subs_diff(st, subs):
+    """(da iscrivere, da togliere): solo token pump.fun in posizione o in shadow."""
+    want = {k for k in fast_targets(st) if str(k).endswith("pump")} if fast_on() else set()
+    return sorted(want - subs), sorted(subs - want)
+
+
+async def fast_ws_sync(ws, st, now=None):
+    now = now or time.time()
+    if now - FAST["last_sync"] < float(CFG["FAST_POLL_SEC"]):
+        return
+    FAST["last_sync"] = now
+    add, rem = fast_subs_diff(st, FAST["subs"])
+    if add:
+        await ws.send(json.dumps({"method": "subscribeTokenTrade", "keys": add}))
+        FAST["subs"] |= set(add)
+    if rem:
+        await ws.send(json.dumps({"method": "unsubscribeTokenTrade", "keys": rem}))
+        FAST["subs"] -= set(rem)
+
+
+def fast_poll_targets(st, now=None):
+    """Mint da leggere col polling: non pump.fun, oppure pump.fun senza trade dal websocket da FAST_WS_STALE_SEC."""
+    now = now or time.time()
+    out = []
+    for k in fast_targets(st):
+        ws_fresh = FAST["ws_ok"] and k in FAST["subs"] and now - fnum(FAST["ws_last"].get(k), 0.0) < CFG["FAST_WS_STALE_SEC"]
+        if not ws_fresh:
+            out.append(k)
+    return out
+
+
+async def fast_poll_agent(st, http):
+    """Polling DexScreener (gratis) ogni FAST_POLL_SEC per i mint non coperti dal websocket: al massimo 30 mint per
+    chiamata, cioe ~12 chiamate/min con meno di 30 posizioni+shadow. Nessuna chiamata Helius."""
+    while True:
+        await asyncio.sleep(float(CFG["FAST_POLL_SEC"]))
+        if not fast_on():
+            continue
+        try:
+            tg = fast_poll_targets(st)
+            if not tg:
+                continue
+            market = await dex_batch(http, tg[:30])
+            now = time.time()
+            for mint, pairs in market.items():
+                m = summarize(pairs) if pairs else None
+                if m and m["price"] > 0:
+                    fast_feed(st, mint, m["price"], now, src="poll")
+        except Exception as e:  # noqa: BLE001
+            log(st, "Risk", "warn", f"uscite veloci (polling): errore {type(e).__name__}, continuo")
+
+
+def fast_exit_fields(o, close_ts, close_pnl):
+    """Alla chiusura: uscita veloce simulata accanto a quella vera. lag positivo = la veloce arrivava prima."""
+    fx = o.get("fast_exit") or {}
+    tp = o.get("fast_tp1") or {}
+    out = {"fast_exit_why": fx.get("why"), "fast_exit_fill": fx.get("pnl"), "fast_exit_level": fx.get("level"),
+           "fast_exit_lag_s": round(close_ts - fnum(fx.get("ts")), 1) if fx.get("ts") else None,
+           "fast_exit_gain_pct": round(fnum(fx.get("pnl")) - fnum(close_pnl), 2) if fx.get("pnl") is not None
+           and close_pnl is not None else None,
+           "fast_tp1_pnl": tp.get("pnl"), "fast_ticks_mode": CFG.get("FAST_EXIT_MODE")}
+    return {k: v for k, v in out.items() if v is not None}
 
 
 def exit_lag_fields(o, reason, value, tokens_sold, now=None):
@@ -5900,6 +6231,9 @@ OVR_INT_KEYS |= {"BIRDEYE_MIN_HOLDERS", "BIRDEYE_TREND_SEC", "BIRDEYE_RESERVE_CU
 OVR_LIMITS.update({"MARK_NOROUTE_CONFIRM": (2.0, 6.0)})   # v8.5
 OVR_INT_KEYS |= {"MARK_NOROUTE_CONFIRM"}
 OVR_GLOBAL_MAP["MARK_NOROUTE_CONFIRM"] = "MARK_NOROUTE_CONFIRM"   # senza questa riga la chiave era ignorata
+OVR_LIMITS.update({"LIQ_CRASH_CONFIRM": (1.0, 4.0)})   # review Claude (compito 4)
+OVR_INT_KEYS |= {"LIQ_CRASH_CONFIRM"}
+OVR_GLOBAL_MAP["LIQ_CRASH_CONFIRM"] = "LIQ_CRASH_CONFIRM"
 OVR_LIMITS.update({"CLUSTER_FAM_HARD_N": (3.0, 5.0)})   # review Claude (compito 2)
 OVR_INT_KEYS |= {"CLUSTER_FAM_HARD_N"}
 OVR_STR_KEYS["CLUSTER_FAM_MODE"] = ("shadow", "on")
@@ -6159,6 +6493,7 @@ async def _sell_position(st, broker, mint, reason, fraction=1.0, zero=False, mar
     res = {"ok": True, "value": 0.0, "tokens": p["tokens"] * fraction} if zero else \
         await broker.sell(st, mint, p, fraction, urgent=urgent)
     if not res.get("ok"):
+        p.pop("_cpmm_cap", None)   # review Claude: il prezzo limite del gradino vale solo per QUESTA vendita (pnl_cpmm)
         p["sell_fails"] = p.get("sell_fails", 0) + 1
         p["fill_failed"] = p.get("fill_failed", 0) + res.get("fill_failed", 1)
         p["fee_failed_usd"] = p.get("fee_failed_usd", 0.0) + res.get("fee_failed_usd", 0.0)
@@ -6214,6 +6549,8 @@ async def _sell_position(st, broker, mint, reason, fraction=1.0, zero=False, mar
     t.update({f"f_{k}": (p.get("features") or {}).get(k) for k in FEATURES})
     fe = dict(p.get("entry_features") or {})  # v8.1 (posizioni aperte prima della v8.1: vuoto)
     if fe:
+        age_gate_close(fe, 0.0 if zero else p.get("last_price"), p.get("quote_price") or p.get("entry_mark"))
+        fe.update(fast_exit_fields(p, time.time(), pnl / p["cost"] * 100 if p["cost"] else None))   # compito 6
         fe.update({"trough_pct": round(fnum(p.get("trough_pct")), 2), "dyn_stop_hit": p.get("dyn_hit")})
         fe.update(alt_exits(mint, "real", p.get("opened")))   # v8.4f: solo registrato
     t.update(fe_columns(fe))
@@ -6392,7 +6729,7 @@ async def risk_agent(st, http, broker):
                         elif time.time() - p["last_ok"] > 900:
                             await sell_position(st, broker, mint, "nessun prezzo da 15 min, possibile rug",
                                                 zero=broker.mode == "paper")
-                        elif p["liq_entry"] > 0 and p["liq"] < p["liq_entry"] * (1 - CFG["LIQ_DROP_EXIT_PCT"] / 100):
+                        elif liq_crash_confirmed(p):
                             drop = (1 - p["liq"] / p["liq_entry"]) * 100
                             await sell_position(st, broker, mint, f"liquidita crollata del {drop:.0f}%",   # v8.5h
                                                 zero=broker.mode == "paper" and bool(CFG["LIQ_CRASH_ZERO"]))
@@ -6619,6 +6956,8 @@ def _close_shadow_row(st, mint, sh, pnl, rug, why, now=None):
            "invalid_for_learning": (sh.get("inv_why") or "no_price") if sh.get("np_invalid") else ""}
     _lag = dict(sh.get("_lag") or {})   # v8.6 (A)
     fe = dict(sh.get("fe") or {})  # v8.1
+    age_gate_close(fe, 0.0 if rug else sh.get("last_price"), sh.get("price"))   # compito 10: solo misura
+    fe.update(fast_exit_fields(sh, now, pnl))   # compito 6: uscita veloce simulata, solo misura
     if fe and sh.get("_lagx"):
         fe.update(sh["_lagx"])
     if fe:
@@ -6670,7 +7009,10 @@ async def open_shadow(st, http, mint, m, keys, reason, score, flags, now=None, t
     if CFG["SHADOW_ROUTE_CHECK"] and br is not None and getattr(br, "realistic", False):
         pre = await br.precheck(st, mint, m, size)  # solo preventivi, nessuna transazione
         if pre and not pre.get("ok", True):
-            if pre.get("cat") in ("non rivendibile", "nessun percorso Jupiter"):
+            # review Claude (compito 4): "nessun percorso d'ACQUISTO" non e un rug: il trade vero non sarebbe partito
+            # (come per la rivendita troppo cara), quindi niente shadow -100. Resta il caso "non rivendibile":
+            # acquisto possibile e vendita no nello stesso momento = segnale honeypot.
+            if pre.get("cat") == "non rivendibile":
                 sh = {"t": now, "sym": m["symbol"], "reason": reason, "keys": list(keys), "flags": list(flags),
                       "score": round(score, 4), "thr": round(st.threshold, 4), "price": m["price"],
                       "liq_entry": m["liq"], "rt": None, "src": "jupiter", "peak_pct": 0.0, "tag": tag,
@@ -6744,7 +7086,7 @@ def shadow_decide(sh, now=None):
             return "DATI NON VALIDI: nessun prezzo da nessuna fonte (non rug)", 1.0, False, False
         return ("nessun prezzo da 15 min, possibile rug" + (" (confermato da Jupiter)" if sh.get("np_src") else ""),
                 1.0, True, True)
-    if sh["liq_entry"] > 0 and sh["liq"] < sh["liq_entry"] * (1 - CFG["LIQ_DROP_EXIT_PCT"] / 100):
+    if liq_crash_confirmed(sh):
         drop = (1 - sh["liq"] / sh["liq_entry"]) * 100
         why = f"liquidita crollata del {drop:.0f}%"
         if CFG["LIQ_CRASH_ZERO"]:   # v8.5h: parte non venduta a 0, sempre rug
@@ -6777,7 +7119,14 @@ async def shadow_apply(st, http, mint, sh, dec, now=None):
         raw = int(sh["tokens"] * 10 ** int(sh["dec"]))
         _, err = await jup_quote(http, mint, WSOL, raw)  # solo preventivo: c'e ancora un percorso di vendita?
         if err == "no_route":
-            why, zero, rug = why + "; nessun percorso di vendita su Jupiter", True, True
+            # review Claude (compito 4): un solo 'no_route' (anche un 400 qualsiasi) chiudeva a -100% rug.
+            # Ora serve la conferma al giro successivo (MARK_NOROUTE_CONFIRM di fila, minimo 2); intanto resta aperto.
+            sh["close_noroute"] = int(sh.get("close_noroute", 0)) + 1
+            if sh["close_noroute"] < max(2, int(CFG.get("MARK_NOROUTE_CONFIRM", 3))):
+                return None
+            why, zero, rug = why + "; nessun percorso di vendita su Jupiter (confermato)", True, True
+        else:
+            sh.pop("close_noroute", None)
     sold = sh["tokens"] * frac
     _val = 0.0 if zero else exit_value(sold, sh["last_price"], sh["liq"])
     sh["realized"] += _val
@@ -7335,6 +7684,7 @@ async def main():
             "Analyst": lambda: analyst_agent(st, http, q_an, q_ex),
             "Executor": lambda: executor_agent(st, broker, q_ex),
             "Risk": lambda: risk_agent(st, http, broker),
+            "Uscite veloci": lambda: fast_poll_agent(st, http),   # compito 6: solo misura (FAST_EXIT_MODE)
             "Learner": lambda: shadow_agent(st, http),
             "Shadow": lambda: shadow_trade_agent(st, http),
             "Recap": lambda: recap_agent(st),

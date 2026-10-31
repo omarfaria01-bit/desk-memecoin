@@ -1,0 +1,7 @@
+# prior-calibration (compito 9)
+
+1. **Cosa:** `docs/analysis/calibrate_prior.py`, solo libreria standard e sola lettura sulle copie dei CSV. Prende le righe valide (`valido=1`, senza `invalid_for_learning`) con `p_prior` nell'entry_features, oppure lo ricalcola dalle colonne `f_*` con `--model sources/model_prior.json`. y = pnl > 0. Split temporale 70/30 su "aperto". Prova Platt e isotonica (PAV), sceglie la migliore per Brier sulla verifica, scrive `<out>/model_prior_calibrated.json` e stampa il report con AUC e Brier (grezzo, Platt, isotonica).
+2. **Perché:** `p_prior` (Slinky21, giu–lug) ordina bene (AUC 0,70) ma le probabilità non sono calibrate: base 0,25% in train contro circa 10% in test.
+3. **File:** `docs/analysis/calibrate_prior.py`, `tests/test_prior_calibration.py`. Nessuna modifica al bot, nessun peso sullo score.
+4. **Prove:** test con dati sintetici (p_prior che sovrastima in modo sistematico): la calibrazione abbassa il Brier, le righe non valide sono escluse, lo split è temporale, AUC/Brier/PAV sono controllati a mano su casi piccoli. Nessun risultato reale: i CSV non sono nel repo. Per lanciarlo: `cp shadow_trades.csv trades.csv /tmp/ && python3 docs/analysis/calibrate_prior.py --out /tmp /tmp/shadow_trades.csv /tmp/trades.csv`.
+5. **Rischi:** nessuno sul bot. Con poche righe (minimo 30) l'isotonica tende a sovradattarsi: va letto il Brier sulla verifica, non quello di calibrazione. `p_prior` c'è solo per i token valutati dall'Analyst dopo v8.7.

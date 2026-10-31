@@ -55,9 +55,12 @@ def compute(trades, creator=None, created_ms=None, cfg=None):
     first = order[:int(c["FIRST_N"])]
     fb = sum(bought[w] for w in first)
     fs = sum(min(sold.get(w, 0.0), bought[w]) for w in first)
+    # review Claude (compito 7): senza creatore il suo acquisto iniziale (stessa tx della creazione, entro
+    # SNIPER_SEC) finisce in sniper_pct e tra i primi 20: creator_known = 0 permette di separare queste righe
     return {"sniper_pct": round(snip / c["SUPPLY"] * 100, 3),
             "first20_sold_pct": round(fs / fb * 100, 2) if fb > 0 else None,
             "dev_first_sell_dt": dev_sell, "dev_sold": int(dev_sell is not None) if cr else None,
+            "creator_known": int(bool(cr)),
             "n_trades": len(tr), "span_s": round((float(tr[-1]["blockTimeMs"]) - t0) / 1000.0, 1)}
 
 
