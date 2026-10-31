@@ -4643,7 +4643,8 @@ async def analyst_agent(st, http, q_in, q_out):
             brand = SRC["brand"].brand_tag(m["symbol"], m.get("name")) if brand_mode != "off" and "brand" in SRC else None
             if brand:
                 signals.append(f"brand:{brand}")
-                if brand_mode == "on" and "brand" not in flags:
+                # review Claude: i controlli positivi di Kiwi (es. GTA6 'probabile_buono') hanno il tag ma mai la penalita
+                if brand_mode == "on" and "brand" not in flags and st.labels.get(mint) not in POS_LABELS:
                     flags.append("brand")
                     pen += soft_pen(st, "brand")
                     score -= soft_pen(st, "brand")
