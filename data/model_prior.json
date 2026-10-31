@@ -1,0 +1,44 @@
+{
+ "w": {
+  "trend": 0.60891,
+  "macd": -0.31937,
+  "rsi": 0.49856,
+  "bsr": 0.01417,
+  "volsurge": -1.7866,
+  "higher_lows": 2.16018,
+  "social": 0.0,
+  "trending": 0.0,
+  "narrative": 0.0,
+  "holders": 1.43358,
+  "concentration": 1.73488,
+  "liquidity": -0.09661
+ },
+ "b": -7.40422,
+ "n": 6914,
+ "source": "Slinky21/Pumpfun_Memecoin_Corpus (CC BY 4.0), 2026-06-05..2026-07-14, bonding curve pump.fun",
+ "split": {
+  "train": "2026-06-20 <= T < 2026-07-03",
+  "test": "T >= 2026-07-04"
+ },
+ "metrics": {
+  "n_test": 5204,
+  "base_rate_train": 0.0025,
+  "base_rate_test": 0.104,
+  "auc_test": 0.7004,
+  "auc_rule_score_test": 0.6507,
+  "precision_top10pct_test": 0.1382,
+  "precision_p_ge_0.5_test": null,
+  "share_with_chart": 0.1537
+ },
+ "limits": [
+  "social/trending/narrative assenti nel corpus: forzati a 0, peso ~0",
+  "holders = somma wallet unici per bucket (sovrastima), top10 alla nascita del token",
+  "grafico da <=20 candele 1m (bot: 100, minimo 30); soglia qui 10",
+  "popolazione: tutti i token pump.fun con mcap>=60 SOL a ~20 min, non i soli candidati del bot",
+  "etichetta su 10 min di bucket 1m (ordine stop/TP dentro il minuto ignoto: prudente)",
+  "graduated_at quasi assente prima del 19 giu: etichetta da graduazione affidabile solo dopo",
+  "solo fase bonding curve; dati di giu-lug 2026 (regime diverso da oggi)"
+ ],
+ "version": 1,
+ "created": "2026-10-31T09:27:11Z"
+}

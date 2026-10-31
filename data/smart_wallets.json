@@ -1,0 +1,4264 @@
+{
+ "version": 1,
+ "source": "export wallet tracker di Kiwi (31/10/2026)",
+ "note": "category da euristica sul nome: trader = trader/KOL; dev = dev noto (solo log, segno incerto); unknown = exchange/infra, insider/bundler o nome generico. Nessuna chiave o dato privato.",
+ "wallets": [
+  {
+   "address": "MiLSTQNcHDmZ1cHTo7fC5kvUYMFDBuEDk2HQ2hAGs3Y",
+   "name": "mils",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "mils"
+  },
+  {
+   "address": "suqh5sHtr8HyJ7q8scBimULPkPpA557prMG47xCHQfK",
+   "name": "Cupsey",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "cupsey",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 696,
+    "grad_rate_pre": 0.141,
+    "con_esito": 97,
+    "good_rate": 0.165
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "BaLCEtq6qgPFruxfnjWBJBkWwCXdwmuodn4NUicQqMSw",
+   "name": "cup2",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "cup2"
+  },
+  {
+   "address": "HDWn4og2pEBuAwNoEp1Q1ee7YreL3ssxh4YjUbk9vnDo",
+   "name": "lincoln ...",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "lincoln"
+  },
+  {
+   "address": "A1QRKMAVzgnkqJyukUhjTkzhiV1kFC8crKwb95mB5qB",
+   "name": "frank",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "frank"
+  },
+  {
+   "address": "FKy2QyHNz2H7K8c4pZnifdP3ogrG4JujwNEB5bTzFEL3",
+   "name": "freeshayne burn",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "freeshayne"
+  },
+  {
+   "address": "DyvfC79QMJHXPTCoVMP3fcWvBnsenbDeD19WWacDgvXb",
+   "name": "kjai dev",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "kjai"
+  },
+  {
+   "address": "HyYNVYmnFmi87NsQqWzLJhUTPBKQUfgfhdbBa554nMFF",
+   "name": "fartcoin blixze",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "fartcoin",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 5,
+    "grad_rate_pre": 0.6,
+    "con_esito": 3,
+    "good_rate": 0.333
+   }
+  },
+  {
+   "address": "BTeqNydtKyDaSxQNRm8ByaUDPK3cpQ1FsXMtaF1Hfaom",
+   "name": "finn",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "finn"
+  },
+  {
+   "address": "76ZUBj1JLz7arTVHSRJok5oSTEqDuVBgySFMVHtzxzZc",
+   "name": "cabal guy",
+   "category": "unknown",
+   "subtype": "insider/bundle",
+   "group": "cabal",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 121,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "4Uq8kK9rzb1BhLKez5LgfzQLHUn2TTX1LRnyfkxFBrDo",
+   "name": "Ace YV",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "ace"
+  },
+  {
+   "address": "Bq5N5kQYFDT9ZNE3CaZL519oyYbS3TokSspouzqJvKjR",
+   "name": "koyla",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "koyla"
+  },
+  {
+   "address": "3xzTSh7KSFsnhzVvuGWXMmA3xaA89gCCM1MSS1Ga6ka6",
+   "name": "TruthTerminal",
+   "category": "unknown",
+   "subtype": "infra/exchange",
+   "group": "truthterminal"
+  },
+  {
+   "address": "41CMkTohu1nXSKNexVxWYK3Xwe8Zgox9ag4CBruFBBv7",
+   "name": "KILO",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "kilo"
+  },
+  {
+   "address": "3URnnJKdG8eTjrKo7G8rN5GjzweYwSZSxwyJm5Ut5UmL",
+   "name": "F",
+   "category": "unknown",
+   "subtype": "nome generico/incerto",
+   "group": "f",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 5,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "99i9uVA7Q56bY22ajKKUfTZTgTeP5yCtVGsrG9J4pDYQ",
+   "name": "zrool",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "zrool",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 626,
+    "grad_rate_pre": 0.022,
+    "con_esito": 14,
+    "good_rate": 0.071
+   }
+  },
+  {
+   "address": "9f2ornZ1JAe3T1gGx7ZdfwrfRioJdAf1W1JPSCDEU6Lz",
+   "name": "JS",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "js"
+  },
+  {
+   "address": "UvsXNihusMGgQKUYKwYXUwXxd77xM3wXVybRmchgMcC",
+   "name": "dan",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "dan"
+  },
+  {
+   "address": "VyGNiGZ3PS3kHmnk5h3fkrcMBjLKFgX5acsnS4qaYKy",
+   "name": "JUICE",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "juice"
+  },
+  {
+   "address": "XDgpjPubjN5soLAFmAMjD2uVR1XZxUKgNpMU6Eo97H7",
+   "name": "cented",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "cented"
+  },
+  {
+   "address": "KANYEsXAntLxYUE6GtPJ5CahFGpEbaSbd5xhNFYbvq3",
+   "name": "kanye",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "kanye"
+  },
+  {
+   "address": "EwTNPYTuwxMzrvL19nzBsSLXdAoEmVBKkisN87csKgtt",
+   "name": "gake",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "gake"
+  },
+  {
+   "address": "9ZzjXiwkGRDBwVHJitfx8AmnN2YUbnqW6M1tH38juEeJ",
+   "name": "ai quant",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "ai",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 7,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "4Hq9UkSXjEwDZDBMAo9Lnri7VnbQCoomRAdrT6NGMh1c",
+   "name": "gake",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "gake"
+  },
+  {
+   "address": "Hp2JBrAhny1TDaC4YhHJLB5jBmcfVXB3A2GTUZzPkQaD",
+   "name": "nikitabear",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "nikitabear"
+  },
+  {
+   "address": "LeckTHCG66D9CcZoecas8P8AGkNmqbXfAt6LXCKDWhq",
+   "name": "Leck",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "leck"
+  },
+  {
+   "address": "BTWDNC2jHxQT8AfphvEJ5Dqr2Xd7wcBFhFPnAUPukueq",
+   "name": "new frostyjays",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "frostyjays"
+  },
+  {
+   "address": "DatN81qe1wd2cGtLJfJ34i7P9o4HAtmQAGdpEzeKK6gL",
+   "name": "Diego",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "diego"
+  },
+  {
+   "address": "5WBE6v8rCbaNLV83fHQQZwZcpaMFojYSn5NvQwrv1k5m",
+   "name": "elon",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "elon"
+  },
+  {
+   "address": "7JmBfR2vRj8Hw4RBZfD2eh26EQ6dgb1UwMJdFnahrjWd",
+   "name": "bryan danny wallet",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "bryan"
+  },
+  {
+   "address": "8HeDT75s5g4CtCimH5B5nySqCiQhtWii8UnZhxBtFo38",
+   "name": "RE DEV",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "re",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 3,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "5pxkp8Rpg7xHekFf7URJ25i4P5ZXVk8hRQUaDKytU5K7",
+   "name": "new leens",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "leens"
+  },
+  {
+   "address": "CuHEkY5sgJfQ3dT5ub1YFPGeifB482cCH3WUTsvfZ9iR",
+   "name": "1k ye buys",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "1k"
+  },
+  {
+   "address": "D6B4C5KopAs3TPibLGN2qKDEPjiLmpWdZuZies81cfyC",
+   "name": "JS",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "js"
+  },
+  {
+   "address": "55yPXFXuJpWbh7dJsre5vNtPjdovu2EFE9nPa3jyn6Q4",
+   "name": "milan 1",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "milan"
+  },
+  {
+   "address": "4nmSyCYLBmZUcw8z2bYQmYMDzbkbA7S1yAmr2cHAA2KJ",
+   "name": "Nach",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "nach"
+  },
+  {
+   "address": "8yJFWmVTQq69p6VJxGwpzW7ii7c5J9GRAtHCNMMQPydj",
+   "name": "lexapro",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "lexapro",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 157,
+    "grad_rate_pre": 0.032,
+    "con_esito": 5,
+    "good_rate": 0.2
+   }
+  },
+  {
+   "address": "G1pRtSyKuWSjTqRDcazzKBDzqEF96i1xSURpiXj3yFcc",
+   "name": "CryptoD",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "cryptod"
+  },
+  {
+   "address": "GfXQesPe3Zuwg8JhAt6Cg8euJDTVx751enp9EQQmhzPH",
+   "name": "spuno",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "spuno",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 30,
+    "grad_rate_pre": 0.2,
+    "con_esito": 6,
+    "good_rate": 0.0
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "GGKs8NKMigXoZffMDB5bDJzBGbqKBgwuNcwWKygE7KwC",
+   "name": "reverts",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "reverts"
+  },
+  {
+   "address": "EjBiEMGNWpgK8jq3DGtPQBrNDaYd6wjbR8kLyNafJbw6",
+   "name": "peme dev",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "peme"
+  },
+  {
+   "address": "GFJhtZuENEB9StZiacHUd1aoBoCtY2wWLskhgwcyfaYN",
+   "name": "based16z",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "based16z"
+  },
+  {
+   "address": "HmhrKQSVunAmkVoANZAp3AV3gSuh9wTWSk1et3rr6uYy",
+   "name": "nach3",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "nach3"
+  },
+  {
+   "address": "6DmAGqHB5P19MJQqLg4M9Nh2saCu8UipdecfYmXkTkpH",
+   "name": "Tavern2",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "tavern2"
+  },
+  {
+   "address": "HooderpigTVYapoXi6PQzxwtWhq3U1cuGvyu89fGjruY",
+   "name": "hooder",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "hooder"
+  },
+  {
+   "address": "FY3cZS5qwxbZdCGwnHaTR5J4Ff7AuvJkgTpkqzQPXrbo",
+   "name": "mackwood",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "mackwood"
+  },
+  {
+   "address": "9hD5wsPWy7xzU8aVxToZsgiAVvjhHgf4A6AmA1Cjn49o",
+   "name": "maybe gake",
+   "category": "unknown",
+   "subtype": "nome generico/incerto",
+   "group": "maybe"
+  },
+  {
+   "address": "5skKDVJ77jhEa1YELXuARCdMLTupVSt83c6VxAYbYqpg",
+   "name": "missor",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "missor"
+  },
+  {
+   "address": "96sErVjEN7LNJ6Uvj63bdRWZxNuBngj56fnT9biHLKBf",
+   "name": "sbsorange",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "sbsorange"
+  },
+  {
+   "address": "4xRGFR3k18DYba9BQDH6FNue2MVJJemA5vUjFefNs31c",
+   "name": "valor potion",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "valor",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 26,
+    "grad_rate_pre": 0.038,
+    "con_esito": 1,
+    "good_rate": 0.0
+   }
+  },
+  {
+   "address": "7e2sow2fQNLA1RcWhCbLmyyzpfQ5kY52t8SwduvcLFwp",
+   "name": "trench AI",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "trench"
+  },
+  {
+   "address": "5V7z2FLGprtHqUSqe7vMk2gknsb4AAbYvwx5BFyHCdof",
+   "name": "yelo",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "yelo"
+  },
+  {
+   "address": "FyNrn5ELHtimjCscVqRK11Q59VaH3knzahtcaPpcmSro",
+   "name": "motion",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "motion",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 31,
+    "grad_rate_pre": 0.226,
+    "con_esito": 7,
+    "good_rate": 0.286
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "433upk9SyfRhanvZkYzYKuiCQk4dBU7xGHMekhfQA6dF",
+   "name": "leno",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "leno"
+  },
+  {
+   "address": "Eh9gqdQGux4dKqsx7hSF1mfLQuffVSyfhQtq3wNJ5pgK",
+   "name": "tavern",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "tavern"
+  },
+  {
+   "address": "4BdKaxN8G6ka4GYtQQWk4G4dZRUTX2vQH9GcXdBREFUk",
+   "name": "jijo",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "jijo",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 48,
+    "grad_rate_pre": 0.021,
+    "con_esito": 1,
+    "good_rate": 0.0
+   }
+  },
+  {
+   "address": "G6fUXjMKPJzCY1rveAE6Qm7wy5U3vZgKDJmN1VPAdiZC",
+   "name": "clukz",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "clukz",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 38,
+    "grad_rate_pre": 0.105,
+    "con_esito": 4,
+    "good_rate": 0.25
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "HYWo71Wk9PNDe5sBaRKazPnVyGnQDiwgXCFKvgAQ1ENp",
+   "name": "komethazine",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "komethazine"
+  },
+  {
+   "address": "ArfVe1K5gt5zsxzRCWSQeWc1rJSJjZzuuYxmvRh71mMQ",
+   "name": "useless dev",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "useless"
+  },
+  {
+   "address": "DwtF6KdjB9xgzKhCvcxKQLGU1NezdFFdVo8tLzSb7C8W",
+   "name": "pow trench wal",
+   "category": "unknown",
+   "subtype": "insider/bundle",
+   "group": "pow"
+  },
+  {
+   "address": "3vkpy5YHqnqJTnA5doWTpcgKyZiYsaXYzYM9wm8s3WTi",
+   "name": "pump buyback",
+   "category": "unknown",
+   "subtype": "infra/exchange",
+   "group": "pump"
+  },
+  {
+   "address": "DjAfkjAV7qD6U2qjjU5RdcuzXwdk1gF3CtiWwGZc8pxJ",
+   "name": "PASTERNAK",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "pasternak"
+  },
+  {
+   "address": "2etgHx7nEvQWvdj5xMKrvcmJEvQaHbPM9whBx4hHGxtV",
+   "name": "Rowdy",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "rowdy"
+  },
+  {
+   "address": "HmBmSYwYEgEZuBUYuDs9xofyqBAkw4ywugB1d7R7sTGh",
+   "name": "Tobx",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "tobx",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 60,
+    "grad_rate_pre": 0.067,
+    "con_esito": 4,
+    "good_rate": 0.0
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "Fi2hrxExy6TJnKcbPtQpo6iZzX9SUVbB9mDw6d29NgCn",
+   "name": "genz quant",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "genz"
+  },
+  {
+   "address": "CeKK8aDLxyTT98ZV8yKYRYjjQhtF3hPBJuu5Hzqn1bgq",
+   "name": "bismuth dev",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "bismuth"
+  },
+  {
+   "address": "4Bq5yvgoiZDsukGERb7aM52jDmbVPCpoihbztscZ5PeM",
+   "name": "JS (maybe)",
+   "category": "unknown",
+   "subtype": "nome generico/incerto",
+   "group": "js"
+  },
+  {
+   "address": "HQnpJtH4t2TPwJZHAp17HFRPmz4dyYJ7H2rbCT77cjYz",
+   "name": "abull inside 1",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "abull"
+  },
+  {
+   "address": "3jgub3P9KP3XA9Dwh7XpKu35BiQNTZZXbPmfBAJMsroL",
+   "name": "luigi quant",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "luigi"
+  },
+  {
+   "address": "FXkGydbnG4jHVYqbBWWG4kkkwCpz6YEeVtM1vA6kZLaS",
+   "name": "ARC DEV",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "arc"
+  },
+  {
+   "address": "6oTuUiLduWkbD1WdF62YZgMtzUQa8YMLC4DUT17hdpqq",
+   "name": "snowchan",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "snowchan"
+  },
+  {
+   "address": "A4nTzSw1oZKK846zGv8diWw6dGXqnGPJwbxyJ85WM4Sg",
+   "name": "itai",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "itai"
+  },
+  {
+   "address": "5TMR5GFPTzkNhprnty2ocXEFLoLur1uchg4NkEr5WEf4",
+   "name": "Zookez",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "zookez",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 64,
+    "grad_rate_pre": 0.109,
+    "con_esito": 7,
+    "good_rate": 0.0
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "vQ33AcEii7mciXznW7TAqzpv18Z77PQHxSfJ7xNBHwU",
+   "name": "Marcel",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "marcel"
+  },
+  {
+   "address": "4M8QVddY7Ld8eAaHoYcWKPxQcwxVuZsXMFKsm8921Uzd",
+   "name": "Kimchi",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "kimchi"
+  },
+  {
+   "address": "emmemiip3UroEr81wLeNm8vveLARzR2zV5t3T4YTU13",
+   "name": "hostage holder",
+   "category": "unknown",
+   "subtype": "insider/bundle",
+   "group": "hostage"
+  },
+  {
+   "address": "4aDVcdMbRhmL2XtFVdBLE4mq8bvze8EN2RAnRxH6Z6hz",
+   "name": "bfs dev",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "bfs"
+  },
+  {
+   "address": "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1",
+   "name": "ray",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "ray"
+  },
+  {
+   "address": "9Z2JS8quQd25SkotoBQ9wN9WdKPnWwTFt7aenHiXm1Fq",
+   "name": "top trader ubc",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "top"
+  },
+  {
+   "address": "FpSJaWysgd1vRS8bPEp2D6JC89RrT4owCmoBx781vvJp",
+   "name": "turtle",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "turtle"
+  },
+  {
+   "address": "FTg1gqW7vPm4kdU1LPM7JJnizbgPdRDy2PitKw6mY27j",
+   "name": "solo",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "solo"
+  },
+  {
+   "address": "HABhDh9zrzf8mA4SBo1yro8M6AirH2hZdLNPpuvMH6iA",
+   "name": "Bugha",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "bugha"
+  },
+  {
+   "address": "Gp33W3sRrzdva7byyrd6Kme5RnA25jeAdXJr32uepV9k",
+   "name": "nyhrox2",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "nyhrox2",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 6,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "D9gQ6RhKEpnobPBUdWY5bPQt2p3zGk3iVz6ChpUi2ArA",
+   "name": "washy lil bitch new",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "washy",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 6,
+    "grad_rate_pre": 0.167,
+    "con_esito": 1,
+    "good_rate": 0.0
+   }
+  },
+  {
+   "address": "2V54c75rjibgh6NsDWP88tbpu8KjQ3APRrK5zNQVqx1T",
+   "name": "orangie",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "orangie"
+  },
+  {
+   "address": "sAdNbe1cKNMDqDsa4npB3TfL62T14uAo2MsUQfLvzLT",
+   "name": "ethan po...",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "ethan",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 88,
+    "grad_rate_pre": 0.182,
+    "con_esito": 16,
+    "good_rate": 0.125
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "H66T73iEqzZBrL4jP3sM7AmL1Be816nXysoS4KVxfP4t",
+   "name": "bryan irl",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "bryan"
+  },
+  {
+   "address": "5U1HMpLWyd8Qpq8YNBUSsRE8JmgFsJVwkuDP4kY3FD8u",
+   "name": "fletch",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "fletch"
+  },
+  {
+   "address": "6nhskL8RVpXzWXC7mcC1UXpe3ze2p6P6og1jXVGUW88s",
+   "name": "Patty",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "patty",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 2,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "E9mEz2zVQfjKYj43HXihgzCZ2Je8pDv8v7cH2rot5uno",
+   "name": "spy",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "spy"
+  },
+  {
+   "address": "D3Z7weHeLGWA7eg1qwVB66NCs8YLxiDTBVE6Eb1tTmwg",
+   "name": "TATE",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "tate",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 1,
+    "grad_rate_pre": 1.0,
+    "con_esito": 1,
+    "good_rate": 1.0
+   }
+  },
+  {
+   "address": "2WN4rnEmB9c9ouC7VTb4CBXbyiY7qTMcvWUxKKQ2D47T",
+   "name": "Shah",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "shah"
+  },
+  {
+   "address": "2huXTbjeBhtMZ1ugNwUGucYBRasRaaiypymUX6P1Kwjx",
+   "name": "Crustball GFNF",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "crustball"
+  },
+  {
+   "address": "9R2UJG1Wyoo5V376TKkHcp98hrKEQhmGMmx8jVtRLJoz",
+   "name": "gkitad",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "gkitad"
+  },
+  {
+   "address": "v2yNhm4KkC87MdBkvvYiMVP7UdSyNYLrfXrFte8A5a7",
+   "name": "Qwik",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "qwik",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 81,
+    "grad_rate_pre": 0.025,
+    "con_esito": 2,
+    "good_rate": 0.5
+   }
+  },
+  {
+   "address": "2aDBRNNdGEnCq2Av6Wz447CqgdEbmEaDudfGW1M85MAC",
+   "name": "billym2k",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "billym2k"
+  },
+  {
+   "address": "J6f3FSHEP37ZoKgrXdqVgu7fpfQYy5Rudi4FFfZTNP9M",
+   "name": "phantom founder",
+   "category": "unknown",
+   "subtype": "infra/exchange",
+   "group": "phantom"
+  },
+  {
+   "address": "CLpDttr14kM4svu7jypK4rzsMKdJYAR8emGNPaWs7omB",
+   "name": "300k pnl",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "300k"
+  },
+  {
+   "address": "Ctxhk46mXh2MUHKTGVgXLZjTHD4kpRoawcyhsgkQDnzE",
+   "name": "t",
+   "category": "unknown",
+   "subtype": "nome generico/incerto",
+   "group": "t"
+  },
+  {
+   "address": "CU35ZDB4JptaBVQWiq1gZsR8kso6dz1bQj8uR3xGn2kK",
+   "name": "chucky",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "chucky"
+  },
+  {
+   "address": "CVpxvMJiUJCiyg79SmaaCzVGhiXWC6jFHu6DUtHAVxo2",
+   "name": "jaquan",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "jaquan"
+  },
+  {
+   "address": "CWvdyvKHEu8Z6QqGraJT3sLPyp9bJfFhoXcxUYRKC8ou",
+   "name": "pow secret",
+   "category": "unknown",
+   "subtype": "insider/bundle",
+   "group": "pow"
+  },
+  {
+   "address": "dATMod1UTXYzvaXji4mBsvXTeAUAC73TNJQAejKS54X",
+   "name": "omtad",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "omtad"
+  },
+  {
+   "address": "FXzJ6xwH2HfdKshERVAYiLh79PAUw9zC7ucngupt91ap",
+   "name": "Elio dave bitch",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "elio"
+  },
+  {
+   "address": "Haee7H5bKDCnm6dXLkeR9DcWw9Puhnkwk71QBUSHcpUt",
+   "name": "bazinga dev",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "bazinga"
+  },
+  {
+   "address": "ve94tFcRnLnwMGf7e5mUXMyAkzzcS4qkzSKZGsQV4kk",
+   "name": "twitter quant",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "twitter"
+  },
+  {
+   "address": "AmnG2KXDqUuf6EskVddvuokYw2Hv2pCY5Yv4X6QpKe2R",
+   "name": "banks prison",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "banks"
+  },
+  {
+   "address": "HMMCa4urRGSub1Emotaz5dJbG2YdAD5eEYSAocnpmVmf",
+   "name": "YOGURT",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "yogurt"
+  },
+  {
+   "address": "DZAa55HwXgv5hStwaTEJGXZz1DhHejvpb7Yr762urXam",
+   "name": "ohzarke",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "ohzarke",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 160,
+    "grad_rate_pre": 0.075,
+    "con_esito": 13,
+    "good_rate": 0.231
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "FgfzLpCJhHYZVji6Sw7omJDEdTq5C12FrV72HzDtwvb5",
+   "name": "leno",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "leno"
+  },
+  {
+   "address": "AGvZF6SzYCJTJCgB33S2L5up1pBNdmTmkYo1976J9SCQ",
+   "name": "Kimchi",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "kimchi"
+  },
+  {
+   "address": "orcACRJYTFjTeo2pV8TfYRTpmqfoYgbVi9GeANXTCc8",
+   "name": "orca",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "orca"
+  },
+  {
+   "address": "9yYya3F5EJoLnBNKW6z4bZvyQytMXzDcpU5D6yYr4jqL",
+   "name": "loop",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "loop",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 11,
+    "grad_rate_pre": 0.091,
+    "con_esito": 1,
+    "good_rate": 0.0
+   }
+  },
+  {
+   "address": "kwhcooMFSt8k8S1RbdygHiYkAtyVVwcPMhyqBecTzBU",
+   "name": "carlos potion 1",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "carlos"
+  },
+  {
+   "address": "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o",
+   "name": "cented",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "cented",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 1686,
+    "grad_rate_pre": 0.029,
+    "con_esito": 49,
+    "good_rate": 0.327
+   },
+   "edge": [
+    "grad",
+    "good"
+   ]
+  },
+  {
+   "address": "Fkm7CbuXsHuq9BGcT2EUzbK1PWDDgYR9Az2rrRi4iuYF",
+   "name": "Rename wallet",
+   "category": "unknown",
+   "subtype": "nome generico/incerto",
+   "group": "rename"
+  },
+  {
+   "address": "EgKVzMi4vydExJ3MN23DdGvLixiULM6UmenA95cCzJaq",
+   "name": "Saved wallet",
+   "category": "unknown",
+   "subtype": "nome generico/incerto",
+   "group": "saved"
+  },
+  {
+   "address": "E7p75ggvpWVfUt6XqL8T9yneNLPjK1k4uvwZBxk18CRM",
+   "name": "CHUKKY",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "chukky"
+  },
+  {
+   "address": "NFJKkZ7yeoAvfHLWNiqAw6CYKWnVAVAQu5PE3AC3qYt",
+   "name": "Solshotta",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "solshotta"
+  },
+  {
+   "address": "FWbg3842q7cmow1fuH8MAQGrRvJoG8kQG9yWzB2mmHoi",
+   "name": "P89 TT2",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "p89"
+  },
+  {
+   "address": "3hLHcRZdv5yRBP592Cy9BBedNwCszjC8HpLEdRfzfrM4",
+   "name": "DOGENES 20K",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "dogenes"
+  },
+  {
+   "address": "73KcgcTVyLYhnVX3PJbit8e4mC7jU8QotNGBFGix14jn",
+   "name": "T1 60Ks",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "t1"
+  },
+  {
+   "address": "5EzUr1Z8nahDXXK7oki6pPeJ3aWoM8cxHJShFumJtsT9",
+   "name": "5ez",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "5ez"
+  },
+  {
+   "address": "68r74QNDsgV4dzuDZ2vrGofBKRMEASVscGemDDLKyjws",
+   "name": "TJR",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "tjr"
+  },
+  {
+   "address": "5qvLmTd6yKMn7T7DP6RPPcASBH231Rtvjta1Pzao48PR",
+   "name": "Dev",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "dev"
+  },
+  {
+   "address": "niggerd597QYedtvjQDVHZTCCGyJrwHNm2i49dkm5zS",
+   "name": "nr",
+   "category": "unknown",
+   "subtype": "nome generico/incerto",
+   "group": "nr",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 1400,
+    "grad_rate_pre": 0.061,
+    "con_esito": 85,
+    "good_rate": 0.2
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "rapistGfyUzNGKrcDvmcjMQ8t6tds5kNrLYV2gG1ytU",
+   "name": "supressant",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "supressant"
+  },
+  {
+   "address": "RH6epK9UW5vA5rm23FcLi4rPuTJjwya6UQJeG1tigv3",
+   "name": "profit alt 2",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "profit"
+  },
+  {
+   "address": "4ZjYSCH3Sib9iMSM3QN2sL2kwxNcXG2P4XCemSC2hsyb",
+   "name": "NOM",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "nom"
+  },
+  {
+   "address": "9fR8gerfvGSycFGbK2VY1PFrPuU9jS6QM47S974yTUHC",
+   "name": "Jasper TT3 300K",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "jasper"
+  },
+  {
+   "address": "6ryvxoTHMYkVUgTTexpqntYLfY4La582UGX7TSX4KRh7",
+   "name": "obijai",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "obijai"
+  },
+  {
+   "address": "GDR6Svdvfd2y8K8dsWFHosNWkxSqsv15nrSNCnLyikUn",
+   "name": "dev3",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "dev3"
+  },
+  {
+   "address": "8GBWFfkUJw78tbdxD9W9yjSDGWt5LHxf3Vy6Mihiuk3Q",
+   "name": "gorilla",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "gorilla"
+  },
+  {
+   "address": "4NX2vftqtHTCSmC7PVDquH5Np8NWgRRhoSKSzbBnu1cX",
+   "name": "Tann?",
+   "category": "unknown",
+   "subtype": "nome generico/incerto",
+   "group": "tann"
+  },
+  {
+   "address": "K4cT8gJgkfzShDjBoD41hfGKWaVqFkpwivcswdfnZhS",
+   "name": "ram3",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "ram3"
+  },
+  {
+   "address": "zLJpQSjVD2b1CeLpexgaWaYRopVgnjQeuzetHNNhXh1",
+   "name": "kasumi",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "kasumi"
+  },
+  {
+   "address": "4D6kMkudsfBK56qujVmPyUAXCoAfBbAThdapvqWDuqBC",
+   "name": "jack alt",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "jack"
+  },
+  {
+   "address": "5LwtbNjQeDvRYB3dz8eVFrapGreCgz999LdR41ArFmNm",
+   "name": "SHOTTA",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "shotta"
+  },
+  {
+   "address": "BU3Eto9HzT4GZHJ7GcJweHqTgydekXBZKZtLQFK7ujG1",
+   "name": "dev1 think",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "dev1"
+  },
+  {
+   "address": "Fs2f5rNW7MsyfBcdU6NfYsMkrnNSuACuRsNJvrLEDezC",
+   "name": "nym",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "nym"
+  },
+  {
+   "address": "4sZm6CRqUTUz9EE3nE8wPfdTHBHzQHWj1Tcx4m1htfWX",
+   "name": "SolBigBrain",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "solbigbrain"
+  },
+  {
+   "address": "pndujwi7BeaRRenYHSShyNQXAdBNEzKDR5jgzbheJFT",
+   "name": "blob",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "blob"
+  },
+  {
+   "address": "DecXrBS8ADaac7yqLcC6WxNNAfMhVsF1SHmvSNv66yDe",
+   "name": "fridon insider1",
+   "category": "unknown",
+   "subtype": "insider/bundle",
+   "group": "fridon"
+  },
+  {
+   "address": "FfjphfYFcZkWueoFJMfEV44wsV1QayRVs1JyBtb22BuG",
+   "name": "Kenzo",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "kenzo"
+  },
+  {
+   "address": "HtucFepgUkMpHdrYsxMqjBNN6qVBdjmFaLZneNXopuJm",
+   "name": "FrostyJays",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "frostyjays"
+  },
+  {
+   "address": "666WTwF6YsiEVffGJKSAUWYCgcMCuN9cX459kG2wqrX9",
+   "name": "Nosh",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "nosh"
+  },
+  {
+   "address": "4Be9CvxqHW6BYiRAxW9Q3xu1ycTMWaL5z8NX4HR3ha7t",
+   "name": "MITCH",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "mitch",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 2,
+    "grad_rate_pre": 0.0,
+    "con_esito": 1,
+    "good_rate": 0.0
+   }
+  },
+  {
+   "address": "8EtTuouEFrqQfwjtQ6oPA2ZS6fQcew83kFH9zEYB9PJV",
+   "name": "ANT TT3",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "ant"
+  },
+  {
+   "address": "6DWVQJr4Ep78Kz4Qj7shEx7Abx594MDo4AmeLXn7YV95",
+   "name": "ANT TT4",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "ant"
+  },
+  {
+   "address": "AtqScWPNA72St8uANmneoX7hhgXvMqthMzBckUwwqsX1",
+   "name": "ANT TT5",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "ant"
+  },
+  {
+   "address": "Dy4FYHkwPXnp1MRt83FodbktAa8coEtNCJiNJaN9dRKx",
+   "name": "Frosty POTIONALPHA",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "frosty"
+  },
+  {
+   "address": "3bKXGquu6NVjsxSGDSXdSiSUZfRmpNGt6zH1ivRCpVhv",
+   "name": "P89 TT1",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "p89"
+  },
+  {
+   "address": "GPpEjfHJZ4Ey9bSBLzd9sggsHFJKuQ5SxsjRYsRDWkH2",
+   "name": "Cented's Friend",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "cented's"
+  },
+  {
+   "address": "4vQ4uSE5NbLJTn74mQczYm1y9jezRFAr36cYsWGnm2fm",
+   "name": "Test TT1",
+   "category": "unknown",
+   "subtype": "nome generico/incerto",
+   "group": "test"
+  },
+  {
+   "address": "dVs7zZksjFuq73xbtUC62brFXYYuxCuPSG4wZeGiHck",
+   "name": "Aperal",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "aperal",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 4,
+    "grad_rate_pre": 0.25,
+    "con_esito": 1,
+    "good_rate": 0.0
+   }
+  },
+  {
+   "address": "J3H2hLKTnxaGiDzG6XfVUgKQdAbzivo98ewXU6zVRyRs",
+   "name": "Artist Insider",
+   "category": "unknown",
+   "subtype": "insider/bundle",
+   "group": "artist"
+  },
+  {
+   "address": "9QtfjkutLg1WH9iXQdoR9aXMCzruf4aVcHRWsYCvmYK5",
+   "name": "union",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "union"
+  },
+  {
+   "address": "7swY6WZyXXgagE3L1ca3RNmtikwJUjvFpzNxeM4qaQmH",
+   "name": "nach2",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "nach2"
+  },
+  {
+   "address": "DqrTpRqgiEE5GKePgYkhRyR2Vx9XnSJrV1Jd3ZZVECLF",
+   "name": "Puhzessed",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "puhzessed"
+  },
+  {
+   "address": "4UtsTXeM6DpYXJJbZRCrD1Zhsaby7mfFMmi9ZhqWeeus",
+   "name": "444 gfnf",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "gfnf"
+  },
+  {
+   "address": "4U3wrwgkxXodrVGQsxPimiLhtNCJNfFCDgGLe1pp2Gur",
+   "name": "idk",
+   "category": "unknown",
+   "subtype": "nome generico/incerto",
+   "group": "idk"
+  },
+  {
+   "address": "GueGgggeNaCvkR4eg2PUifNwVi1wNsh9gse5bgTCok76",
+   "name": "alison.bonk(doge)",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "alison.bonk(doge)"
+  },
+  {
+   "address": "fwHknyxZTgFGytVz9VPrvWqipW2V4L4D99gEb831t81",
+   "name": "pow big coin",
+   "category": "unknown",
+   "subtype": "insider/bundle",
+   "group": "pow"
+  },
+  {
+   "address": "2BU3NAzgRA2gg2MpzwwXpA8X4CCRaLgrf6TY1FKfJPX2",
+   "name": "issa",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "issa"
+  },
+  {
+   "address": "Gr34KrdUAQvH5Hz3VYpa2BiZLx9N4MDLccE4ksaHPubp",
+   "name": "jayden alt",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "jayden"
+  },
+  {
+   "address": "32QqMDpda2bV91cJrkaG2ZYXSWG7XCFFrvL6JTmH3YPt",
+   "name": "supplyai 1",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "supplyai"
+  },
+  {
+   "address": "B9ChV8cBwMBDTjBzHeTHGLnuLu7f22GZjAZgDtxuxcKv",
+   "name": "supplyai 2",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "supplyai"
+  },
+  {
+   "address": "3HvQN8uxfRXaxzAPiaYquLZ5j1RTkeFvFHYyJKgiDFoY",
+   "name": "supplyai 3",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "supplyai"
+  },
+  {
+   "address": "DFoR6f9aMWxjMC3jacMLQRfXDfWFt2LZjhjH5Jry3BJ6",
+   "name": "svai 1",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "svai"
+  },
+  {
+   "address": "DNnebS2GXArnErtgmnvSeX9G44S66zd4MAXBf5qSDUGk",
+   "name": "svai 3",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "svai"
+  },
+  {
+   "address": "2WfNxFN74pzJWKnXQ7NpkbnbEEhSLVJZGiB9NvxQ4Vpb",
+   "name": "fridon insider2",
+   "category": "unknown",
+   "subtype": "insider/bundle",
+   "group": "fridon"
+  },
+  {
+   "address": "4qWKgdUQTfV771dxKp2HeBqEzTXEKW7agijrfDfpsXPC",
+   "name": "casper",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "casper"
+  },
+  {
+   "address": "Bu8iZsGvS5dwuY3GiEDjUSDayEME7LthH4x7TRGTnMXA",
+   "name": "printer (insider?)",
+   "category": "unknown",
+   "subtype": "insider/bundle",
+   "group": "printer"
+  },
+  {
+   "address": "9F1X92uBq9WSdUkj1KhfuQiNhMWtTd4NKBBk8oPnGfSJ",
+   "name": "MONKEYNUTS POTION",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "monkeynuts",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 139,
+    "grad_rate_pre": 0.072,
+    "con_esito": 10,
+    "good_rate": 0.3
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "GiTjPLMYngDKZYxyc2MBFBwsS1Zt3NBCjJtAgsGb3AJv",
+   "name": "flames",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "flames"
+  },
+  {
+   "address": "HL3FZ8XWnLnn1HuktmgpNRyFRjuAxWbXNQVj5fPPzZwt",
+   "name": "bepis",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "bepis",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 3,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "93aHwK6Dqvnc7M6drhZusYwEKEx5j4yAFYfef5NicUPU",
+   "name": "50k profit yzy",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "50k"
+  },
+  {
+   "address": "7vHmzkGUBUGHyr2M5frNrLihrHyE8QNTFGZtDhKQvTfH",
+   "name": "oblock",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "oblock"
+  },
+  {
+   "address": "7Z4Qtu2Feih9Rma2YR5gac5z8g4KgLExF8u1WfHyq8H3",
+   "name": "yogurt",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "yogurt"
+  },
+  {
+   "address": "86AEJExyjeNNgcp7GrAvCXTDicf5aGWgoERbXFiG1EdD",
+   "name": "publix",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "publix",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 246,
+    "grad_rate_pre": 0.102,
+    "con_esito": 25,
+    "good_rate": 0.24
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "87MZqjjJgpuFvaU8GyQJKbZGnCFFhX82qAjBGLRXPfcn",
+   "name": "nyhrox",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "nyhrox"
+  },
+  {
+   "address": "8deJ9xeUvXSJwicYptA9mHsU2rN2pDx37KWzkDkEXhU6",
+   "name": "cooker",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "cooker",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 21,
+    "grad_rate_pre": 0.333,
+    "con_esito": 7,
+    "good_rate": 0.429
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "8MCKzkyRsgB4VdQEpALnzjAnQq1DMZfQ7xttKy1g3AVQ",
+   "name": "PAPER",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "paper"
+  },
+  {
+   "address": "8RfH3LUSed9xM5bh7txdWKZFNbYGB8AeLCaeZjC9kN1o",
+   "name": "marcell",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "marcell"
+  },
+  {
+   "address": "8rvAsDKeAcEjEkiZMug9k8v1y8mW6gQQiMobd89Uy7qR",
+   "name": "casino",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "casino",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 7,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "9amWeN7XKy9HoLWjga1ADYwyFd8BhiUb5iQUU3tFc2F4",
+   "name": "favs",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "favs"
+  },
+  {
+   "address": "8kbkapCokSiMCgnoqJg36dgg8fXDcwFFJRfZrPWJpgrq",
+   "name": "adam",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "adam"
+  },
+  {
+   "address": "9FNz4MjPUmnJqTf6yEDbL1D4SsHVh7uA8zRHhR5K138r",
+   "name": "severe",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "severe",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 98,
+    "grad_rate_pre": 0.071,
+    "con_esito": 7,
+    "good_rate": 0.286
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "9GTVJLduxXwUR6otWSYgDLatYJCab61wHB8Vcoi2FNEf",
+   "name": "waddles alt",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "waddles"
+  },
+  {
+   "address": "9jyqFiLnruggwNn4EQwBNFXwpbLM9hrA4hV59ytyAVVz",
+   "name": "NACH",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "nach",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 5,
+    "grad_rate_pre": 0.2,
+    "con_esito": 1,
+    "good_rate": 0.0
+   }
+  },
+  {
+   "address": "9KB7hpK4Lwi7pqP267YzUQNMi6XeoHc8SGSzVuLLCRRD",
+   "name": "golden",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "golden"
+  },
+  {
+   "address": "9NNS758mUGByRcFBSD79fLn2mYL3PGM9G9J5RjBV3kD4",
+   "name": "azrex",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "azrex"
+  },
+  {
+   "address": "AbcX4XBm7DJ3i9p29i6sU8WLmiW4FWY5tiwB9D6UBbcE",
+   "name": "eq",
+   "category": "unknown",
+   "subtype": "nome generico/incerto",
+   "group": "eq"
+  },
+  {
+   "address": "ACTbvbNm5qTLuofNRPxFPMtHAAtdH1CtzhCZatYHy831",
+   "name": "slidrz",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "slidrz",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 493,
+    "grad_rate_pre": 0.02,
+    "con_esito": 13,
+    "good_rate": 0.385
+   }
+  },
+  {
+   "address": "AE4ZYrdY3HVAvbuNHG5CU6Bo95jdNnxyAuKR8qCCqbpw",
+   "name": "kreo multi",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "kreo"
+  },
+  {
+   "address": "AE9iNfW4sis6XDcEQkm4w6aRgUFFxLePddb97nu176ki",
+   "name": "Jalen",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "jalen"
+  },
+  {
+   "address": "ATmKENkRrL1JQQnoUNAQvkiwgjiHKUkzyncxTGxyzQL1",
+   "name": "durant",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "durant"
+  },
+  {
+   "address": "AM84n1iLdxgVTAyENBcLdjXoyvjentTbu5Q6EpKV1PeG",
+   "name": "AI16z DAO",
+   "category": "unknown",
+   "subtype": "infra/exchange",
+   "group": "ai16z"
+  },
+  {
+   "address": "AVAZvHLR2PcWpDf8BXY4rVxNHYRBytycHkcB5z5QNXYm",
+   "name": "fake ansem",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "fake"
+  },
+  {
+   "address": "AVvbhqsUUVyuMFxNbVSWida9gQmBsLLWj3bd1gwzJqQ9",
+   "name": "wylie",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "wylie"
+  },
+  {
+   "address": "AXyJF621sQqBv5c2TJ2RTjTb915JtiZvnvR4c5rxe8c2",
+   "name": "tate",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "tate"
+  },
+  {
+   "address": "B3wagQZiZU2hKa5pUCj6rrdhWsX3Q6WfTTnki9PjwzMh",
+   "name": "xander",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "xander",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 11,
+    "grad_rate_pre": 0.364,
+    "con_esito": 4,
+    "good_rate": 0.25
+   }
+  },
+  {
+   "address": "BBKC8NkcfL4ZCfZwjke2A2JAPyLeNWtNW3k7VXPm92zU",
+   "name": "raj",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "raj"
+  },
+  {
+   "address": "CRVidEDtEUTYZisCxBZkpELzhQc9eauMLR3FWg74tReL",
+   "name": "frank",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "frank",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 4,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "DfMxre4cKmvogbLrPigxmibVTTQDuzjdXojWzjCXXhzj",
+   "name": "EURIS",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "euris",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 183,
+    "grad_rate_pre": 0.05,
+    "con_esito": 11,
+    "good_rate": 0.273
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "DGPYpCdiVg2shab2TnNiZ2RnsjBQSmhgN71hJyWC5cYn",
+   "name": "QWERTY",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "qwerty"
+  },
+  {
+   "address": "G3K9kWBDUmtnxypFZSzZDdMS9d8GWnZUrbsvobSJkwVG",
+   "name": "leap",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "leap"
+  },
+  {
+   "address": "G5nxEXuFMfV74DSnsrSatqCW32F34XUnBeq3PfDS7w5E",
+   "name": "profit 4",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "profit",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 9,
+    "grad_rate_pre": 0.111,
+    "con_esito": 1,
+    "good_rate": 0.0
+   }
+  },
+  {
+   "address": "G8n4gBsc9Z4P1q5JFJQUfxZs58zD7kF1CqowcTft18RL",
+   "name": "cupsey multi",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "cupsey"
+  },
+  {
+   "address": "GmMkFTKsAofDMViWKKi3MZRgcsTRKqwRHJcRQ3bQeMdu",
+   "name": "dave alt",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "dave"
+  },
+  {
+   "address": "GrXjXop95XkVPYJafDJNCLFzK9K8LkpopxYcgUUn2H87",
+   "name": "grx",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "grx"
+  },
+  {
+   "address": "GtpUHgnumZKEuL2okMPEQHpaC95fyUBBWvBdFLGghCFj",
+   "name": "eq stream",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "eq"
+  },
+  {
+   "address": "GTvBQnRvAPweU2qmYg8MDLND2PAAyYFKe35aKQGMRDaL",
+   "name": "polar",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "polar"
+  },
+  {
+   "address": "GxceSANEY9hnqK3NWA992wk2i4Qj42MoubribSZrLGcG",
+   "name": "wy",
+   "category": "unknown",
+   "subtype": "nome generico/incerto",
+   "group": "wy"
+  },
+  {
+   "address": "mercyFDsQrEJk6FMXo6h9mwecQHt1TyYW7QKDpbM7e6",
+   "name": "mercy",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "mercy"
+  },
+  {
+   "address": "mp1V2SpFvcfJoyLPDNHLece3pYWBrmA97qco5GMMNP4",
+   "name": "wylie",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "wylie"
+  },
+  {
+   "address": "mpa4abUkjQoAvPzREkh5Mo75hZhPFQ2FSH6w7dWKuQ5",
+   "name": "sol foundation",
+   "category": "unknown",
+   "subtype": "infra/exchange",
+   "group": "sol"
+  },
+  {
+   "address": "MVPoC32ZweNts37WJ3pn4vUtTkVM1Phrfa7RX8omkmb",
+   "name": "jalen alt",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "jalen"
+  },
+  {
+   "address": "mW4PZB45isHmnjGkLpJvjKBzVS5NXzTJ8UDyug4gTsM",
+   "name": "dex",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "dex",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 116,
+    "grad_rate_pre": 0.181,
+    "con_esito": 21,
+    "good_rate": 0.19
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "RFSqPtn1JfavGiUD4HJsZyYXvZsycxf31hnYfbyG6iB",
+   "name": "fmr",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "fmr",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 9,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "7w7f4P284zJhv3zotjCUmaNsZSsrHQKtpXGBJFq8gdzq",
+   "name": "EQ",
+   "category": "unknown",
+   "subtype": "nome generico/incerto",
+   "group": "eq"
+  },
+  {
+   "address": "HUpPyLU8KWisCAr3mzWy2FKT6uuxQ2qGgJQxyTpDoes5",
+   "name": "sun",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "sun"
+  },
+  {
+   "address": "2JKaXsACKyTKK7b5WPascrQpE2SwigoS2d4GVEB1VorQ",
+   "name": "nikita alt",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "nikita"
+  },
+  {
+   "address": "6EbQwK1bLmwwHPGYgUtGgH4PVA2Vq683SpmxauJXKC2m",
+   "name": "wylie",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "wylie"
+  },
+  {
+   "address": "6DtEedWf9Wk5hA7Xth82Eq441yf5DA4aGLqaQAVfDokm",
+   "name": "ALON",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "alon"
+  },
+  {
+   "address": "A4DCAjDwkq5jYhNoZ5Xn2NbkTLimARkerVv81w2dhXgL",
+   "name": "coyote",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "coyote"
+  },
+  {
+   "address": "215nhcAHjQQGgwpQSJQ7zR26etbjjtVdW74NLzwEgQjP",
+   "name": "ogant",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "ogant",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 16,
+    "grad_rate_pre": 0.062,
+    "con_esito": 1,
+    "good_rate": 0.0
+   }
+  },
+  {
+   "address": "6B9YXryYGvAsHTj5RVn6JbMXgm5eXTViF1ytKenUtkQ1",
+   "name": "reign",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "reign"
+  },
+  {
+   "address": "BFTCyf9BfP8WWuheCBoRfBWKz54JQ2aSQoGz1MGwwMNT",
+   "name": "dave alt",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "dave"
+  },
+  {
+   "address": "BHREKFkPQgAtDs8Vb1UfLkUpjG6ScidTjHaCWFuG2AtX",
+   "name": "puhzessed",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "puhzessed",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 56,
+    "grad_rate_pre": 0.036,
+    "con_esito": 2,
+    "good_rate": 0.0
+   }
+  },
+  {
+   "address": "BLhQ4fWgkNAJ4MWXSdXaTnxwZxwHh7QTnMQb6i3Z2QYy",
+   "name": "qwerty",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "qwerty"
+  },
+  {
+   "address": "BrNoqdHUCcv9yTncnZeSjSov8kqhpmzv1nAiPbq1M95H",
+   "name": "profit",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "profit"
+  },
+  {
+   "address": "EHg5YkU2SZBTvuT87rUsvxArGp3HLeye1fXaSDfuMyaf",
+   "name": "til",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "til",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 129,
+    "grad_rate_pre": 0.031,
+    "con_esito": 4,
+    "good_rate": 0.0
+   }
+  },
+  {
+   "address": "EiGjwgAWG89bDMEWGVMAQJ7jKv7tV8hrxp4waCoiB1De",
+   "name": "cupsey multi",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "cupsey"
+  },
+  {
+   "address": "EJM2zrEd4uc6662LVVdDN5bH9iDFy2A4mDuhLttMkhby",
+   "name": "zemrics",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "zemrics"
+  },
+  {
+   "address": "EP5mvfhGv6x1XR33Fd8eioiYjtRXAawafPmkz9xBpDvG",
+   "name": "zemrics",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "zemrics",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 33,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "HkFt55P3PhRWHXoTFeuvkKEE4ab26xZ1bk6UmXV88Pwz",
+   "name": "terp",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "terp",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 21,
+    "grad_rate_pre": 0.333,
+    "con_esito": 7,
+    "good_rate": 0.286
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "ACFUm3nxWyydwazkVJYEMfGoDuLoPvMhKrQokbRetE4n",
+   "name": "senoxe",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "senoxe",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 2,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "5ua8SrN7XJYxGbmvxmyqUCetXXsU51HY7vv16NL88UJm",
+   "name": "KIXNG",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "kixng"
+  },
+  {
+   "address": "fLTnN43bDb5h8Shf5TjSD51FUL5XXvrZ8kFqLzAqJ32",
+   "name": "opus tt",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "opus"
+  },
+  {
+   "address": "4dE3d4e2oob6otG1R624X59jCVBjj2faz45B3aL7sNhS",
+   "name": "ram1",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "ram1"
+  },
+  {
+   "address": "CMxgFDUbfRbhhCL27VqDs8jtPR1ateVH1Apbodg6phfu",
+   "name": "ram2",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "ram2"
+  },
+  {
+   "address": "ATaHBG9gPwWPm6q1DA6PLGLhxp28mux39CcdWtN7v9tc",
+   "name": "orangie",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "orangie"
+  },
+  {
+   "address": "BCnqsPEtA1TkgednYEebRpkmwFRJDCjMQcKZMMtEdArc",
+   "name": "kreo",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "kreo",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 170,
+    "grad_rate_pre": 0.1,
+    "con_esito": 17,
+    "good_rate": 0.294
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "9hKZp6ub9SqCfPALuzWx8QmmKcqd2KkL8BVjHAc6wTnr",
+   "name": "ansem",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "ansem"
+  },
+  {
+   "address": "694X5Cuvx6xs4y2aDBu5U1RkZS4RTbcUCZ8qLbH7bVPc",
+   "name": "idc dev",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "idc"
+  },
+  {
+   "address": "B8CdgWxMFm8vARVjXaR2cngTgAxYz9LJYBdikXHxi4dd",
+   "name": "him",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "him"
+  },
+  {
+   "address": "9wD97Gp2zFECtrRaSXVLEsXhNe1tyzMevn8EkB9REvy",
+   "name": "kimchi",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "kimchi"
+  },
+  {
+   "address": "8YDcHz6KbqEvjr1SQfo5k4enicHH3Ho2dTpqcudq9KwC",
+   "name": "test dev",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "test"
+  },
+  {
+   "address": "5ARTXxRUjCLodrGQvGbPrcbD1b25iq81Nv6SfPGAFMDq",
+   "name": "KITTY INSIDER",
+   "category": "unknown",
+   "subtype": "insider/bundle",
+   "group": "kitty"
+  },
+  {
+   "address": "CjsbcKND5Dsb3QjwiLVMN7ggbvdNjY2h43Tk7nng7mAf",
+   "name": "Kenzo 2",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "kenzo"
+  },
+  {
+   "address": "4CqecFud362LKgALvChyhj6276he3Sy8yKim1uvFNV1m",
+   "name": "P89 TT3",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "p89",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 2,
+    "grad_rate_pre": 0.5,
+    "con_esito": 1,
+    "good_rate": 0.0
+   }
+  },
+  {
+   "address": "CweihpVSti1gN8A4V86B1F2DcZjkgdwChaQnVuYKN7UF",
+   "name": "SKY TT2",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "sky",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 1,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "5C5NHuTyJ3t8iXuRQArXhZFkwmmxfcmRHBTA6fM8Qkwe",
+   "name": "SKY TT3",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "sky"
+  },
+  {
+   "address": "DH5picTwbyk6CrRxVBn4tYwRY2axzEkma1ywtZiuBkrF",
+   "name": "SKY UR TT",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "sky"
+  },
+  {
+   "address": "EDmbDc7sY87dKszqyZ3rHczWbKcCyUvJQSJpE3Cg4RcZ",
+   "name": "Stupid Holder",
+   "category": "unknown",
+   "subtype": "insider/bundle",
+   "group": "stupid"
+  },
+  {
+   "address": "EDoonKrsParDnA4yJKJ3iDNEaFVfcaxSULqzQyNkwa61",
+   "name": "Stupid Holder2",
+   "category": "unknown",
+   "subtype": "insider/bundle",
+   "group": "stupid"
+  },
+  {
+   "address": "5mtbmPwj2SMkxPP9c93s9oD9bmMdByTqepNarM9Y7u7e",
+   "name": "RyxnH",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "ryxnh"
+  },
+  {
+   "address": "HDRfsGqhJFhhm3MKwNSFNurT71PzbbCrdy2UYL2WH9sL",
+   "name": "dev",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "dev"
+  },
+  {
+   "address": "EsCk2ewGL1tEnL3zzai7ZUbBjDyYDxYoumVcCYKf6no3",
+   "name": "Rhudi?",
+   "category": "unknown",
+   "subtype": "nome generico/incerto",
+   "group": "rhudi"
+  },
+  {
+   "address": "GG2TmwJf8zkfwSFgZxbXuaAhTHbk5U6UwXv4xEEJwzsD",
+   "name": "killz2",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "killz2"
+  },
+  {
+   "address": "Hus4uoc8UZNE2BKb2uHEfihLSRvvEGpx9KbPcU9T9fQx",
+   "name": "killz3",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "killz3"
+  },
+  {
+   "address": "G32SLVumUnMfw5dpwht73gShY94wNVCSQ7b69Stuq7nT",
+   "name": "killz4",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "killz4"
+  },
+  {
+   "address": "Cbj482ar1f5b7RvoEFJZEPCeZQ3SYEA5oxFYXmX4Wrio",
+   "name": "kreo?",
+   "category": "unknown",
+   "subtype": "nome generico/incerto",
+   "group": "kreo",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 6,
+    "grad_rate_pre": 0.0,
+    "con_esito": 1,
+    "good_rate": 1.0
+   }
+  },
+  {
+   "address": "28ipXVfkdmu1PDowCHbcSfzkpH9edZmSiVoDhY5xGVfR",
+   "name": "MIM VFNF",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "mim"
+  },
+  {
+   "address": "ouKvBJLk8RejHwMCjMqtAfEbKQvjbj4oXbpwNWGMVdr",
+   "name": "Kyroh",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "kyroh"
+  },
+  {
+   "address": "7cm7BtqSJHqy7QYJFh4cr7SybGR6q1zA7oXk6gdvWgTk",
+   "name": "Jihoz",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "jihoz"
+  },
+  {
+   "address": "E6gTYLyK5KJ3g3keUe7nNRiZVtzMAVop8GVDjaE6KQe4",
+   "name": "nicolai",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "nicolai"
+  },
+  {
+   "address": "924zuRoroyHF7GhSJBPGBhVtebd1FBd1Gp1csuuAHZa1",
+   "name": "j3",
+   "category": "unknown",
+   "subtype": "nome generico/incerto",
+   "group": "j3"
+  },
+  {
+   "address": "BiqkWhrJ4dfpE6TeNY34tA4GssG23SBH8CU8mqB7xZ6t",
+   "name": "BIQ ORNG",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "biq"
+  },
+  {
+   "address": "39qpCe9zdyC2g53UJeyGh5jwGBKjFwidCbnD5W53aVBW",
+   "name": "orangie 39q",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "orangie"
+  },
+  {
+   "address": "6nRzbpSDdrPTf9m98Xh94c8brSwfj9LZagutH9dezHB4",
+   "name": "ORANGIE3",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "orangie3"
+  },
+  {
+   "address": "DiddyP7tSoS5e26zzy43QVfgTQ3dJ8ZyLibC3uPAAwQk",
+   "name": "dev2",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "dev2"
+  },
+  {
+   "address": "92iYee4tHCanKiiCpFk3rvA89k466NjgVKojZkpJdcvj",
+   "name": "issa",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "issa"
+  },
+  {
+   "address": "6eqPKHBtEEktxS89v1fmeFMkCaNAW6p98HBNE42ChHTD",
+   "name": "anti-pro dev",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "anti-pro"
+  },
+  {
+   "address": "CFNjTNoqr8Wpq7DVe5ymK9CKXNzoW5X6rMQQAPZh4kHg",
+   "name": "fric dev",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "fric"
+  },
+  {
+   "address": "D1DhSivDh6nuS3ecXN3ddx38vBxxBbj35Ak98gwHoGnR",
+   "name": "staqi dev",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "staqi"
+  },
+  {
+   "address": "3F4vYJB4ek26WGViLSZ8sW5Ab65wQh3jCm4Rt44iULT6",
+   "name": "the wild kin",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "the"
+  },
+  {
+   "address": "AP1o6r9mbp4cezW6RZnbc9YvyzbtoEkXjb5afrYXU32B",
+   "name": "test dev",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "test"
+  },
+  {
+   "address": "8W6mYze9UQHqmS1VkX35C6RWfZBuyh4gyvq9KEeeTT8b",
+   "name": "ai32 dev",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "ai32"
+  },
+  {
+   "address": "Fbf3gUZ8d5EENvR5Z8LCqyNZXrDfQVJjviNADPWRSXTL",
+   "name": "jack wallet",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "jack"
+  },
+  {
+   "address": "A3d4nghJDz5BmBcQ2YKFMQfX1HhgYPSnJmrAfTCwWNHG",
+   "name": "bully",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "bully"
+  },
+  {
+   "address": "6vktKctTpVWMbSz7NNXQVAWqtp1MyibVG6FnnLKoCBTh",
+   "name": "qoocat dev",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "qoocat"
+  },
+  {
+   "address": "8e1MDn3mx1p2ekKjbyALxZNtGD8pqapb1g6EjK4wf4AG",
+   "name": "svai 2",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "svai"
+  },
+  {
+   "address": "8MF6FoaC684sK1h2PhTtuJccbytQXa89XyBmoKtVQyQQ",
+   "name": "Profit GFNF",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "profit"
+  },
+  {
+   "address": "DKwybycDSWidrHfpMjaahUsT1Yid3kig86ncXPAGe7AU",
+   "name": "Yogurt",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "yogurt"
+  },
+  {
+   "address": "8vgu2Lb311V4qsyDQrYYXdRksJvynvtV264YL63ep8CP",
+   "name": "Sage",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "sage"
+  },
+  {
+   "address": "3rSZJHysEk2ueFVovRLtZ8LGnQBMZGg96H2Q4jErspAF",
+   "name": "Staqi",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "staqi"
+  },
+  {
+   "address": "12zQYCKJbCkJtVQcNJd9hPtkC1YzUvU3EqLZAQ1JDN6m",
+   "name": "Fake Ansem",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "fake"
+  },
+  {
+   "address": "DwHcRYVqV4onyrza3okN8YxyRFykmcMR2JAjqGfjX13Q",
+   "name": "ANT TT1",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "ant"
+  },
+  {
+   "address": "8nwPeguVWHiZYLsg1pgUWHfAavqxfBBi7nU9RyQZcgoV",
+   "name": "Ant TT2",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "ant"
+  },
+  {
+   "address": "HEibUTHW7JHt7VgKYtWpQCSX7a6YHBmRQrixZs9i4wGY",
+   "name": "Enzo",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "enzo"
+  },
+  {
+   "address": "4kuweVrNm9sAeCRxCn1q91YFiYX1bFFrHtJEpkbEXe7B",
+   "name": "buhp",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "buhp"
+  },
+  {
+   "address": "GX9dnG2NET941qhCmbJmkJCzRbki2AzZ4CHK7YJME93Y",
+   "name": "gx9",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "gx9"
+  },
+  {
+   "address": "BkyCUgwb99KiA7aUgmCaTVc4CTEQ81ZuukdBBv1KFkU5",
+   "name": "DOGENES 13K",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "dogenes"
+  },
+  {
+   "address": "53L8zz6Z44Kaq7TwP2tuSWD7FXoBtDyrNwisWRVVKK2d",
+   "name": "Potential CT",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "potential"
+  },
+  {
+   "address": "96LnVrNbNGaJZ3yXTC9wmFp7D3Ks1UoBgToVi8ybMrXW",
+   "name": "Potential CT2",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "potential"
+  },
+  {
+   "address": "ChjGfE1aKvtjhhqAQGQySmRT9Ju2KntG6UsEuYGJ4y4X",
+   "name": "Potential CT3",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "potential"
+  },
+  {
+   "address": "E57hYjjwNAnvXe67C1q7nKRdC2jWMRGLWAJsBJAJrgzR",
+   "name": "the GOAT",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "the"
+  },
+  {
+   "address": "DJobMrbVvwRsbTEM9UBNiT6KHQmiu1j3VEnugJaDTM4z",
+   "name": "Orangie",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "orangie"
+  },
+  {
+   "address": "5UBWGr8tA4qxyz6cNx7homdWXPU44uZRLsnW94ques1v",
+   "name": "SKY TT",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "sky"
+  },
+  {
+   "address": "7s5n36J9R5KCWufr18qD5R61kxVt6D3VhM42b2CmBX91",
+   "name": "RIPETH TT",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "ripeth"
+  },
+  {
+   "address": "Fo62XDVE3fg47xjeU5odUgQeMaX3s28NsMo3ib5mQEMj",
+   "name": "ColePalmer.sol",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "colepalmer.sol"
+  },
+  {
+   "address": "DSVc1Rd69sLcXBoZAsvkzK4jGFyJKP77K3J2CaFVNAFP",
+   "name": "Pre",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "pre"
+  },
+  {
+   "address": "2eHQuhpB5yprGZ1CSFrEUS6oSzHGX1y8vkrpPXGhzA1g",
+   "name": "Favs",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "favs"
+  },
+  {
+   "address": "4LFQ8MSN2h9y3omR2d9W2avrdXWkT9k9rit2XgpVt68P",
+   "name": "Santi",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "santi"
+  },
+  {
+   "address": "4btaRjaRpakx3Rjtp3AdWnH8eC7mvH3nVMVruyFiYDYk",
+   "name": "js",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "js"
+  },
+  {
+   "address": "DBmettWCbsQML9bwzZ2pAAiFukxCg4QkJrbg1bMDJfft",
+   "name": "bloom o",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "bloom"
+  },
+  {
+   "address": "5CLVBtQ3CPsZfHxtDof1Uk7Bmzr1LYbBiFZDv35uU8tP",
+   "name": "MALIK",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "malik"
+  },
+  {
+   "address": "EWH2o5SKFnLc8HQKdPBi5BvynzsV6SwkV6jHUMXaQdE6",
+   "name": "diabolo tt",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "diabolo"
+  },
+  {
+   "address": "3YRMrgGgFS8YQ7E3gcSCbMRa5spMqZt2Q19CTyKoXJeM",
+   "name": "Tann",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "tann"
+  },
+  {
+   "address": "H2F75G1DMTLSpoqFjSU8NYydATBxpv4HzrZGJTRM1ZNj",
+   "name": "Kenzo",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "kenzo"
+  },
+  {
+   "address": "5VD46CMUb98ryVF5K5KSUraaVeZ1REmUPWLyaeknvXrC",
+   "name": "Cented",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "cented"
+  },
+  {
+   "address": "Hqkk2zNPZYiQL7c9JhVed1EyQppoZToBKMCzaCX1m21y",
+   "name": "nym",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "nym"
+  },
+  {
+   "address": "FAwHi11KyJVh2pR2b2vNFEbbunTVkMFpdNBuD2dh9NRf",
+   "name": "nyhrox",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "nyhrox"
+  },
+  {
+   "address": "3wynYQc7daEoNKvPXRTy4CFFm8j8S9gWuX79nFozyxcM",
+   "name": "xander",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "xander"
+  },
+  {
+   "address": "H6RErn6vTw3ZSLBN9iNpP3cAq8CETh6dy6HVkEwPonjE",
+   "name": "chillguy tt",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "chillguy"
+  },
+  {
+   "address": "7Dt5oUpxHWuKH8bCTXDLz2j3JyxA7jEmtzqCG6pnh96X",
+   "name": "Leens",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "leens"
+  },
+  {
+   "address": "DiMSeocybuZWi88Y65sWM4YMTTuuTMWYfMtGFtEJCAF3",
+   "name": "50 sol 1c kono",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "sol"
+  },
+  {
+   "address": "5WYXL4gKimy8hhBaxXzBw9UxDzkesa2aANwXd59sexVU",
+   "name": "anti dev",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "anti"
+  },
+  {
+   "address": "HJXP9JqEx396xNdg6vNKnrqWvyqXB2f7RDHjTWqbanYc",
+   "name": "SIR DOGE",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "sir"
+  },
+  {
+   "address": "HmzcsdvZAqbQCSvinutMJzYTEgR9HaEPUVWFpUkv22KL",
+   "name": "Elizas Sister",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "elizas"
+  },
+  {
+   "address": "CVK53d63891qJHWMcnpGzs4zyVGaW77vsLUZLbyQssYN",
+   "name": "xander",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "xander"
+  },
+  {
+   "address": "HVajxfNTWqLGxsfJA9DFThnvddveKfJLK8re1kNpeCVv",
+   "name": "TATE TRENCH",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "tate"
+  },
+  {
+   "address": "HaZtFxgw99iM97LxmwFuDW6k4MP1XwsWTGoy7GUoSELj",
+   "name": "cobie",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "cobie"
+  },
+  {
+   "address": "FbeT4rHCJNmqe5Rzs2Caw29cUrWJ13ZRzVD7v448ytUc",
+   "name": "zno",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "zno"
+  },
+  {
+   "address": "Gw5WHSB5FbXdXGVZK5RCdm4bzc2M64rX1GcftibKM4RX",
+   "name": "shotta",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "shotta"
+  },
+  {
+   "address": "GNqTGGVz3NpCeoUVKQpa9y365cxLLa9k1Zi2o57WHisY",
+   "name": "shitcoin dev",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "shitcoin"
+  },
+  {
+   "address": "Fa3Sd2ttv1W1mga8Vs6VTtqPyJTsHYk7meZHqSsZR4u3",
+   "name": "ANDY",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "andy"
+  },
+  {
+   "address": "6y7Bc52kor6sn3QhbmpvxeBwZWLud4fFP1viz9RLSVQh",
+   "name": "NACH ALT",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "nach"
+  },
+  {
+   "address": "BUsHXQcabNEMogJiagWFkGLjNxVGjhRsq7A8RWdeLPNp",
+   "name": "kimchi",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "kimchi"
+  },
+  {
+   "address": "FsMaCLmxF2zEKAQ5CGJMLi49LLjy4vjhjcozmKsLNLK2",
+   "name": "hany",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "hany"
+  },
+  {
+   "address": "C9wE2tKWQvDRaEnC4jTLzgMawwwYJCzKvewSaJVLQFMG",
+   "name": "fresu funded ye buyer",
+   "category": "unknown",
+   "subtype": "insider/bundle",
+   "group": "fresu"
+  },
+  {
+   "address": "286CHN57Km41GsAnDv866WKd6YB6HPSjFgF4rGDJTRLf",
+   "name": "china man",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "china",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 169,
+    "grad_rate_pre": 0.012,
+    "con_esito": 2,
+    "good_rate": 0.0
+   }
+  },
+  {
+   "address": "2F19ZXrvQDCoYXdBoFBiBcEmgrAKYAheZHnQxZksHQhN",
+   "name": "Solarnius",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "solarnius",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 1,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "4XMPyWFsYdNcCN4FG8geyytyTeUNacn4QundBzMqbGGT",
+   "name": "statics",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "statics",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 218,
+    "grad_rate_pre": 0.064,
+    "con_esito": 14,
+    "good_rate": 0.214
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "5fm5pHB2GR8Py4YARY7fDire8E4oFBHCHCYRHPD4x48f",
+   "name": "wylie dev",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "wylie"
+  },
+  {
+   "address": "7vZBfAKXx1medCXn5jo9bjhUi17rh6XhSJgHmCXuMvNU",
+   "name": "aaaaa",
+   "category": "unknown",
+   "subtype": "nome generico/incerto",
+   "group": "aaaaa"
+  },
+  {
+   "address": "7w7BRXN3ge84KxzeDLLbwBcMWpLwagrZTZ7pWSg31dw7",
+   "name": "JELLY DEV GUY",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "jelly"
+  },
+  {
+   "address": "7YndBV5gp3VvAiBbSfv8M7CoyMhFsiKeGYWkwee49fTg",
+   "name": "Poe",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "poe",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 29,
+    "grad_rate_pre": 0.138,
+    "con_esito": 4,
+    "good_rate": 0.0
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "9UWZFoiCHeYRLmzmDJhdMrP7wgrTw7DMSpPiT2eHgJHe",
+   "name": "molly whale",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "molly"
+  },
+  {
+   "address": "9Wagwcs6HVtMHaaxBjUbE7AKmxeg9nzEDcvXhN8bydUG",
+   "name": "killz",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "killz",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 71,
+    "grad_rate_pre": 0.31,
+    "con_esito": 22,
+    "good_rate": 0.273
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "9Wf2Gbo6ZnbJpXrwm1TTPpULHZz59uPZaszTsECE9PRb",
+   "name": "CLADZ",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "cladz"
+  },
+  {
+   "address": "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
+   "name": "binance",
+   "category": "unknown",
+   "subtype": "infra/exchange",
+   "group": "binance"
+  },
+  {
+   "address": "FxmuMAWVXRLkXpaYtQ8o41Tr7meVKMMmKtvMpasF645V",
+   "name": "frank alt",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "frank"
+  },
+  {
+   "address": "FXobn8QbTmzHeHu5GPWjDR31jh8HCW7TsqrczF8v7cKA",
+   "name": "Mungo",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "mungo"
+  },
+  {
+   "address": "AWxr21P2srfkPLiPpqDYyWsKWR1bpJWtw5beVMiRxwZm",
+   "name": "maybe tom",
+   "category": "unknown",
+   "subtype": "nome generico/incerto",
+   "group": "maybe"
+  },
+  {
+   "address": "3h65MmPZksoKKyEpEjnWU2Yk2iYT5oZDNitGy5cTaxoE",
+   "name": "jidn",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "jidn",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 534,
+    "grad_rate_pre": 0.017,
+    "con_esito": 9,
+    "good_rate": 0.333
+   }
+  },
+  {
+   "address": "EDajBBK71iW7jeVjfsmiGeneraPEsq2YrPgeAQkiLd6R",
+   "name": "markers",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "markers",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 84,
+    "grad_rate_pre": 0.024,
+    "con_esito": 2,
+    "good_rate": 0.0
+   }
+  },
+  {
+   "address": "BoBo3rgrjVwkNCjTd7EqB6sn3kzDbnew4KSKPFVByKjK",
+   "name": "bundle man",
+   "category": "unknown",
+   "subtype": "insider/bundle",
+   "group": "bundle"
+  },
+  {
+   "address": "ESfSy3R5M9tUTaxgWgJSwdqPCYz5T9TUUnm5Rh32H6Ab",
+   "name": "9GAG",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "9gag"
+  },
+  {
+   "address": "2FMGLCbrCbsuNBViefqNnwWq1pkej3544JZLictaGW1F",
+   "name": "PK",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "pk"
+  },
+  {
+   "address": "2h7s3FpSvc6v2oHke6Uqg191B5fPCeFTmMGnh5oPWhX7",
+   "name": "fomo",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "fomo"
+  },
+  {
+   "address": "2LEZBEKxx8hpGEVUVCqKr72zUbvk6iiKTdKwjWhpor3q",
+   "name": "oblock",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "oblock"
+  },
+  {
+   "address": "2YyBULF7gFU42TaVhbCawoAfEWL325cf9qV8X3MgVABM",
+   "name": "Tahi",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "tahi"
+  },
+  {
+   "address": "36MZYxD491sezrMkPALuC3yV1Cc4FmBXnQdNnPjAGcvW",
+   "name": "pow bundle",
+   "category": "unknown",
+   "subtype": "insider/bundle",
+   "group": "pow"
+  },
+  {
+   "address": "37yTBV9MbWEgS2gDhCBNV1qM4z6JtKNZawpa6V5BynY8",
+   "name": "wylie",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "wylie"
+  },
+  {
+   "address": "3cprtviUwxcTxjXnhFD64zF2ydYdW6vgGszh8c31HzSG",
+   "name": "og",
+   "category": "unknown",
+   "subtype": "nome generico/incerto",
+   "group": "og"
+  },
+  {
+   "address": "3diLgHoGz4Lxfyd3pRAx9s5UUixBjwT77mqYkJHyHAis",
+   "name": "china 2",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "china"
+  },
+  {
+   "address": "3DrfCcNC6Q5PFBgrgAcBAgvykcVBcBWcr8nnRmNyWXdA",
+   "name": "Pow bundle",
+   "category": "unknown",
+   "subtype": "insider/bundle",
+   "group": "pow"
+  },
+  {
+   "address": "3eiDfhs5daac6UgPmzchZL49RttEL7d99kq7oaP57gFW",
+   "name": "JS",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "js"
+  },
+  {
+   "address": "3jN1M8gWLk2ryTGnscrcwRK1Gy4Ttzq5QizWT8uizZsT",
+   "name": "NEON",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "neon"
+  },
+  {
+   "address": "3JoVBiQEA2QKsq7TzW5ez5jVRtbbYgTNijoZzp5qgkr2",
+   "name": "frank",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "frank"
+  },
+  {
+   "address": "3MBE2jqkBUDHcDpMcQw8jtSTZyJ4G9WgXANwdyPDvYaq",
+   "name": "wy",
+   "category": "unknown",
+   "subtype": "nome generico/incerto",
+   "group": "wy"
+  },
+  {
+   "address": "3PFXaTQ7QBquUgGCBd8HbkRGpLsCd47HqhwEc3nNhyNw",
+   "name": "slerf",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "slerf"
+  },
+  {
+   "address": "3pZ59YENxDAcjaKa3sahZJBcgER4rGYi4v6BpPurmsGj",
+   "name": "kaden",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "kaden"
+  },
+  {
+   "address": "3tc4BVAdzjr1JpeZu6NAjLHyp4kK3iic7TexMBYGJ4Xk",
+   "name": "dev grand",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "dev",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 1,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "49FvbfcoqwKPefpmj95BaWAFHUoPUFa4ZfQZJCpnmaFG",
+   "name": "wylie",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "wylie"
+  },
+  {
+   "address": "4aDdi3EiDPMbeZ3e5BvbFMt4vfJaoahaHxZuwKQRtFc1",
+   "name": "Nach (Challenge)",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "nach"
+  },
+  {
+   "address": "4Bdn33fA7LLZQuuXuFLSxtPWGAUnMBcreQHfh9MXuixe",
+   "name": "key",
+   "category": "unknown",
+   "subtype": "nome generico/incerto",
+   "group": "key"
+  },
+  {
+   "address": "4Bxf1mCFoaQmCxxB7obV4hjfYJqkCXVQVCTRkjT1YQuL",
+   "name": "profit alt",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "profit",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 1,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "4cXnf2z85UiZ5cyKsPMEULq1yufAtpkatmX4j4DBZqj2",
+   "name": "waiter",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "waiter",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 33,
+    "grad_rate_pre": 0.061,
+    "con_esito": 2,
+    "good_rate": 0.5
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "4GaqQnEeuP6XFcXVDZAvgEPQr14XKn7bomUhiygreiVm",
+   "name": "turtle new",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "turtle"
+  },
+  {
+   "address": "4hSXPtxZgXFpo6Vxq9yqxNjcBoqWN3VoaPJWonUtupzD",
+   "name": "PORTA",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "porta",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 31,
+    "grad_rate_pre": 0.0,
+    "con_esito": 1,
+    "good_rate": 0.0
+   }
+  },
+  {
+   "address": "4jRX4iW2F5wBnfYMyB7RjS2PU5MjXrST3fB9DoV4BjHa",
+   "name": "Tate",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "tate"
+  },
+  {
+   "address": "4kvN7diP6HYKuzMbDduh8a7m4P2Yyj92wsYYs6V8yhJZ",
+   "name": "vyolent",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "vyolent"
+  },
+  {
+   "address": "4nwfXw7n98jEQn93VWY7Cuf1jnn1scHXuXCPGVYS9k6T",
+   "name": "4nwf",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "4nwf",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 51,
+    "grad_rate_pre": 0.039,
+    "con_esito": 2,
+    "good_rate": 0.5
+   }
+  },
+  {
+   "address": "4S9U8HckRngscHWrW418cG6Suw62dhEZzmyrT2hxSye5",
+   "name": "polar",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "polar",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 1,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "4sKEmneKj4tRyjBj7nLLtEMzPBoSVcBeQeLD5hH2wakN",
+   "name": "cented",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "cented"
+  },
+  {
+   "address": "4TS24wgLBMucbZt7zqhM3KakXwdNTT2ECxDXEpsn5AhZ",
+   "name": "turtle",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "turtle",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 31,
+    "grad_rate_pre": 0.065,
+    "con_esito": 2,
+    "good_rate": 0.5
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "4U7WKe5o8ScS8n6Gy5tEmTdfsKHYeRNiKbqZ38Kp99Ps",
+   "name": "union",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "union"
+  },
+  {
+   "address": "4uojqvrE6jirqfqvmy5PngFJmgBy2tqXioHx4dv5zsCU",
+   "name": "wylie dev",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "wylie"
+  },
+  {
+   "address": "4zq1iLpmepj2Rj7W6A3XQMRQA1HyjYqVpZiBzM6aPyH7",
+   "name": "orangie",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "orangie"
+  },
+  {
+   "address": "525LueqAyZJueCoiisfWy6nyh4MTvmF4X9jSqi6efXJT",
+   "name": "joji",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "joji",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 23,
+    "grad_rate_pre": 0.304,
+    "con_esito": 7,
+    "good_rate": 0.286
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "55ZBpYaDnpd9QyENdyVrkYWkm76ee15WRnLaKEDwS7Xq",
+   "name": "hack dao",
+   "category": "unknown",
+   "subtype": "infra/exchange",
+   "group": "hack"
+  },
+  {
+   "address": "57JMxCescrFBvb8bqjNwHPM9J7wPF12SV5KJa82HCd9B",
+   "name": "milan",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "milan"
+  },
+  {
+   "address": "5D1RFRESCwbFswtwMX6F9MdHZK2nJ7tJjxXwxB9az47h",
+   "name": "key",
+   "category": "unknown",
+   "subtype": "nome generico/incerto",
+   "group": "key"
+  },
+  {
+   "address": "5dzoivi2oG7Brpak98U2tZJZCwAhfLkiKdhQadW3Ef9P",
+   "name": "turtle new",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "turtle"
+  },
+  {
+   "address": "5Ge6SzFcJnpyh3VbikYeS3bkHiEz3cR5pCf9R1r13t42",
+   "name": "laiys (yn)",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "laiys"
+  },
+  {
+   "address": "5M8ACGKEXG1ojKDTMH3sMqhTihTgHYMSsZc6W8i7QW3Y",
+   "name": "bonk guy",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "bonk"
+  },
+  {
+   "address": "5o5P6jK1suNxykvh8Rj8JLYCPTi5HRNrpTvRmHw9iZsC",
+   "name": "Nosh",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "nosh",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 4,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "5owZXjEe27wZTRevqRUETwia3EctJiaYtKhpqmPzWHuj",
+   "name": "favs",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "favs"
+  },
+  {
+   "address": "5q7Xwc2T57sK1DKU6zuwVXvMPsxqB2xrJ3T5AonFYtcY",
+   "name": "Maybe Insider",
+   "category": "unknown",
+   "subtype": "insider/bundle",
+   "group": "maybe"
+  },
+  {
+   "address": "5rkPDK4JnVAumgzeV2Zu8vjggMTtHdDtrsd5o9dhGZHD",
+   "name": "PORTNOY",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "portnoy"
+  },
+  {
+   "address": "5sTQ5ih7xtctBhMXHr3f1aWdaXazWrWfoehqWdqWnTFP",
+   "name": "WinterMute",
+   "category": "unknown",
+   "subtype": "infra/exchange",
+   "group": "wintermute"
+  },
+  {
+   "address": "5YkKg3dov1YG59PhbD5nCSTaA82YXpYEjby1RNrd3KfY",
+   "name": "grx",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "grx"
+  },
+  {
+   "address": "62FZUSWPMX9pofoV1uWHMdzFJRjwMa1LHgh2zhdEB7Zj",
+   "name": "blossom",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "blossom"
+  },
+  {
+   "address": "636N7frU8bUwYfyUAtvMQQsXhTFRuSWjxnEZihr5axGV",
+   "name": "staqi",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "staqi"
+  },
+  {
+   "address": "66W4ypeod8MegVzMot5ZJPEh6QBUG4FriDxC72bEJxvT",
+   "name": "pow alt",
+   "category": "unknown",
+   "subtype": "insider/bundle",
+   "group": "pow"
+  },
+  {
+   "address": "6cpADLEZ9kgVD4yDFMxCsSV7eNnkagkF2dfVL9LXtNzG",
+   "name": "cented",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "cented"
+  },
+  {
+   "address": "6EaWAqk7BAaZTYce1tMpUkSPiW1pxs21bJvi9JY4fLtF",
+   "name": "Jlove",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "jlove"
+  },
+  {
+   "address": "6iLZbYvc7MrBRQvzAX8yJj85cb9cQF3Prvrn1D9vvLA2",
+   "name": "door",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "door"
+  },
+  {
+   "address": "6LChaYRYtEYjLEHhzo4HdEmgNwu2aia8CM8VhR9wn6n7",
+   "name": "ASSASIN",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "assasin",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 11,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "6m5sW6EAPAHncxnzapi1ZVJNRb9RZHQ3Bj7FD84X9rAF",
+   "name": "JS",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "js"
+  },
+  {
+   "address": "6n87cC3KG3rzMYMc1RFp24woriFMQ8zqb61qzYkkXjvD",
+   "name": "dave insider 2",
+   "category": "unknown",
+   "subtype": "insider/bundle",
+   "group": "dave"
+  },
+  {
+   "address": "6pkYrAM2hWWjQHPq5GYkRxzM8e4m7MKxa2iANNjTNj1p",
+   "name": "alx",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "alx"
+  },
+  {
+   "address": "6qBMtRQpQotxEgDRsUZ9DDnZoFxBf9MxxLPs4CG6yKrv",
+   "name": "forede",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "forede"
+  },
+  {
+   "address": "6S8GezkxYUfZy9JPtYnanbcZTMB87Wjt1qx3c6ELajKC",
+   "name": "nyrhox",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "nyrhox",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 152,
+    "grad_rate_pre": 0.039,
+    "con_esito": 6,
+    "good_rate": 0.333
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "73LnJ7G9ffBDjEBGgJDdgvLUhD5APLonKrNiHsKDCw5B",
+   "name": "WADDLES",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "waddles",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 71,
+    "grad_rate_pre": 0.014,
+    "con_esito": 1,
+    "good_rate": 0.0
+   }
+  },
+  {
+   "address": "75ZgszfwDM89rhJ4gxWoapa6gv4a4dYxGkgFWMdmB6fh",
+   "name": "waiter",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "waiter"
+  },
+  {
+   "address": "77kq9xNZg4Vb94UJMpeHsx7pKXUBU3Wpqsm5UXhjA9dd",
+   "name": "cented",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "cented"
+  },
+  {
+   "address": "7ABz8qEFZTHPkovMDsmQkm64DZWN5wRtU7LEtD2ShkQ6",
+   "name": "redwifbag",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "redwifbag",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 621,
+    "grad_rate_pre": 0.039,
+    "con_esito": 24,
+    "good_rate": 0.208
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "7dEez77RSJxKCi37rsECMQi88Gswfu3ETNTCKeaWxCtF",
+   "name": "OG",
+   "category": "unknown",
+   "subtype": "nome generico/incerto",
+   "group": "og"
+  },
+  {
+   "address": "7DkYsg1uyNCp7HeSy6wdN8wcGoV5x7VAGMur2Aa7wtVY",
+   "name": "crazygg",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "crazygg"
+  },
+  {
+   "address": "7F7hvmbT9hVBb3c3SKDsNhQBjtg9JyjrBWucZYorgYwD",
+   "name": "golden",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "golden"
+  },
+  {
+   "address": "7pEXhVH9pCEBeLMhbnybcowXgH54rRbb2P9TkANvRZhU",
+   "name": "wy",
+   "category": "unknown",
+   "subtype": "nome generico/incerto",
+   "group": "wy"
+  },
+  {
+   "address": "7QZGS7MQ4S6hRmE8iXoFTXgQ2hXVUCho2ZhgeWvLNPZT",
+   "name": "murad",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "murad"
+  },
+  {
+   "address": "7SDs3PjT2mswKQ7Zo4FTucn9gJdtuW4jaacPA65BseHS",
+   "name": "insentos grand fnf",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "insentos"
+  },
+  {
+   "address": "7sUFQdV7gK3hBXQHsoGocacbXvnSWqWDinHtQHSJnG7d",
+   "name": "crazygg",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "crazygg"
+  },
+  {
+   "address": "7SvvTJSwcpNQCDGEt14zuoPFoSsaveGd7UWgiJGQLAHN",
+   "name": "mero",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "mero"
+  },
+  {
+   "address": "7uTZLDL3mY6kDnwxuqqu3WGgtMiPsYMmCvX3NQt4W8VS",
+   "name": "nyhrox",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "nyhrox"
+  },
+  {
+   "address": "7V7jPL2b5QV2HmQg8neREtQyXY83PYjxhZqLuKWPu2FK",
+   "name": "wylie",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "wylie"
+  },
+  {
+   "address": "8fzuwRkhP45usiwbVia7MCQNmDRF97Rzs9oLiFqb4ZN2",
+   "name": "adam gf normie quant",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "adam"
+  },
+  {
+   "address": "8MaVa9kdt3NW4Q5HyNAm1X5LbR8PQRVDc1W8NMVK88D5",
+   "name": "daumen",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "daumen",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 211,
+    "grad_rate_pre": 0.038,
+    "con_esito": 9,
+    "good_rate": 0.333
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "8SQFRz77ZDWy3z6dmcfb7817qPzYMc78K6GBkWxvckJg",
+   "name": "pow bundle",
+   "category": "unknown",
+   "subtype": "insider/bundle",
+   "group": "pow"
+  },
+  {
+   "address": "8zFZHuSRuDpuAR7J6FzwyF3vKNx4CVW3DFHJerQhc7Zd",
+   "name": "POW",
+   "category": "unknown",
+   "subtype": "insider/bundle",
+   "group": "pow"
+  },
+  {
+   "address": "9cStCUnJnrH3dSQHGCmScuwRNH4nQ8xT2BZeVPsnGPuB",
+   "name": "mungo",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "mungo"
+  },
+  {
+   "address": "9EFpeiHD3Xnrah4aAGjNh7ThWsEsERxxQAkVyauUAq7H",
+   "name": "wy",
+   "category": "unknown",
+   "subtype": "nome generico/incerto",
+   "group": "wy"
+  },
+  {
+   "address": "9EyPAMyQvXaUWFxd2uQHvG8vpkKs33YdXvDvwmRXrUiH",
+   "name": "Connor",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "connor",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 11,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "9FE8V34esAoosqYqyV3fRGoPrfuR6WtH9TAhk31HJ7G8",
+   "name": "le bandit",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "le"
+  },
+  {
+   "address": "8CZjFG1EV3FduGV918QWUh7fevUoZSTffVY8bK6M3wbu",
+   "name": "noodle",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "noodle"
+  },
+  {
+   "address": "9peW76TTRt5dp4wiQid8dw2pmxpwpN5eXZ15bmLBNCsx",
+   "name": "profit alt",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "profit"
+  },
+  {
+   "address": "9UUEJrGeNbmRYF16iYdMgZqAk59XEKHyH6cgnb3bMy8P",
+   "name": "profit alt 3",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "profit"
+  },
+  {
+   "address": "9X5n5i1mugTjgGPhqf1KJDt8r4kD8TF3s62ttbxKzFHa",
+   "name": "dingaling",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "dingaling"
+  },
+  {
+   "address": "AC5RDfQFmDS1deWZos921JfqscXdByf8BKHs5ACWjtW2",
+   "name": "bybit",
+   "category": "unknown",
+   "subtype": "infra/exchange",
+   "group": "bybit"
+  },
+  {
+   "address": "AMaokHvLumVnwgYTPGEut9VPwRWXZy2jJQQzCkvrPafT",
+   "name": "fred dev",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "fred",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 3,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "ApRnQN2HkbCn7W2WWiT2FEKvuKJp9LugRyAE1a9Hdz1",
+   "name": "krow",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "krow",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 49,
+    "grad_rate_pre": 0.13,
+    "con_esito": 9,
+    "good_rate": 0.333
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "ASSw3FMwV99rh4CvxLAucTVHX8f4LQ2pmi2JjDA337sN",
+   "name": "Orangie",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "orangie"
+  },
+  {
+   "address": "AT6FsbUy1jNR2AHE35WCVh3nSdDtYADtdhA2KitQXmL5",
+   "name": "noodle",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "noodle"
+  },
+  {
+   "address": "ATFRUwvyMh61w2Ab6AZxUyxsAfiiuG1RqL6iv3Vi9q2B",
+   "name": "marcell",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "marcell"
+  },
+  {
+   "address": "ATKi3ZvMbo31pbgBgGSGQPDPKEbQ4oGzoDrwG2sms56k",
+   "name": "NACH",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "nach"
+  },
+  {
+   "address": "BCagckXeMChUKrHEd6fKFA1uiWDtcmCXMsqaheLiUPJd",
+   "name": "dv",
+   "category": "unknown",
+   "subtype": "nome generico/incerto",
+   "group": "dv",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 1293,
+    "grad_rate_pre": 0.049,
+    "con_esito": 61,
+    "good_rate": 0.164
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "AJ6MGExeK7FXmeKkKPmALjcdXVStXYokYNv9uVfDRtvo",
+   "name": "tim",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "tim",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 2,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "CKEzb9jRMNo5rYwJPfgKCg3vhx5RMLhSaZGHMzcmqzmZ",
+   "name": "highsky",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "highsky"
+  },
+  {
+   "address": "CkxVhktjqYuhsVfNQzqEZkwQ2gMU1wEFPM3FSSVXGjM9",
+   "name": "BANKS",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "banks"
+  },
+  {
+   "address": "CNudZYFgpbT26fidsiNrWfHeGTBMMeVWqruZXsEkcUPc",
+   "name": "gake alt",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "gake"
+  },
+  {
+   "address": "CPcDUe51Xh8Jq7NdBsr8qd2wXN7tYov5iLGtNYskkXLb",
+   "name": "adin",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "adin"
+  },
+  {
+   "address": "DKgvpfttzmJqZXdavDwTxwSVkajibjzJnN2FA99dyciK",
+   "name": "ROWDY",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "rowdy"
+  },
+  {
+   "address": "DNfuF1L62WWyW3pNakVkyGGFzVVhj4Yr52jSmdTyeBHm",
+   "name": "GAKE",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "gake",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 1,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "DpNVrtA3ERfKzX4F8Pi2CVykdJJjoNxyY5QgoytAwD26",
+   "name": "gorilla",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "gorilla"
+  },
+  {
+   "address": "DScqtGwFoDTme2Rzdjpdb2w7CtuKc6Z8KF7hMhbx8ugQ",
+   "name": "shaw",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "shaw",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 2,
+    "grad_rate_pre": 0.5,
+    "con_esito": 1,
+    "good_rate": 0.0
+   }
+  },
+  {
+   "address": "EaVboaPxFCYanjoNWdkxTbPvt57nhXGu5i6m9m6ZS2kK",
+   "name": "cladz",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "cladz",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 302,
+    "grad_rate_pre": 0.053,
+    "con_esito": 17,
+    "good_rate": 0.353
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "ECCKBDWX3MkEcf3bULbLBb9FvrEQLsmPMFTKFpvjzqgP",
+   "name": "Kenzo",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "kenzo"
+  },
+  {
+   "address": "EcJWNtETrzdbj8s2dXpaE4Tu4r7fxALD6TNw9H8S6ksz",
+   "name": "nothing",
+   "category": "unknown",
+   "subtype": "nome generico/incerto",
+   "group": "nothing"
+  },
+  {
+   "address": "ETcmHKVYg2TrU83cZbP6BNoitfztUdGVagWNSmGyzycG",
+   "name": "profit",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "profit",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 2,
+    "grad_rate_pre": 0.5,
+    "con_esito": 1,
+    "good_rate": 0.0
+   }
+  },
+  {
+   "address": "Ez2jp3rwXUbaTx7XwiHGaWVgTPFdzJoSg8TopqbxfaJN",
+   "name": "keano",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "keano"
+  },
+  {
+   "address": "F5jWYuiDLTiaLYa54D88YbpXgEsA6NKHzWy4SN4bMYjt",
+   "name": "mercy",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "mercy",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 5,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "F72vY99ihQsYwqEDCfz7igKXA5me6vN2zqVsVUTpw6qL",
+   "name": "jalen",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "jalen",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 1,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "FakHVp9d6JJDa5j4w4d1NetFjZafLkHx1LETWhDCyVxK",
+   "name": "nach",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "nach"
+  },
+  {
+   "address": "Fffc5CxTqeKwrg3xTMnNwfnmVn32m6Cuq3PB72gFNpip",
+   "name": "TIM",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "tim"
+  },
+  {
+   "address": "FKY9K9K2WjXP5i4FrAo3EZsyfqV4u9CjQAwj59QXh8Uv",
+   "name": "nosh",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "nosh",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 4,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "FneFUpqkjBx5KNGVWtsBY7TuUnS3962BQEgctWNje7mL",
+   "name": "ANDY (TRUTH)",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "andy"
+  },
+  {
+   "address": "GJA1HEbxGnqBhBifH9uQauzXSB53to5rhDrzmKxhSU65",
+   "name": "latuche",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "latuche",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 75,
+    "grad_rate_pre": 0.147,
+    "con_esito": 11,
+    "good_rate": 0.091
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "Gmh3Wt423pU6GsS3FQyZjknifnAFW7g3J8HhbF2TrbZL",
+   "name": "sukio",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "sukio",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 18,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "GYMhYoRn1kwK5rrtoQ2xppYmRCJDALuNEBpLDqAnFuXW",
+   "name": "dukez",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "dukez"
+  },
+  {
+   "address": "GZVSEAajExLJEvACHHQcujBw7nJq98GWUEZtood9LM9b",
+   "name": "washy idiot dumbass",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "washy",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 12,
+    "grad_rate_pre": 0.167,
+    "con_esito": 2,
+    "good_rate": 0.0
+   }
+  },
+  {
+   "address": "HrTZPWV4ZPebBiwyzoTBajCD49kQqVwf4dwsLuYG8CXX",
+   "name": "killz",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "killz"
+  },
+  {
+   "address": "HsfSzb7BBv4oKNFamgoyBEQ4v6BHUhEREEmBnWzZJXLj",
+   "name": "wylie",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "wylie"
+  },
+  {
+   "address": "i8D8Qm9C1mjzr8xzQuoEVKmvQwJioETHNods4wEzbZa",
+   "name": "jarvis",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "jarvis"
+  },
+  {
+   "address": "JBKRd7yDg3npf5PDTrC4wGzLjS8tGPRMQ39k1AufvPkJ",
+   "name": "Wylie",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "wylie"
+  },
+  {
+   "address": "JDd3hy3gQn2V982mi1zqhNqUw1GfV2UL6g76STojCJPN",
+   "name": "ratwizard",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "ratwizard",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 183,
+    "grad_rate_pre": 0.087,
+    "con_esito": 16,
+    "good_rate": 0.25
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "9HCTuTPEiQvkUtLmTZvK6uch4E3pDynwJTbNw6jLhp9z",
+   "name": "corleone",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "corleone"
+  },
+  {
+   "address": "H812jAz5Z5t8cvfXoxbE27Q2F89eovpib5kpXawLAFdS",
+   "name": "cooker",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "cooker"
+  },
+  {
+   "address": "26kZ9rg8Y5pd4j1tdT4cbT8BQRu5uDbXkaVs3L5QasHy",
+   "name": "ORANGIE",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "orangie"
+  },
+  {
+   "address": "BtMBMPkoNbnLF9Xn552guQq528KKXcsNBNNBre3oaQtr",
+   "name": "letterbomb",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "letterbomb",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 104,
+    "grad_rate_pre": 0.115,
+    "con_esito": 12,
+    "good_rate": 0.333
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "BXNiM7pqt9Ld3b2Hc8iT3mA5bSwoe9CRrtkSUs15SLWN",
+   "name": "absol dev",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "absol",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 33,
+    "grad_rate_pre": 0.121,
+    "con_esito": 4,
+    "good_rate": 0.25
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "BYZxm7zMf2wkMMnh8KmZmEFoxL319w4QGkB4zQgEThkS",
+   "name": "wy",
+   "category": "unknown",
+   "subtype": "nome generico/incerto",
+   "group": "wy"
+  },
+  {
+   "address": "ErushyoogjNsr3WdvdxS8XKLYsJ6ZL5vAZvUUfCvF7Yo",
+   "name": "JLOVE",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "jlove"
+  },
+  {
+   "address": "EsDB2BmVKKUM64hKnaKT6ZLAcGrzdp72oBupmhBkUAue",
+   "name": "pow bundle",
+   "category": "unknown",
+   "subtype": "insider/bundle",
+   "group": "pow"
+  },
+  {
+   "address": "Hbi1ubruHkQdX52uDewnCjeHtxsLoCXTnsBMPJZyxn28",
+   "name": "bundle",
+   "category": "unknown",
+   "subtype": "insider/bundle",
+   "group": "bundle"
+  },
+  {
+   "address": "HdxkiXqeN6qpK2YbG51W23QSWj3Yygc1eEk2zwmKJExp",
+   "name": "IT4I",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "it4i",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 6,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "AszsUFwSNY8tVZ5N8ukjutgmEbikPZYRzk5744U9JFNk",
+   "name": "marcell",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "marcell"
+  },
+  {
+   "address": "4H5cREJ2KvHFh8UvcKLek8DJgRte6kiaR2FSBTBVGUd3",
+   "name": "connor old",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "connor"
+  },
+  {
+   "address": "ACHhRQMbTxuWqU3bmbBbgUNGsPsYnvB8KLcPkkXCY1C7",
+   "name": "marcell",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "marcell"
+  },
+  {
+   "address": "j1opmdubY84LUeidrPCsSGskTCYmeJVzds1UWm6nngb",
+   "name": "Goat TT",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "goat",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 1,
+    "grad_rate_pre": null,
+    "con_esito": 1,
+    "good_rate": 1.0
+   }
+  },
+  {
+   "address": "65paNEG8m7mCVoASVF2KbRdU21aKXdASSB9G3NjCSQuE",
+   "name": "pullup",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "pullup",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 4,
+    "grad_rate_pre": 0.0,
+    "con_esito": 0,
+    "good_rate": null
+   }
+  },
+  {
+   "address": "FateMietcaAAUvfQDHnnPDGmeYme7mvLqFYvLomWEmNw",
+   "name": "fate",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "fate"
+  },
+  {
+   "address": "2fg5QD1eD7rzNNCsvnhmXFm5hqNgwTTG8p7kQ6f3rx6f",
+   "name": "cupsey",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "cupsey",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 965,
+    "grad_rate_pre": 0.131,
+    "con_esito": 125,
+    "good_rate": 0.192
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "7NAd2EpYGGeFofpyvgehSXhH5vg6Ry6VRMW2Y6jiqCu1",
+   "name": "cup2",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "cup2",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 930,
+    "grad_rate_pre": 0.119,
+    "con_esito": 110,
+    "good_rate": 0.164
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "FxN3VZ4BosL5urG2yoeQ156JSdmavm9K5fdLxjkPmaMR",
+   "name": "cup3",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "cup3",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 934,
+    "grad_rate_pre": 0.118,
+    "con_esito": 109,
+    "good_rate": 0.165
+   },
+   "edge": [
+    "grad"
+   ]
+  },
+  {
+   "address": "xXpRSpAe1ajq4tJP78tS3X1AqNwJVQ4Vvb1Swg4hHQh",
+   "name": "aloh",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "aloh",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 8,
+    "grad_rate_pre": 0.125,
+    "con_esito": 1,
+    "good_rate": 1.0
+   }
+  },
+  {
+   "address": "DuQabFqdC9eeBULVa7TTdZYxe8vK8ct5DZr4Xcf7docy",
+   "name": "ORANGIE",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "orangie",
+   "hist": {
+    "fonte": "Pumpfun_Memecoin_Corpus giu-lug 2026",
+    "token": 7,
+    "grad_rate_pre": 0.143,
+    "con_esito": 1,
+    "good_rate": 0.0
+   }
+  },
+  {
+   "address": "5GCuB6Wq1Lrdkbp8qWKqpWmCyzVtcQMVdxvihyjhEheH",
+   "name": "dev msft",
+   "category": "dev",
+   "subtype": "dev",
+   "group": "dev"
+  },
+  {
+   "address": "CjqBxqmjMJMpYawAh5zVctjcWMEqG6XDhUfvx4D9NXN8",
+   "name": "tylr",
+   "category": "trader",
+   "subtype": "trader/kol",
+   "group": "tylr"
+  }
+ ],
+ "note_hist": "hist/edge dal corpus pubblico Slinky21/Pumpfun_Memecoin_Corpus (MIT/CC BY 4.0), giu-lug 2026: edge 'grad' = i token comprati prima della graduazione graduano piu della base (limite basso 95%); 'good' = dopo la graduazione finiscono major/minor_pump/sustained piu della base. Solo informativo."
+}
