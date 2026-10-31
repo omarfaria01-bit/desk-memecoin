@@ -25,11 +25,14 @@ mk = {"symbol": "S", "name": "s", "price": 1.0, "liq": 500_000.0, "chg_h1": 10.0
       "vol_h1": 100_000.0, "twitter": 1, "telegram": 1, "website": 1, "pair": "P", "url": "", "src": "pump.fun"}
 
 
+HTTP = {"v": None}
+
+
 async def run(cands, st):
     qi, qo = asyncio.Queue(), asyncio.Queue()
     for c in cands:
         await qi.put(c)
-    t = asyncio.ensure_future(D.analyst_agent(st, None, qi, qo))
+    t = asyncio.ensure_future(D.analyst_agent(st, HTTP["v"], qi, qo))
     await asyncio.sleep(0.5)
     t.cancel()
     out = []
@@ -68,8 +71,33 @@ CL.update(level="none", why="")
 D.CFG["MODE"] = "live"; out, _ = one("B7", 0.47); D.CFG["MODE"] = "paper"
 assert out == []
 # fascia + ripiego RugCheck: le due riduzioni si sommano (x0.25), cluster v2 richiesto
+# review Claude (rugcheck-fallback-review): col ripiego servono anche holder >= MIN_HOLDERS (da cluster v2) e creatore noto
 out, _ = one("B8", 0.47, sec={"soft": [], "rc_down": True})
+assert out == [], out   # holder e creatore non verificati = dubbio, niente acquisto
+class _H:
+    async def get(self, *_a, **_k): return None
+CRH = {"creator": "C" * 43}
+class _Crh:
+    @staticmethod
+    async def lookup(get, mint, creator=None, now=None, cfg=None):
+        return {"level": "ok", "pen": 0.0, "why": "ok", "creator": CRH["creator"], "prev": 0, "dead": 0}
+_old_crh = D.SRC.get("crh"); D.SRC["crh"] = _Crh; HTTP["v"] = _H()
+CL.update(holders_total=500)
+out, _ = one("B8" + "x" * 36 + "pump", 0.47, sec={"soft": [], "rc_down": True})
 assert len(out) == 1 and abs(out[0]["size_mult"] - 0.25) < 1e-9 and "rugcheck_down" in out[0]["soft"], out
+# creatore in lista nera col ripiego: niente acquisto
+_st_init = D.State.__init__
+def _init_bl(self, *a, **k):
+    _st_init(self, *a, **k); self.blacklist = set(self.blacklist) | {CRH["creator"]}
+D.State.__init__ = _init_bl
+out, _ = one("B9" + "x" * 36 + "pump", 0.47, sec={"soft": [], "rc_down": True})
+assert out == [], out
+D.State.__init__ = _st_init
+CL.pop("holders_total"); HTTP["v"] = None
+if _old_crh is not None:
+    D.SRC["crh"] = _old_crh
+else:
+    D.SRC.pop("crh", None)
 
 # (E) acq/vend 5m 1.25 -> solo shadow buysell_relax; 1.10 -> vecchio shadow analyst_momentum
 opened.clear()

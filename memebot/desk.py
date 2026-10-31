@@ -166,6 +166,8 @@ CFG = {
     "CLUSTER2_BUDGET_SEC": 75,        # tempo massimo di una scansione (top 150 holder, ~450 chiamate RPC)
     "CLUSTER2_MAX_QUEUE": 4,          # scansioni in background per gli shadow (quelle dei trade veri passano sempre)
     "CLUSTER_GROUP_HARD_PCT": 20.0,   # un SOLO gruppo di wallet collegati >= 20% dell'offerta = scarto rigido
+    "CLUSTER_FAM_MODE": "shadow",     # review Claude: famiglie soft -> HARD ('shadow' = solo registrato, 'on' = attivo)
+    "CLUSTER_FAM_HARD_N": 3,          # famiglie soft indipendenti insieme per l'HARD (override 3-5)
     "CLUSTER_UNKNOWN_ACTION": "skip", # v8.5: cluster non verificabile = niente acquisto (shadow 'cluster_unknown')
     "CLUSTER_UNKNOWN_PENALTY": 0.05,
     "CLUSTER_UNKNOWN_SIZE_MULT": 0.5,
@@ -2251,7 +2253,10 @@ def cluster2_brief(cl):
         return None
     keys = ("level", "why", "max_group_pct", "max_group_wallets", "linked_pct", "cluster_pct", "cluster_infra_pct",
             "infra_group_pct", "infra_group_fresh", "swarm_pct", "swarm_wallets", "fresh_share", "scanned",
-            "holders_total", "calls", "sec")
+            "holders_total", "calls", "sec",
+            # review Claude (compito 2): feature delle regole v8.4c/e, prima non registrate negli eventi: senza
+            # di loro una regola nuova non si puo calibrare sullo storico
+            "uniform", "single_funder", "stars", "cexf_pct", "cexf_best", "recv_pct", "multi_groups", "combo")
     return {k: cl.get(k) for k in keys if k in cl}
 
 
@@ -2309,7 +2314,8 @@ async def cluster2_scan(st, http, mint, sec, sym="?", rt=False):
         if hit and time.time() - hit[0] < CFG["CLUSTER_CACHE_SEC"]:
             return hit[1]
         cfg = {"BUDGET_SEC": CFG["CLUSTER2_BUDGET_SEC"],
-               "GROUP_HARD_PCT": min(20.0, fnum(CFG["CLUSTER_GROUP_HARD_PCT"], 20.0))}
+               "GROUP_HARD_PCT": min(20.0, fnum(CFG["CLUSTER_GROUP_HARD_PCT"], 20.0)),
+               "FAM_MODE": CFG["CLUSTER_FAM_MODE"], "FAM_HARD_N": int(CFG["CLUSTER_FAM_HARD_N"])}
         try:
             res = await SRC["cluster2"].scan(lambda u, b: _cl2_post(http, u, b, "bulk"), mint,
                                              exclude=sec.get("exclude") or [], token_program=sec.get("token_program"),
@@ -3345,6 +3351,27 @@ def rc_health(ok, now=None):
     return h["down"]
 
 
+def rc_down_doubts(st, cl, crh=None):
+    """Review Claude: dubbi del ripiego che si possono verificare solo nell'Analyst (cluster v2 gia fatto).
+    Lista vuota = nessun dubbio. Ogni dato mancante e un dubbio, mai un 'ok'."""
+    d = []
+    lv = (cl or {}).get("level", "unknown")
+    if lv not in ("ok", "none", "soft"):   # v8.5e: 'none' = cluster v2 pulito
+        d.append(f"cluster v2 '{lv}' (serve ok o soft)")
+    # col ripiego totalHolders non c'e e MIN_HOLDERS in security_check veniva saltato: conta di cluster v2
+    n = int(fnum((cl or {}).get("holders_total")))
+    if n < CFG["MIN_HOLDERS"]:
+        d.append(f"holder non verificati o pochi ({n} < {CFG['MIN_HOLDERS']})" if n else "numero di holder non verificato")
+    # col ripiego r['creator'] non c'e: lista nera e quota del creatore in security_check venivano saltate.
+    # Il creatore arriva dallo storico creatore (pump.fun); se non si conosce, la lista nera non e controllabile.
+    cr = str((crh or {}).get("creator") or "")
+    if not cr:
+        d.append("creatore non verificabile (lista nera non controllata)")
+    elif cr in st.blacklist:
+        d.append("creatore in lista nera per un rug precedente")
+    return d
+
+
 async def _rpc_core(http, method, params):
     d = await _cl2_post(http, "https://solana-rpc.publicnode.com",
                         {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}, "core")
@@ -3597,6 +3624,10 @@ async def security_check(st, http, mint, m, cache):
             doubt.append(f"LP non verificata bruciata/bloccata (stato {lp_status})")
         if not r.get("topHolders"):
             doubt.append("top 10 non calcolato")
+        if not isinstance(r.get("insiderNetworks"), list):
+            # review Claude: senza l'endpoint delle reti insider (errore, 429, schema diverso) graphInsidersDetected
+            # resta assente e il controllo bundle sopra veniva SALTATO: un bundle che RugCheck dava hard passava
+            doubt.append("reti insider RugCheck non verificabili (controllo bundle non fatto)")
         if doubt:
             RC_HEALTH["fb_skip"] += 1
             sec.update(severe="rugcheck_down", shadow_keys=["rugcheck_down"], soft=["rugcheck_down"] + sec["soft"])
@@ -4088,6 +4119,7 @@ async def analyst_agent(st, http, q_in, q_out):
                     smult *= soft_size(st, flag)
             # v8.4e (Kiwi): storico del creatore, solo per i candidati a un acquisto vero (2 chiamate pump.fun
             # gratuite per creatore nuovo, poi cache). 'unknown' = nessun effetto.
+            crh = None   # review Claude: mai il valore del token precedente (letto dal ripiego RugCheck qui sotto)
             if CFG.get("CREATOR_HISTORY", True) and "crh" in SRC and not so and score >= gate_thr \
                     and str(mint).endswith("pump") and callable(getattr(http, "get", None)):
                 crh = await SRC["crh"].lookup(http.get, mint, (c.get("sec") or {}).get("creator") or None)
@@ -4112,9 +4144,11 @@ async def analyst_agent(st, http, q_in, q_out):
             if (_sec.get("rc_down") or _sec.get("bundle_established")) and not so and score >= gate_thr:
                 _lv = (cl or {}).get("level", "unknown")
                 why_tag = "rugcheck_down" if _sec.get("rc_down") else "bundle_established"
-                if _lv not in ("ok", "none", "soft"):   # v8.5e: 'none' = cluster v2 pulito (prima veniva scartato)
+                doubts = rc_down_doubts(st, cl, crh) if why_tag == "rugcheck_down" else \
+                    ([] if _lv in ("ok", "none", "soft") else [f"cluster v2 '{_lv}' (serve ok o soft)"])
+                if doubts:   # v8.5e: 'none' = cluster v2 pulito (accettato anche qui e in rc_down_doubts)
                     reason = f"{'RugCheck giu' if why_tag == 'rugcheck_down' else 'bundle su token affermato'}: " \
-                             f"cluster v2 '{_lv}' (serve ok o soft)"
+                             + "; ".join(doubts)
                     rej(reason, agent="Analyst", cat="RugCheck giu (dubbio)" if why_tag == "rugcheck_down"
                         else "bundle affermato senza cluster")
                     if why_tag == "rugcheck_down":
@@ -5110,6 +5144,18 @@ async def _execute_buy(st, broker, c, mint, m):
                 return
             if _rcd:
                 RC_HEALTH["fb_ok"] += 1
+    elif (c.get("sec") or {}).get("rc_down"):
+        # review Claude: con HONEYPOT_CHECK spento (config.json) o il modulo honeypot non caricato il blocco sopra
+        # non gira, e con lui il requisito "GoPlus ok + honeypot pulito" del ripiego: si comprava con i soli
+        # controlli on-chain. Ora niente acquisto, shadow rugcheck_down.
+        reason = "RugCheck giu: controllo honeypot/GoPlus non disponibile (HONEYPOT_CHECK spento o modulo assente)"
+        reject(st, mint, m["symbol"], reason, agent="Executor", cat="RugCheck giu (dubbio)")
+        RC_HEALTH["fb_skip"] += 1
+        if CFG["SHADOW_TRADES"]:
+            spawn_shadow(st, getattr(broker, "http", None), mint, m, ["rugcheck_down"], reason,
+                         fnum(c.get("score")), (c.get("soft") or []) + ["rugcheck_down"], tag="rugcheck_down",
+                         signals=(c.get("signals") or "").split("|"))
+        return
     # v8.4: controllo incrociato Birdeye (overview) per prefiltro e honeypot. MAI un filtro duro:
     # "shadow" = solo registrato, "soft" = size ridotta se Birdeye non conferma.
     if str(CFG.get("BIRDEYE_XCHECK_MODE", "shadow")) != "off":
@@ -5336,6 +5382,11 @@ OVR_LIMITS.update({"BIRDEYE_XCHECK_SIZE_MULT": (0.2, 1.0), "BIRDEYE_MIN_HOLDERS"
 OVR_INT_KEYS |= {"BIRDEYE_MIN_HOLDERS", "BIRDEYE_TREND_SEC", "BIRDEYE_RESERVE_CU"}
 OVR_LIMITS.update({"MARK_NOROUTE_CONFIRM": (2.0, 6.0)})   # v8.5
 OVR_INT_KEYS |= {"MARK_NOROUTE_CONFIRM"}
+OVR_GLOBAL_MAP["MARK_NOROUTE_CONFIRM"] = "MARK_NOROUTE_CONFIRM"   # senza questa riga la chiave era ignorata
+OVR_LIMITS.update({"CLUSTER_FAM_HARD_N": (3.0, 5.0)})   # review Claude (compito 2)
+OVR_INT_KEYS |= {"CLUSTER_FAM_HARD_N"}
+OVR_STR_KEYS["CLUSTER_FAM_MODE"] = ("shadow", "on")
+OVR_GLOBAL_MAP.update({"CLUSTER_FAM_HARD_N": "CLUSTER_FAM_HARD_N", "CLUSTER_FAM_MODE": "CLUSTER_FAM_MODE"})
 OVR_GLOBAL_MAP.update({k: k for k in ("BIRDEYE_XCHECK_SIZE_MULT", "BIRDEYE_MIN_HOLDERS", "BIRDEYE_LIQ_RATIO",
                                       "BIRDEYE_TREND_SEC", "BIRDEYE_RESERVE_CU", "BIRDEYE_SAVE_AT")})
 OVR_DEFAULTS = {k: CFG[k] for k in list(OVR_LIMITS) + list(OVR_STR_KEYS)}

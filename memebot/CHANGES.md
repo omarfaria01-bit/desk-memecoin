@@ -927,3 +927,32 @@ senza patch (websocket pump.fun). ATTENZIONE: le suite scrivono e cancellano fil
 - Fix: il cancello v8.5 RugCheck giù / bundle affermato scartava anche il cluster v2 pulito (livello `none`); ora accetta ok/none/soft.
 - Config: SCORE_BAND, SCORE_BAND_LOW, SCORE_BAND_SIZE_MULT, BUYSELL_RELAX_SHADOW, BUYSELL_RELAX_LOW.
 - Test: tests/test_v85e.py (copia in /tmp).
+
+## v8.5f (31/10, review di Claude Code integrata da Kiwi bot) — solo PAPER
+- **Ripiego RugCheck giù (compito 1, branch `claude/rugcheck-fallback-review`)**, attivo solo quando RugCheck è giù:
+  reti insider non lette = dubbio (prima il controllo bundle veniva saltato); holder totali da cluster v2 (`holders_total`)
+  >= MIN_HOLDERS, altrimenti dubbio; creatore dallo storico pump.fun controllato contro la lista nera (creatore
+  sconosciuto = dubbio); con HONEYPOT_CHECK spento o modulo honeypot assente niente acquisto. `crh` azzerato a ogni token.
+  Conflitti risolti tenendo v8.5e: cluster v2 `none` (pulito) resta accettato anche in `rc_down_doubts`, fascia score_band invariata.
+- **Cluster BEAST/DESSA (compito 2)**: regola "famiglie soft" (>= 3 famiglie = hard) solo in SHADOW (`CLUSTER_FAM_MODE`=shadow,
+  nessun effetto sugli acquisti); `cluster2_brief` registra uniform/single_funder/stars/cexf/recv/combo per calibrarla.
+  Fix: override `MARK_NOROUTE_CONFIRM` ora davvero applicabile (non impostato in overrides.json, nessun cambio).
+- **Test (compito 3)**: `tests/test_cluster_rules.py` (bordi uniform/star/single-funder/ticker impostore),
+  `tests/test_rc_fallback_review.py`, `tests/test_cluster_beast_dessa.py`; `tests/test_v85e.py` aggiornato al ripiego più severo.
+- Con RugCheck su: nessun cambio di comportamento. Controlli positivi (Dacity, Bonnie, LUMI) invariati.
+
+## Web app – stream a basso consumo (31/10/2026, 09:29 ora di Roma)
+
+Solo `web/server.py` e `web/index.html`; bot, `.env` e modalità PAPER non toccati.
+
+- `/api/stream`: snapshot completo **solo alla connessione**; poi controllo ogni 3 s e evento `patch`
+  **solo se i dati cambiano**, con le sole sezioni cambiate (per le sezioni-oggetto, solo le sottochiavi
+  cambiate). `files_age` da solo non genera patch. Heartbeat `hb` (~20 byte) ogni 12 s senza patch.
+- Il punto "ora" del grafico e i contatori "min" di posizioni/ombra avanzano a passi di 60 s
+  (prima cambiavano a ogni giro e rimandavano tutto ogni 1,5 s).
+- Tolto `no-transform` dallo stream: Caddy ora lo comprime in gzip (eventi consegnati subito, verificato).
+- `/api/snapshot` con `ETag` → 304 se invariato; polling di riserva ogni 5 s (prima 2 s).
+- `index.html`: unisce le patch in `D`, `hb` conta come "vivo"; layout mobile invariato.
+- Banda per scheda aperta, misurata su https://desk.linkgox.com per 60 s: **5.040.517 B → 73.673 B** (−98,5%).
+- Ripristino: `/opt/desk/backups/web-20261031-092806/` (server.py, index.html, Caddyfile) →
+  copiare in `/opt/desk/web/` e `systemctl restart desk-web`.

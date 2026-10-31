@@ -278,14 +278,19 @@ function params(){
 function render(){if(!D)return;header();positions();pipe();charts();shadowPanel();candidates();feed();narratives();overrides();trades();params()}
 function setConn(t,ok){$("conn").innerHTML=`<span class="${ok?"pos":"neg"}">●</span> ${esc(t)}`}
 let pollT=null;
-function poll(){fetch("api/snapshot",{cache:"no-store"}).then(r=>r.json()).then(d=>{if(d&&d.mode){D=d;lastMsg=Date.now();render();setConn("polling · "+new Date().toLocaleTimeString("it-IT",{timeZone:"Europe/Rome"}),true)}}).catch(()=>setConn("server non raggiungibile",false))}
-function startPoll(){if(!pollT){poll();pollT=setInterval(poll,2000)}}
+let etag="";
+function poll(){fetch("api/snapshot",{cache:"no-store",headers:etag?{"If-None-Match":etag}:{}}).then(r=>{if(r.status===304){lastMsg=Date.now();setConn("polling · "+new Date().toLocaleTimeString("it-IT",{timeZone:"Europe/Rome"}),true);return null}etag=r.headers.get("ETag")||"";return r.json()}).then(d=>{if(d&&d.mode){D=d;lastMsg=Date.now();render();setConn("polling · "+new Date().toLocaleTimeString("it-IT",{timeZone:"Europe/Rome"}),true)}}).catch(()=>setConn("server non raggiungibile",false))}
+function startPoll(){if(!pollT){poll();pollT=setInterval(poll,5000)}}
+function applyPatch(p){if(!D)return false;for(const k in (p.s||{}))D[k]=p.s[k];for(const k in (p.m||{})){if(!D[k]||typeof D[k]!=="object"||Array.isArray(D[k]))D[k]={};Object.assign(D[k],p.m[k])}for(const k in (p.d||{}))for(const sk of p.d[k])if(D[k])delete D[k][sk];return true}
+function live(){if(pollT){clearInterval(pollT);pollT=null}lastMsg=Date.now();setConn("live · "+new Date().toLocaleTimeString("it-IT",{timeZone:"Europe/Rome"}),true)}
 function connect(){
   if(typeof EventSource==="undefined"){startPoll();return}
   const es=new EventSource("api/stream");
   setTimeout(()=>{if(!lastMsg)startPoll()},6000);
-  es.addEventListener("snap",e=>{try{if(pollT){clearInterval(pollT);pollT=null}D=JSON.parse(e.data);lastMsg=Date.now();render();setConn("live · "+new Date().toLocaleTimeString("it-IT",{timeZone:"Europe/Rome"}),true)}catch(_){}});
-  es.addEventListener("ping",()=>{lastMsg=Date.now();if(D)header()});
+  es.addEventListener("snap",e=>{try{const d=JSON.parse(e.data);if(!d||!d.mode)return;D=d;live();render()}catch(_){}});
+  es.addEventListener("patch",e=>{try{if(applyPatch(JSON.parse(e.data))){live();render()}}catch(_){}});
+  es.addEventListener("hb",()=>{if(D){live();header()}});
+  es.addEventListener("ping",()=>{if(D){live();header()}});
   es.onerror=()=>setConn("riconnessione…",false);
 }
 setInterval(()=>{if(D)header();if(lastMsg&&Date.now()-lastMsg>15000){setConn("nessun dato da "+Math.round((Date.now()-lastMsg)/1000)+" s",false);startPoll()}},1000);
