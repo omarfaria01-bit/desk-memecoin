@@ -31,6 +31,10 @@ def mint_flags(parsed, cfg=None):
         ext_names.append(name)
         if name == "transferHook" and s.get("programId"):
             hard.append(f"transfer hook attivo (programma {str(s.get('programId'))[:6]}.. puo bloccare le vendite)")
+        elif name == "transferHook" and s.get("authority"):
+            # review Claude (compito 7): hook spento ma con authority = il dev puo attivarlo dopo il nostro acquisto
+            # e bloccare le vendite (stesso caso di transferFeeConfigAuthority, gia rigido)
+            hard.append("transfer hook attivabile dal dev (authority attiva, puo bloccare le vendite)")
         elif name == "transferFeeConfig":
             bps = 0
             for k in ("newerTransferFee", "olderTransferFee"):

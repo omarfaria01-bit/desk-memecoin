@@ -97,7 +97,8 @@ h, s, i = HP.mint_flags(mk({"extension": "permanentDelegate", "state": {"delegat
                            {"extension": "defaultAccountState", "state": {"accountState": "frozen"}}))
 assert len(h) == 3 and set(i["t22_flags"]) == {"permanent_delegate", "transfer_hook", "default_frozen"}
 h, s, i = HP.mint_flags(mk({"extension": "transferHook", "state": {"programId": None, "authority": "A"}}))
-assert not h and i["t22_flags"] == ["transfer_hook_auth"]
+# review Claude (compito 7, da decidere da Kiwi): hook spento ma attivabile dal dev = rigido (prima: solo registrato)
+assert any("attivabile dal dev" in x for x in h) and i["t22_flags"] == ["transfer_hook_auth"]
 
 # ---- C: seconda conferma, solo registrata
 D.CFG["ENTRY_CONFIRM_SEC"] = 0
