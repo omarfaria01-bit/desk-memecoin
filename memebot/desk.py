@@ -166,6 +166,8 @@ CFG = {
     "CLUSTER2_BUDGET_SEC": 75,        # tempo massimo di una scansione (top 150 holder, ~450 chiamate RPC)
     "CLUSTER2_MAX_QUEUE": 4,          # scansioni in background per gli shadow (quelle dei trade veri passano sempre)
     "CLUSTER_GROUP_HARD_PCT": 20.0,   # un SOLO gruppo di wallet collegati >= 20% dell'offerta = scarto rigido
+    "CLUSTER_FAM_MODE": "shadow",     # review Claude: famiglie soft -> HARD ('shadow' = solo registrato, 'on' = attivo)
+    "CLUSTER_FAM_HARD_N": 3,          # famiglie soft indipendenti insieme per l'HARD (override 3-5)
     "CLUSTER_UNKNOWN_ACTION": "skip", # v8.5: cluster non verificabile = niente acquisto (shadow 'cluster_unknown')
     "CLUSTER_UNKNOWN_PENALTY": 0.05,
     "CLUSTER_UNKNOWN_SIZE_MULT": 0.5,
@@ -2081,7 +2083,8 @@ async def cluster2_scan(st, http, mint, sec, sym="?", rt=False):
         if hit and time.time() - hit[0] < CFG["CLUSTER_CACHE_SEC"]:
             return hit[1]
         cfg = {"BUDGET_SEC": CFG["CLUSTER2_BUDGET_SEC"],
-               "GROUP_HARD_PCT": min(20.0, fnum(CFG["CLUSTER_GROUP_HARD_PCT"], 20.0))}
+               "GROUP_HARD_PCT": min(20.0, fnum(CFG["CLUSTER_GROUP_HARD_PCT"], 20.0)),
+               "FAM_MODE": CFG["CLUSTER_FAM_MODE"], "FAM_HARD_N": int(CFG["CLUSTER_FAM_HARD_N"])}
         try:
             res = await SRC["cluster2"].scan(lambda u, b: _cl2_post(http, u, b, "bulk"), mint,
                                              exclude=sec.get("exclude") or [], token_program=sec.get("token_program"),
@@ -5021,6 +5024,10 @@ OVR_LIMITS.update({"BIRDEYE_XCHECK_SIZE_MULT": (0.2, 1.0), "BIRDEYE_MIN_HOLDERS"
 OVR_INT_KEYS |= {"BIRDEYE_MIN_HOLDERS", "BIRDEYE_TREND_SEC", "BIRDEYE_RESERVE_CU"}
 OVR_LIMITS.update({"MARK_NOROUTE_CONFIRM": (2.0, 6.0)})   # v8.5
 OVR_INT_KEYS |= {"MARK_NOROUTE_CONFIRM"}
+OVR_LIMITS.update({"CLUSTER_FAM_HARD_N": (3.0, 5.0)})   # review Claude (compito 2)
+OVR_INT_KEYS |= {"CLUSTER_FAM_HARD_N"}
+OVR_STR_KEYS["CLUSTER_FAM_MODE"] = ("shadow", "on")
+OVR_GLOBAL_MAP.update({"CLUSTER_FAM_HARD_N": "CLUSTER_FAM_HARD_N", "CLUSTER_FAM_MODE": "CLUSTER_FAM_MODE"})
 OVR_GLOBAL_MAP.update({k: k for k in ("BIRDEYE_XCHECK_SIZE_MULT", "BIRDEYE_MIN_HOLDERS", "BIRDEYE_LIQ_RATIO",
                                       "BIRDEYE_TREND_SEC", "BIRDEYE_RESERVE_CU", "BIRDEYE_SAVE_AT")})
 OVR_DEFAULTS = {k: CFG[k] for k in list(OVR_LIMITS) + list(OVR_STR_KEYS)}
