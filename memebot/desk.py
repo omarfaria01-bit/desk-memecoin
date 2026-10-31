@@ -276,7 +276,7 @@ CFG = {
     "VOL_ACCEL_MIN": 1.0,             # volume 5 min > 5 min precedenti (candele); senza candele > volume 1h / 12
     "REQUIRE_ABOVE_VWAP5": True,      # nuovo: con le candele il prezzo deve stare sopra la VWAP dei 5 min
     "MIN_CHANGE_H1_PCT": -15.0,       # (orig. -10.0)
-    "MIN_CHANGE_M5_PCT": -8.0,        # (orig. -5.0)
+    "MIN_CHANGE_M5_PCT": 0.0,         # v8.4f (review Claude c): niente acquisti col prezzo in calo a 5 min (prima -8)
     # apprendimento
     "SCORE_THRESHOLD": 0.50,          # (orig. 0.60)
     "THRESHOLD_MIN": 0.50,
@@ -385,6 +385,10 @@ try:
         print(f"v8.2: cluster_v2/honeypot non caricati ({type(_e2).__name__}: {_e2})")
 except Exception as _e:  # noqa: BLE001
     SRC = {"error": f"{type(_e).__name__}: {_e}"[:160]}
+try:
+    from sources.solkeys import on_curve, DEAD_ADDRS  # noqa: E402  v8.4f
+except Exception:  # noqa: BLE001
+    on_curve, DEAD_ADDRS = (lambda a: None), frozenset()
 try:
     from sources import gmgn_trending as _gmgn  # noqa: E402
     SRC["gmgn"] = _gmgn
@@ -1503,7 +1507,8 @@ async def cluster_scan(st, http, mint, sec):
                 tot = sum(x[0] for x in rows) or 1
                 rows.sort(reverse=True)
                 for amt, owner, acc_k in rows:
-                    if owner in excl or acc_k in excl or amt / tot * 100 >= 10:  # pool/curva/locker
+                    # v8.4f: niente piu "quota >= 10% = pool": fuori solo exclude, indirizzi morti e owner PDA
+                    if owner in excl or acc_k in excl or owner in DEAD_ADDRS or on_curve(owner) is False:
                         continue
                     owners.append((owner, amt / tot * 100))
                     if len(owners) >= CFG["CLUSTER_TOP_N"]:
@@ -1627,6 +1632,28 @@ async def verify_no_price(st, http, items, now=None):
 
 # ----------------------------------------------------------------------- v8.4c: honeypot sconosciuto, ticker impostori
 HP_RETRY = {}   # mint -> tentativi dopo un honeypot 'sconosciuto' (in memoria)
+
+
+HP_SHADOW_KEYS = frozenset({"goplus_hard", "honeypot_hard", "honeypot_soft"})   # v8.4f: solo misura, Learner fermo
+
+
+def hp_shadow(st, http, mint, m, c, hp, kind):
+    """v8.4f (review Claude g): ogni scarto GoPlus/honeypot va in shadow, per misurare i falsi positivi.
+    Mai un acquisto; tag goplus_hard / honeypot_hard / honeypot_soft, piu fee_auth_known se GoPlus lo segnala."""
+    try:
+        if not CFG.get("HP_REJECT_SHADOW", True):
+            return
+        gf = list(hp.get("goplus_flags") or [])
+        key = ("goplus_hard" if hp.get("goplus_level") == "hard" else "honeypot_hard") if kind == "hard" \
+            else "honeypot_soft"
+        flags = list(c.get("soft") or []) + [f"gp:{f}" for f in gf][:8] + (["fee_auth_known"] if "fee_auth_known" in gf else [])
+        sig = c.get("signals") or []
+        sig = [x for x in (sig.split("|") if isinstance(sig, str) else sig) if x] + \
+            (["fee_auth_known"] if "fee_auth_known" in gf else [])
+        spawn_shadow(st, http, mint, m, [key], f"{key}: {str(hp.get('why') or '')[:160]}", fnum(c.get("score")),
+                     flags, tag=key, signals=sig)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def honeypot_unknown_skip(st, http, mint, m, c, hp, now=None):
@@ -2238,6 +2265,11 @@ async def entry_features(st, http, mint, m, signals=None, candles=None, soft=Non
                    "trend_families": ti.get("families"), "trend_sources": ti.get("sources"),
                    "trend_paid": ti.get("paid")})
         fe.update({"atr_gecko": vg["atr"] if vg and v is not vg else None, "atr_birdeye": be_why})   # v8.4
+        if CFG.get("V84F_SHADOW_FIELDS", True):   # v8.4f: solo registrati
+            if allow_fetch and http is not None and time.time() - MKT_CTX["t"] >= 900 and not MKT_CTX["busy"]:
+                asyncio.ensure_future(market_ctx(http))   # in background: mai attese sull'ingresso
+            mk = MKT_CTX["d"]
+            fe.update(shadow_fields(mint, m, rows, fe.get("ret_5m"), mk))
         try:
             log(st, "Analyst", "atr", f"{m.get('symbol', '?')} ATR 1m {fe['atr_1m_10']}% fonte {fe['atr_src']}"
                 + (f" (Birdeye: {be_why})" if be_why not in ("ok", "spento") else ""),
@@ -2247,6 +2279,162 @@ async def entry_features(st, http, mint, m, signals=None, candles=None, soft=Non
     except Exception as e:  # noqa: BLE001
         fe = dict(fe, error=type(e).__name__)
     return fe
+
+
+# ----------------------------------------------------------------------- v8.4f: campi SOLO shadow (review Claude)
+SEC_LAST = {}      # mint -> {"rc_holders", "supply", "ts"} dall'ultimo controllo sicurezza (nessuna chiamata)
+MKT_CTX = {"t": 0.0, "d": {}, "busy": False}   # BTC/SOL da CoinGecko, cache 15 min
+
+
+def _pct_back(series, now, sec):
+    """series = [(ts, prezzo)] in ordine: variazione % rispetto al punto piu vicino a now - sec."""
+    if not series:
+        return None
+    tgt = now - sec
+    old = min(series, key=lambda x: abs(x[0] - tgt))
+    if abs(old[0] - tgt) > max(900, sec * 0.25) or old[1] <= 0:
+        return None
+    return round((series[-1][1] / old[1] - 1) * 100, 2)
+
+
+async def market_ctx(http, now=None):
+    """v8.4f: btc_1h/4h/24h, sol_1h/4h (CoinGecko gratis, 2 chiamate ogni 15 min). Errore = campi None."""
+    now = now or time.time()
+    if now - MKT_CTX["t"] < 900 or http is None or MKT_CTX["busy"] or not CFG.get("MKT_CTX", True):
+        return MKT_CTX["d"]
+    MKT_CTX["busy"] = True
+    try:
+        d = {}
+        for coin, pre in (("bitcoin", "btc"), ("solana", "sol")):
+            r = await http.get(f"https://api.coingecko.com/api/v3/coins/{coin}/market_chart?vs_currency=usd&days=1")
+            pr = (r or {}).get("prices") if isinstance(r, dict) else None
+            ser = [(x[0] / 1000.0, fnum(x[1])) for x in pr or [] if isinstance(x, (list, tuple)) and len(x) >= 2]
+            if len(ser) >= 10:
+                t_last = ser[-1][0]
+                d[pre + "_1h"] = _pct_back(ser, t_last, 3600)
+                d[pre + "_4h"] = _pct_back(ser, t_last, 4 * 3600)
+                if pre == "btc":
+                    d["btc_24h"] = round((ser[-1][1] / ser[0][1] - 1) * 100, 2) if ser[0][1] > 0 else None
+        MKT_CTX.update(t=now, d=d)
+    except Exception:  # noqa: BLE001
+        MKT_CTX["t"] = now
+    finally:
+        MKT_CTX["busy"] = False
+    return MKT_CTX["d"]
+
+
+def shadow_fields(mint, m, rows, ret5, mkt=None):
+    """v8.4f: pool sottile, ombra/candela rossa, posizione nel range 30m, lama, BTC/SOL, supply d'ingresso.
+    Solo registrati in entry_features (nessun effetto sulle decisioni). Tag in 'v84f_tags'."""
+    out, tags = {}, []
+    try:
+        sl = SEC_LAST.get(mint) or {}
+        price, liq = fnum(m.get("price")), fnum(m.get("liq"))
+        sup = fnum(sl.get("supply")) or (1e9 if str(mint).endswith("pump") else 0.0)
+        hs = sorted((fnum(p_) for _, p_ in sl.get("rc_holders") or []), reverse=True)
+        out["supply_entry"] = sup or None
+        if price > 0 and sup > 0 and liq > 0:
+            f = (liq / 2) / (price * sup)
+            out["pool_supply_pct"] = round(f * 100, 3)
+            if hs:
+                t1, t3 = hs[0] / 100, sum(hs[:3]) / 100
+                out["top1_pct"], out["top3_pct"] = round(t1 * 100, 3), round(t3 * 100, 3)
+                out["imp_top1_pct"] = round((1 - (f / (f + t1)) ** 2) * 100, 1) if f + t1 > 0 else None
+                out["imp_top3_pct"] = round((1 - (f / (f + t3)) ** 2) * 100, 1) if f + t3 > 0 else None
+                if fnum(out["imp_top1_pct"]) >= 50 or fnum(out["imp_top3_pct"]) >= 75:
+                    tags.append("thin_pool")
+        cur = int(time.time() // 60) * 60
+        done = [r for r in (rows or []) if r[0] < cur and r[4] > 0]
+        if done:
+            o, h, l_, c_ = done[-1][1], done[-1][2], done[-1][3], done[-1][4]
+            rng = h - l_
+            out["wick_entry"] = int(bool(rng > 0 and ((h - max(o, c_)) / rng > 0.5 or c_ < o)))
+            w30 = done[-30:]
+            hi, lo = max(r[2] for r in w30), min(r[3] for r in w30)
+            out["range_pos_30m"] = round((c_ - lo) / (hi - lo), 3) if hi > lo else None
+            if out["range_pos_30m"] is not None and 0.33 <= out["range_pos_30m"] <= 0.66:
+                tags.append("mid_range")
+            out["ret_15m"] = round((c_ / done[-16][4] - 1) * 100, 2) if len(done) >= 16 and done[-16][4] > 0 else None
+            if out["ret_15m"] is not None and out["ret_15m"] <= -10:
+                tags.append("falling_knife")
+        mk = dict(mkt or {})
+        for k in ("btc_1h", "btc_4h", "btc_24h", "sol_1h", "sol_4h"):
+            out[k] = mk.get(k)
+        if (out["btc_4h"] is not None and out["btc_4h"] <= -3) or (out["btc_24h"] is not None and out["btc_24h"] <= -5):
+            tags.append("risk_off")
+        if out["sol_1h"] is not None and out["sol_1h"] >= 1 and fnum(ret5) < 0:
+            tags.append("rel_weak")
+    except Exception as e:  # noqa: BLE001
+        out["v84f_error"] = type(e).__name__
+    out["v84f_tags"] = tags
+    return out
+
+
+def alt_exits(mint, kind, t0=None, now=None):
+    """v8.4f: uscite alternative simulate sul price path (zero chiamate). Piano base semplificato (stop, TP1,
+    trailing, tempo massimo); alt_tp3x = base + TP3 a +200% che vende il 33% del residuo; alt_moon15 = base sul
+    85% e 15% tenuto senza trailing fino al tempo massimo o al crollo della liquidita (o all'uscita reale)."""
+    try:
+        fp = os.path.join(PATH_DIR, f"{mint}.jsonl")
+        if not os.path.exists(fp):
+            return {}
+        recs = []
+        with open(fp) as f:
+            for ln in f:
+                try:
+                    r = json.loads(ln)
+                except Exception:  # noqa: BLE001
+                    continue
+                if r.get("k") == kind:
+                    recs.append(r)
+        starts = [i for i, r in enumerate(recs) if r.get("ev") == "entry" and (t0 is None or r["t"] >= t0 - 120)]
+        if not starts:
+            return {}
+        path = [r for r in recs[starts[-1]:] if not str(r.get("ev") or "").startswith("exit") and fnum(r.get("p")) > 0]
+        if len(path) < 2:
+            return {}
+        p0, l0, ts0 = fnum(path[0]["p"]), fnum(path[0].get("l")), path[0]["t"]
+        sl, tp1, tp1f = fnum(CFG["STOP_LOSS_PCT"]), fnum(CFG["TP1_PCT"]), fnum(CFG["TP1_FRACTION"])
+        ta, td, mh = fnum(CFG["TRAIL_ACTIVATE_PCT"]), fnum(CFG["TRAIL_DISTANCE_PCT"]), fnum(CFG["MAX_HOLD_MIN"]) * 60
+
+        def sim(tp3=False, moon=0.0):
+            rem, real, peak, tp1d, tp3d = 1.0 - moon, 0.0, 0.0, False, False
+            moon_left, last = moon, 0.0
+            for r in path[1:]:
+                g = (fnum(r["p"]) / p0 - 1) * 100
+                last = g
+                crash = l0 > 0 and 0 < fnum(r.get("l")) < 0.3 * l0
+                over = r["t"] - ts0 >= mh
+                if moon_left > 0 and (crash or over):
+                    real += moon_left * g
+                    moon_left = 0.0
+                if rem <= 0:
+                    if moon_left <= 0:
+                        break
+                    continue
+                peak = max(peak, g)
+                if g <= sl or crash or over:
+                    real += rem * g
+                    rem = 0.0
+                    continue
+                if not tp1d and g >= tp1:
+                    real += rem * tp1f * g
+                    rem *= 1 - tp1f
+                    tp1d = True
+                if tp3 and not tp3d and g >= 200:
+                    real += rem * 0.33 * g
+                    rem *= 0.67
+                    tp3d = True
+                if peak >= ta and g <= peak - td * (1 + peak / 100):
+                    real += rem * g
+                    rem = 0.0
+            real += (rem + moon_left) * last
+            return round(real, 2)
+        return {"alt_base": sim(), "alt_tp3x": sim(tp3=True), "alt_moon15": sim(moon=0.15),
+                "alt_bars": len(path)}
+    except Exception as e:  # noqa: BLE001
+        return {"alt_error": type(e).__name__}
+
 
 
 def fe_columns(fe):
@@ -2618,7 +2806,7 @@ def record_outcome(st, keys, pnl_pct, rug, src, now=None):
 def learn_shadow_step(st, key, now=None):
     """Al massimo un passo all'ora per segnale, solo con >= LEARN_SHADOW_MIN_N esiti. Ritorna l'azione o None."""
     now = now or time.time()
-    if key in LP_GATE_KEYS:  # v8.4e (Kiwi): regola LP 0%/sconosciuta bloccata, il Learner la misura e basta
+    if key in LP_GATE_KEYS or key in HP_SHADOW_KEYS:  # v8.4e (Kiwi): regola LP 0%/sconosciuta bloccata, il Learner la misura e basta
         return None
     e = _ls(st, key)
     sts = shadow_stats(e["hist"])
@@ -2745,6 +2933,23 @@ async def security_check(st, http, mint, m, cache):
             exclude.add(addr)
     holders = [h for h in (r.get("topHolders") or [])
                if h.get("address") not in exclude and h.get("owner") not in exclude]
+    # v8.4f (review Claude f): indirizzi morti (incinerator) ed exchange noti fuori dal top 10, mostrati a parte
+    supply_ui0 = fnum(tok.get("supply")) / 10 ** int(fnum(tok.get("decimals"))) if tok.get("supply") else 0.0
+    _hp = lambda h: (fnum(h.get("uiAmount")) / supply_ui0 * 100 if supply_ui0 > 0 and fnum(h.get("uiAmount")) > 0  # noqa: E731
+                     else fnum(h.get("pct")))
+    dead_pct, cex_pct, cex_names, keep = 0.0, 0.0, [], []
+    for h in holders:
+        o, a = h.get("owner"), h.get("address")
+        lab = holder_cex_label(o) or holder_cex_label(a)
+        if o in DEAD_ADDRS or a in DEAD_ADDRS:
+            dead_pct += _hp(h)
+            exclude.add(a) if a else None
+        elif lab:
+            cex_pct += _hp(h)
+            cex_names.append(lab)
+        else:
+            keep.append(h)
+    holders = keep
     if not holders:
         return False, "lista holder non disponibile", "holder non disponibili", None
     # (v5) pcts = [pct]; se tutte <= 1 venivano moltiplicate x100 -> falsi "top 10 al 99%" sui token molto
@@ -2808,7 +3013,12 @@ async def security_check(st, http, mint, m, cache):
                                                                            "updateAuthority")}
            if isinstance(r.get("tokenMeta"), dict) else None,
            "is_pump": bool(m["dex"] == "pumpfun" or pump_migrated),
+           "cex_pct": round(cex_pct, 2), "cex_names": sorted(set(cex_names))[:5], "dead_pct": round(dead_pct, 2),
            "lp_status": lp_status, "lp_locked_pct": None if lpmax is None else round(lpmax, 2)}
+    SEC_LAST[mint] = {"rc_holders": sec["rc_holders"][:5], "supply": supply_ui or None, "ts": time.time()}  # v8.4f
+    if len(SEC_LAST) > 3000:
+        for k in sorted(SEC_LAST, key=lambda k: SEC_LAST[k]["ts"])[:500]:
+            SEC_LAST.pop(k, None)
     if lp_block:  # v8.4e: prima di ogni altro esito "soft": niente acquisto, shadow col tag dedicato
         sec.update(severe=lp_block[0], shadow_keys=[lp_block[0]], lp_block=lp_block[0])
         return False, lp_block[1], lp_block[2], sec
@@ -2820,7 +3030,8 @@ async def security_check(st, http, mint, m, cache):
     if len(base_flags(f for f, _ in soft)) >= CFG["SOFT_MAX_FLAGS"]:
         sec.update(severe="multi", shadow_keys=["multi"])
         return False, "troppi segnali soft insieme: " + "; ".join(sec["soft_txt"]), "troppi segnali soft", sec
-    return True, f"top 10 al {top10:.1f}%, {sec['holders']} holder, LP ok" + \
+    return True, f"top 10 al {top10:.1f}%" + (f" (exchange a parte {cex_pct:.1f}%)" if cex_pct >= 0.05 else "") + \
+        f", {sec['holders']} holder, LP ok" + \
         (f", segnali soft: {'; '.join(sec['soft_txt'])}" if soft else ""), None, sec
 
 
@@ -3091,7 +3302,9 @@ async def analyst_agent(st, http, q_in, q_out):
                 why.append(f"gia +{m['chg_h1']:.0f}% in 1h")
             if m["chg_h1"] < CFG["MIN_CHANGE_H1_PCT"]:
                 why.append(f"{m['chg_h1']:.0f}% in 1h")
-            if m["chg_m5"] < CFG["MIN_CHANGE_M5_PCT"]:
+            # v8.4f: qui solo il taglio grossolano (come prima, -8); il gate vero (MIN_CHANGE_M5_PCT, 0) e m5_gate
+            # dopo le candele, sullo stesso dato di ret_5m. Stesso numero di chiamate di prima.
+            if m["chg_m5"] < min(fnum(CFG["MIN_CHANGE_M5_PCT"]), -8.0):
                 why.append(f"{m['chg_m5']:.0f}% in 5 min")
             if why:
                 rej("momento sbagliato: " + "; ".join(why), agent="Analyst",
@@ -3113,6 +3326,12 @@ async def analyst_agent(st, http, q_in, q_out):
                 continue
             candles = await fetch_candles(http, m["pair"])
             ch = analyze_chart(candles) if candles else None
+            g5 = m5_gate(m, candles)   # v8.4f: stesso dato di ret_5m (candele se presenti)
+            if g5:
+                rej(f"momento sbagliato: {g5}", agent="Analyst", cat="momento sbagliato")
+                so or add_shadow(st, mint, m, "momento")
+                so or analyst_shadow(st, http, mint, m, c, "momento/momentum")
+                continue
             # volume 5 min che accelera e prezzo sopra la VWAP dei 5 min (dalle candele, se ci sono)
             w5 = window5(candles) if candles else None
             vwap_gap = None
@@ -3955,6 +4174,42 @@ async def executor_agent(st, broker, q_in):
             log(st, "Executor", "error", f"errore ({type(e).__name__}: {e}), continuo")
 
 
+def holder_cex_label(addr):
+    """v8.4f: etichetta exchange (hot wallet CEX statici di cluster_v2), None se non e un exchange.
+    Esclusi hub scoperti in automatico e fee pump.fun (non sono exchange)."""
+    cl2 = SRC.get("cluster2") if isinstance(SRC, dict) else None
+    if not addr or cl2 is None:
+        return None
+    lab = (getattr(cl2, "INFRA_FUNDERS", {}) or {}).get(addr)
+    if not lab:
+        for a, b, l2 in getattr(cl2, "INFRA_PATTERNS", []) or []:
+            if addr.startswith(a) and addr.endswith(b):
+                lab = l2
+                break
+    if not lab or lab.lower().startswith(("hub", "pump")):
+        return None
+    return lab
+
+
+def ret5_entry(m, candles=None):
+    """v8.4f: ritorno a 5 min usato dal gate e registrato in ret_5m (candele 1m se ci sono, altrimenti chg_m5)."""
+    try:
+        v = vol_from_candles(candles) if candles else None
+    except Exception:  # noqa: BLE001
+        v = None
+    if v and v.get("ret5") is not None:
+        return fnum(v["ret5"]), "candele"
+    return fnum(m.get("chg_m5")), "chg_m5"
+
+
+def m5_gate(m, candles=None):
+    """v8.4f: None se ok, altrimenti il motivo. Nessuna eccezione da bonus KOL, narrativa o trending."""
+    r5, src = ret5_entry(m, candles)
+    if r5 < fnum(CFG["MIN_CHANGE_M5_PCT"]):
+        return f"prezzo in calo a 5 min ({r5:+.1f}% da {src}, minimo {fnum(CFG['MIN_CHANGE_M5_PCT']):+g}%)"
+    return None
+
+
 def lp_gate(c):
     """v8.4e (Kiwi 07:07): barriera finale, indipendente da punteggio, soft, Learner, override, narrativa/KOL e
     deep review. Ritorna la chiave di blocco ('lp_unlocked_zero' / 'lp_unknown') o None. Nessun CFG modificabile."""
@@ -3975,6 +4230,10 @@ def lp_gate(c):
 
 
 async def _execute_buy(st, broker, c, mint, m):
+    g5 = m5_gate(m, c.get("candles"))   # v8.4f: barriera anche qui, per ogni percorso
+    if g5:
+        reject(st, mint, m["symbol"], g5, agent="Executor", cat="momento sbagliato")
+        return
     g = lp_gate(c)
     if g:
         reject(st, mint, m["symbol"], f"LP {'0% bloccata/bruciata' if g == 'lp_unlocked_zero' else 'sconosciuta'}: "
@@ -4036,6 +4295,7 @@ async def _execute_buy(st, broker, c, mint, m):
         if hp["level"] == "hard":
             reject(st, mint, m["symbol"], f"honeypot: {hp['why']}", agent="Executor", cat="honeypot")
             st.labels.setdefault(mint, "suspected_rug")
+            hp_shadow(st, getattr(broker, "http", None), mint, m, c, hp, "hard")
             return
         hp_fee = fnum(hp.get("fee_pct"))
         hp_pen = CFG["FEE_PEN_PER_PCT"] * hp_fee + (CFG["GOPLUS_SOFT_PENALTY"] if any(
@@ -4044,6 +4304,7 @@ async def _execute_buy(st, broker, c, mint, m):
         if hp_pen > 0 and fnum(c.get("score")) - hp_pen < st.threshold:
             reject(st, mint, m["symbol"], f"punteggio sotto soglia dopo segnali honeypot soft (fee {hp_fee:g}%, "
                    f"-{hp_pen:.2f}): {hp['why']}", agent="Executor", cat="honeypot soft")
+            hp_shadow(st, getattr(broker, "http", None), mint, m, c, hp, "soft")
             return
         if hp_fee > 0:
             size *= max(0.3, 1.0 - CFG["FEE_SIZE_PER_PCT"] * hp_fee)
@@ -4158,7 +4419,7 @@ OVR_GLOBAL_MAP = {"STOP_LOSS_PCT": "STOP_LOSS_PCT", "TRAIL_START_PCT": "TRAIL_AC
                   "TRAIL_DIST_PCT": "TRAIL_DISTANCE_PCT", "TP_PCT": "TAKE_PROFIT_PCT",
                   "TP_SELL_FRACTION": "TAKE_PROFIT_FRACTION", "MAX_HOLD_MIN": "MAX_HOLD_MIN",
                   # nuove chiavi (decisioni finali); TP2_* vince su TP_PCT/TP_SELL_FRACTION se ci sono entrambe
-                  "TP1_PCT": "TP1_PCT", "TP1_FRACTION": "TP1_FRACTION",
+                  "TP1_PCT": "TP1_PCT", "TP1_FRACTION": "TP1_FRACTION", "MIN_CHANGE_M5_PCT": "MIN_CHANGE_M5_PCT",
                   "TP2_PCT": "TAKE_PROFIT_PCT", "TP2_FRACTION": "TAKE_PROFIT_FRACTION",
                   "BREAKEVEN_PCT": "BREAKEVEN_PCT", "TIME_STOP_MIN": "TIME_STOP_MIN",
                   "TIME_STOP_MIN_PCT": "TIME_STOP_MIN_PCT", "TRAIL_TIGHT_AFTER_PCT": "TRAIL_TIGHT_AFTER_PCT",
@@ -4194,7 +4455,8 @@ OVR_POS_MAP = {"stop_loss_pct": "STOP_LOSS_PCT", "take_profit_pct": "TAKE_PROFIT
 OVR_ACTIONS = ("hold", "sell_all", "sell_half")
 # limiti di sicurezza fissi (min, max) sui valori di CFG
 # v8.1: STOP_LOSS_PCT fino a -30 (prima -15); con stop piu largo di -15 il crollo scatta a 1.5 x stop
-OVR_LIMITS = {"STOP_LOSS_PCT": (-30.0, -3.0), "TRAIL_DISTANCE_PCT": (3.0, 25.0), "TRAIL_ACTIVATE_PCT": (3.0, 100.0),
+OVR_LIMITS = {"MIN_CHANGE_M5_PCT": (-8.0, 5.0),   # v8.4f
+              "STOP_LOSS_PCT": (-30.0, -3.0), "TRAIL_DISTANCE_PCT": (3.0, 25.0), "TRAIL_ACTIVATE_PCT": (3.0, 100.0),
               "TAKE_PROFIT_FRACTION": (0.1, 1.0), "TAKE_PROFIT_PCT": (5.0, 500.0), "MAX_HOLD_MIN": (5.0, 720.0),
               "TP1_PCT": (5.0, 200.0), "TP1_FRACTION": (0.05, 0.6), "BREAKEVEN_PCT": (-5.0, 15.0),
               "TIME_STOP_MIN": (5.0, 240.0), "TIME_STOP_MIN_PCT": (-10.0, 30.0),
@@ -4582,6 +4844,7 @@ async def _sell_position(st, broker, mint, reason, fraction=1.0, zero=False, mar
     fe = dict(p.get("entry_features") or {})  # v8.1 (posizioni aperte prima della v8.1: vuoto)
     if fe:
         fe.update({"trough_pct": round(fnum(p.get("trough_pct")), 2), "dyn_stop_hit": p.get("dyn_hit")})
+        fe.update(alt_exits(mint, "real", p.get("opened")))   # v8.4f: solo registrato
     t.update(fe_columns(fe))
     st.closed.append(t)
     write_trade(t)
@@ -4620,6 +4883,18 @@ async def recheck_security(st, http, mint, p):
         return "nuovo rischio: autorizzazioni o rug"
     dangers = sorted(x.get("name", "?") for x in (data.get("risks") or [])
                      if str(x.get("level", "")).lower() == "danger")
+    try:   # v8.4f: supply all'ingresso vs ricontrollo dopo 20 min (solo registrato, nessuna uscita)
+        fe = p.get("entry_features") or {}
+        tk = data.get("token") or {}
+        if fe.get("supply_entry") and "supply_20m" not in fe and time.time() - fnum(p.get("opened"), time.time()) >= 1200 \
+                and tk.get("supply"):
+            s20 = fnum(tk.get("supply")) / 10 ** int(fnum(tk.get("decimals")))
+            fe["supply_20m"] = s20
+            fe["supply_up_pct"] = round((s20 / fnum(fe["supply_entry"]) - 1) * 100, 4)
+            if fe["supply_up_pct"] > 0.1:
+                fe.setdefault("v84f_tags", []).append("supply_up")
+    except Exception:  # noqa: BLE001
+        pass
     if p.get("sec_risks") is None:
         p["sec_risks"] = dangers
         return None
@@ -4926,6 +5201,7 @@ def _close_shadow_row(st, mint, sh, pnl, rug, why, now=None):
     fe = dict(sh.get("fe") or {})  # v8.1
     if fe:
         fe.update({"trough_pct": round(fnum(sh.get("trough_pct")), 2), "dyn_stop_hit": sh.get("dyn_hit")})
+        fe.update(alt_exits(mint, "shadow", sh.get("t")))   # v8.4f: solo registrato
     row.update(fe_columns(fe))
     write_csv_row(SHADOW_CSV, row)
     if sh.get("last_price"):

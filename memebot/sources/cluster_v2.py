@@ -134,7 +134,16 @@ CFG = {
     "EXPAND_PAGES": 2,           # pagine da 100 transazioni per indirizzo (Helius getTransactionsForAddress, 10 crediti/pagina)
     "EXPAND_HUB_SEC": 600,       # 100 transazioni in meno di 10 minuti e quasi nessuna su questo token = servizio, non espanso
     "EXPAND_CACHE_SEC": 1800,    # i collegamenti trovati restano validi 30 minuti (le scansioni successive costano 0)
+    "EXCLUDE_PDA_OWNERS": True,  # v8.4f: owner fuori curva (PDA di pool/locker/programmi) esclusi dagli holder
 }
+
+try:
+    from sources.solkeys import on_curve, DEAD_ADDRS
+except Exception:  # noqa: BLE001
+    try:
+        from solkeys import on_curve, DEAD_ADDRS
+    except Exception:  # noqa: BLE001
+        on_curve, DEAD_ADDRS = (lambda a: None), frozenset()
 
 _infra_cache = {"t": 0.0, "d": {}}
 
@@ -590,6 +599,10 @@ def _holders_out(per, main_acc, tot, top_n, min_pct, full=None):
 
 def _add(per, main_acc, excl, owner, acc, amt):
     if owner in excl or acc in excl or amt <= 0:
+        return
+    # v8.4f (review Claude f): fuori solo pool/curve/locker (exclude), indirizzi morti e owner programma
+    # (PDA, fuori dalla curva ed25519). Nessuna soglia di quota: una balena con un wallet normale resta.
+    if owner in DEAD_ADDRS or (CFG.get("EXCLUDE_PDA_OWNERS", True) and on_curve(owner) is False):
         return
     per[owner] = per.get(owner, 0) + amt
     if amt > main_acc.get(owner, ("", 0))[1]:

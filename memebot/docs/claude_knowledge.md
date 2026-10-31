@@ -6,7 +6,7 @@ Fonte: relazione inviata da Kiwi il 31/10/2026. Sezione 8 e posizioni personali 
 Memoria memecoin: tutto quello che abbiamo
 imparato
 File da leggere insieme a CLAUDE.md. Riassume settimane di analisi fatte su claude.ai con
-l'utente (italiano, solo iPhone,
+l'utente (italiano,
 usa fomo, GMGN, DexScreener, Bubblemaps, BscScan, Solscan, Blockscout). Periodo: fine
 settembre - fine ottobre 2026.
 Le cifre sono quelle viste al momento dell'analisi: oggi possono essere cambiate.

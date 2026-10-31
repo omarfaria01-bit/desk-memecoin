@@ -37,9 +37,15 @@ def _fee_pct(tf):
         except (TypeError, ValueError):
             continue
         ks = str(k).lower()
+        # v8.4f (REMARC): 'maximum_fee' e un tetto in unita grezze (1e15), non una percentuale -> 1e+15%.
+        # Si leggono solo le tasse: *_bps / basis (punti base), fee_rate / rate / percent (frazione o %).
+        toks = set(ks.replace("-", "_").split("_"))
+        if ("max" in ks or "epoch" in ks or "amount" in ks or "authority" in ks or toks & {"ts", "time", "timestamp"}) \
+                and "bps" not in ks and "basis" not in ks:
+            continue
         if "bps" in ks or "basis" in ks:
             best = max(best, f / 100.0)
-        elif "rate" in ks or "fee" in ks or "percent" in ks:
+        elif "rate" in ks or "percent" in ks or ks in ("fee", "transfer_fee"):
             best = max(best, f * 100.0 if f <= 1.0 else f)
     return best if best > 0 else 0.01   # fee presente ma senza un numero leggibile: la si conta comunque
 
@@ -66,6 +72,15 @@ def verdict(r, cfg=None):
         (hard if fee >= c["HARD_FEE_PCT"] else soft).append(f"GoPlus: fee di trasferimento {fee:g}%")
     if _on(r.get("transfer_fee_upgradable")):
         flags.append("transfer_fee_upgradable")
+        # v8.4f: authority multisig/programma (PDA, fuori curva) -> solo tag shadow per una futura eccezione
+        auth = [a.get("address") for a in ((r.get("transfer_fee_upgradable") or {}).get("authority") or [])
+                if isinstance(a, dict) and a.get("address")] if isinstance(r.get("transfer_fee_upgradable"), dict) else []
+        try:
+            from sources.solkeys import on_curve
+        except Exception:  # noqa: BLE001
+            on_curve = None
+        if auth and on_curve and all(on_curve(a) is False for a in auth):
+            flags.append("fee_auth_known")
         hard.append("GoPlus: fee di trasferimento modificabile dal dev")
     if str(r.get("default_account_state", "1")) == "2":
         flags.append("default_frozen")

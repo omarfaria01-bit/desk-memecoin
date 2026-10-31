@@ -836,3 +836,41 @@ HYPERCHAN non è più un controllo pulito/vincente da nessuna parte (test §13 o
   creatore/rimozione hard). Storico: 10 token con LP 0% erano passati come soft (nessuno comprato; 3 shadow: STONK -0,5/-0,7%, TREND -40,9%).
 - Test: `tests/test_v84e.py` (nuovo); `test_v7`/`test_v6_soft` (LP 0% ora shadow-only), `test_v82`/`test_v84 §13`
   (regola un solo finanziatore disattivata dove si provano altre regole; HYPERCHAN sintetico = hard).
+
+## Aggiornamento 31/10/2026 (mattina) – v8.4f: correzioni dalla review Claude (PAPER)
+Fonte: `docs/claude_knowledge_review.md`. Secondo riavvio (SIGTERM) dopo quello della v8.4e.
+
+**Applicate**
+1. **GoPlus, tassa reale** (`sources/goplus.py`, `_fee_pct`): `maximum_fee` (tetto in unità grezze) non viene più
+   letta come percentuale. Si leggono solo `*_bps`/basis point e `fee_rate`/rate/percent (frazione o %); chiavi con
+   max/epoch/amount/authority/time ignorate. REMARC (`fee_rate 0.01`, `maximum_fee 1e15`) = **1%** (prima 1e15%,
+   scarto rigido). Tassa < 10% resta soft, ≥ 10% rigida (`HARD_FEE_PCT` 10), "fee modificabile dal dev" resta rigida.
+2. **Niente acquisti col prezzo in calo**: `MIN_CHANGE_M5_PCT` da −8 a **0**, override limitato a [−8, +5].
+   Il gate (`m5_gate`) usa lo stesso dato di `ret_5m` (candele 1m se ci sono, altrimenti chg_m5) e vale per tutti
+   i percorsi: Analyst dopo le candele e barriera all'inizio di `_execute_buy` (nessuna eccezione KOL, narrativa,
+   trending). Il taglio grossolano a −8 prima delle candele resta (stesse chiamate di prima).
+3. **Esclusioni holder**: nel Filter incinerator/System Program (`sources/solkeys.py`, `DEAD_ADDRS`) ed exchange
+   noti (hot wallet statici di cluster_v2) fuori dal top 10, quote insider e creatore; mostrati a parte
+   (`cex_pct`, `cex_names`, `dead_pct`, "exchange a parte X%" nel motivo). In cluster_v2 (`_add`) fuori solo
+   `exclude` (pool/curve/locker RugCheck), indirizzi morti e owner PDA (fuori dalla curva ed25519, verifica locale);
+   nel vecchio cluster v7 (riserva) tolto "quota ≥ 10% = pool". Una balena con un wallet normale resta.
+   Nota: nel cluster_v2 attuale la soglia del 10% non c'era più; c'era solo nel cluster v7 di riserva.
+   Ricontrollo sugli snapshot: BEAST soft, DESSA soft, PILLSEY hard, GLITCH hard (8 PDA tolti), BNB hard,
+   HYPERCHAN hard, Bonnie soft (5.9%), CATE hard: **nessun esito cambiato** (nessun holder ≥ 10% negli snapshot).
+
+**Solo shadow** (in `entry_features`, nessun effetto sulle decisioni, zero crediti Helius/Birdeye)
+- `pool_supply_pct`, `top1_pct`, `top3_pct`, `imp_top1_pct`, `imp_top3_pct` (impatto = 1 − (f/(f+s))²), tag `thin_pool`
+  (impatto top1 ≥ 50% o top3 ≥ 75%).
+- `wick_entry`, `range_pos_30m`, `ret_15m`, tag `mid_range` (0.33–0.66) e `falling_knife` (ret_15m ≤ −10%), dalle
+  candele già scaricate.
+- `btc_1h/4h/24h`, `sol_1h/4h` (CoinGecko gratis, 2 chiamate ogni 15 min, in background), tag `risk_off`
+  (BTC 4h ≤ −3% o 24h ≤ −5%) e `rel_weak` (token in calo con SOL 1h ≥ +1%). Tag in `v84f_tags`.
+- `supply_entry` + `supply_20m`/`supply_up_pct` nel ricontrollo RugCheck delle posizioni dopo 20 min (tag `supply_up`
+  sopra +0.1%; nessuna uscita).
+- `alt_base`, `alt_tp3x` (TP3 +200% vende il 33%), `alt_moon15` (15% senza trailing fino al tempo massimo, al
+  crollo della liquidità o all'uscita reale), simulati sul price path alla chiusura.
+- Scarti GoPlus/honeypot (rigidi e "soft sotto soglia") sempre in shadow: tag `goplus_hard`, `honeypot_hard`,
+  `honeypot_soft`, più `fee_auth_known` se l'authority della fee è un PDA/multisig. Learner fermo su questi tag.
+
+Test: nuovo `tests/test_v84f.py`; tutte le 13 suite OK. Inclusi nel commit `CLAUDE.md`, `docs/` e l'esclusione
+`claude_report*` in `tools/sync_github.sh`.
