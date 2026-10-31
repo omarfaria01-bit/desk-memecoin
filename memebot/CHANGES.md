@@ -906,3 +906,12 @@ senza patch (websocket pump.fun). ATTENZIONE: le suite scrivono e cancellano fil
 - Bundle RugCheck soft solo per token affermati (>=7 giorni, mcap >=$5M, >=5k holder) e con cluster v2 ok/soft; per tutti gli altri resta hard. Col ripiego gli holder totali non sono noti, quindi il bundle resta hard.
 - LP 0% su DLMM/CLMM: la concentrazione delle posizioni non si verifica gratis (Meteora non espone l'elenco posizioni per pool, CLMM = NFT), quindi resta solo shadow. Eta/attivita e neet invariati.
 - Test: tests/test_v85c.py (solo su copia in /tmp).
+
+## v8.5d (31/10/2026, stesso giro)
+- Pause dell'host (VM congelata, 'virtual machine fork' + timeout ngrok): `host_pause_check` a ogni giro dei cicli Risk e Shadow. Se tra due giri passano piu di 120 s di time.time() o c'e un salto rispetto a time.monotonic(): evento host_pause, Telegram al massimo ogni 30 min (pause raggruppate), timer 'nessun prezzo'/no_route azzerati per posizioni e shadow, primo giro dopo la ripresa solo nuova quotazione (nessuna chiusura), riga gap_host nei price_paths, chiusure shadow entro 5 min dalla ripresa = valido 0 / invalid_for_learning=host_pause.
+- Retroattivo una volta (host_pause_retro.json): 14 pause tra 00:14 e 06:50 ricavate dai buchi nei price_paths; 33 chiusure shadow entro 5 min dalla ripresa (17 gia DATI NON VALIDI, compresa AgenC, + 16 nuove) e l'esito positivo di GLITCH (lezione negativa) tolti dal Learner; righe CSV marcate.
+- GLITCH e le altre lezioni negative: un loro esito positivo non va MAI al Learner (invalid_for_learning=lezione_negativa).
+- Nuova colonna shadow_trades.csv: invalid_for_learning. Dashboard: le righe valido=0 restano visibili ma escluse da conteggi, win, rug e media.
+- Watchlist curva (curve_watch.json): token scartati per liquidita $0 ancora sulla curva pump.fun -> ricontrollo UNA volta dopo la migrazione, entro 6 ore, max 12 all'ora; rientrano dalla pipeline completa senza eccezioni (DexScreener gratis per il controllo).
+- narrative_relax (solo misura): scartato SOLO per momentum/VWAP o punteggio (senza segnali soft) e legato a una narrativa fresca con trusted_mentions > 0 -> shadow tag narrative_relax. Nessun acquisto; il Learner non fa passi su narrative_relax/rugcheck_down/bundle_established.
+- Test: tests/test_v85d.py (solo su copia in /tmp).

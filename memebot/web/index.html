@@ -22,13 +22,13 @@ header{position:sticky;top:0;z-index:5;background:linear-gradient(#0b0f16,#090c1
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle}
 .on{background:var(--g);box-shadow:0 0 8px var(--g)}.off{background:var(--r);box-shadow:0 0 8px var(--r)}
 .pos{color:var(--g)}.neg{color:var(--r)}.mut{color:var(--mut)}.y{color:var(--y)}
-main{padding:12px 16px;display:grid;gap:12px;grid-template-columns:repeat(12,1fr)}
+main{padding:12px 16px;display:grid;gap:12px;grid-template-columns:repeat(12,minmax(0,1fr))}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;min-width:0}
-.panel h2{margin:0 0 8px;font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:1.2px;display:flex;justify-content:space-between;gap:8px}
+.panel h2{flex-wrap:wrap;overflow-wrap:anywhere;margin:0 0 8px;font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:1.2px;display:flex;justify-content:space-between;gap:8px}
 .s12{grid-column:span 12}.s8{grid-column:span 8}.s6{grid-column:span 6}.s4{grid-column:span 4}.s3{grid-column:span 3}
 @media(max-width:1100px){.s8,.s6,.s4,.s3{grid-column:span 12}}
-.pipe{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
-@media(max-width:800px){.pipe{grid-template-columns:repeat(2,1fr)}}
+.pipe{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+@media(max-width:800px){.pipe{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .ag{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:8px;min-width:0}
 .ag .n{font-size:10px;color:var(--mut)}.ag .t{font-weight:700;font-size:13px}
 .ag .c{font-size:20px;font-weight:700;margin:2px 0}
@@ -36,8 +36,9 @@ main{padding:12px 16px;display:grid;gap:12px;grid-template-columns:repeat(12,1fr
 table{width:100%;border-collapse:collapse}
 th{color:var(--mut);font-weight:400;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.8px;border-bottom:1px solid var(--line);padding:4px 6px}
 td{padding:5px 6px;border-bottom:1px solid #141a24;vertical-align:top}
-.feed{max-height:340px;overflow:auto}
-.ev{display:grid;grid-template-columns:62px 70px 1fr;gap:6px;padding:3px 0;border-bottom:1px solid #121821;font-size:12px}
+.feed{max-height:340px;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
+.ev>span{min-width:0;overflow-wrap:anywhere;word-break:break-word}
+.ev{display:grid;grid-template-columns:62px 70px minmax(0,1fr);gap:6px;padding:3px 0;border-bottom:1px solid #121821;font-size:12px}
 .tabs{display:flex;flex-wrap:wrap;gap:4px}
 .tab{background:var(--panel2);border:1px solid var(--line);color:var(--mut);padding:2px 8px;border-radius:4px;cursor:pointer;font:inherit;font-size:11px}
 .tab.act{color:var(--txt);border-color:var(--b)}
@@ -49,16 +50,24 @@ td{padding:5px 6px;border-bottom:1px solid #141a24;vertical-align:top}
 .small{font-size:11px}
 details summary{cursor:pointer;color:var(--mut)}
 .lnk a{font-size:10px;border:1px solid var(--line);border-radius:3px;padding:0 5px;margin-left:4px;color:var(--b);white-space:nowrap}
-.tscroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
-.tscroll table{min-width:640px}
-.pcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:10px}
+.tscroll{overflow:visible}
+html,body{overflow-x:hidden;max-width:100%}
+td,th{overflow-wrap:anywhere;word-break:break-word}
+.rows{display:flex;flex-direction:column;gap:6px}
+.scard{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:6px 8px;min-width:0;overflow-wrap:anywhere;word-break:break-word}
+.scard .r1{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px}
+.scard .r1>*{min-width:0}
+.scard .r2,.scard .r3{font-size:11px;margin-top:3px;overflow-wrap:anywhere;word-break:break-word}
+.scard .lbl{color:var(--mut);font-size:10px;text-transform:uppercase;letter-spacing:.6px;margin-right:4px}
+.scard.rug{border-left:3px solid var(--r)}.scard.win{border-left:3px solid var(--g)}.scard.loss{border-left:3px solid #7a1f2a}
+.pcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(310px,100%),1fr));gap:10px}
 .pcard{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px;min-width:0}
 .pcard.up{border-left:3px solid var(--g)}.pcard.down{border-left:3px solid var(--r)}
 .ptop{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
 .psym{font-size:15px;font-weight:700;word-break:break-all}
 .pbig{font-size:28px;font-weight:800;line-height:1.05;text-align:right;white-space:nowrap}
 .pbig small{display:block;font-size:13px;font-weight:600}
-.pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px 10px;margin-top:8px}
+.pgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 10px;margin-top:8px}
 .pgrid div span{display:block;color:var(--mut);font-size:9px;text-transform:uppercase;letter-spacing:.7px}
 .pchart{margin-top:8px}.pchart summary{font-size:12px;color:var(--b);padding:4px 0}
 .pchart .frame{height:300px;border-radius:6px;overflow:hidden;background:#000;margin-top:4px}
@@ -66,7 +75,7 @@ details summary{cursor:pointer;color:var(--mut)}
 .tf{display:flex;gap:4px;align-items:center}
 .ovbig{font-size:22px;font-weight:800}
 .ovwrap{height:320px}
-@media(max-width:700px){main{padding:8px;gap:8px}header{position:static;padding:8px 10px;gap:8px}.kpis{display:grid;grid-template-columns:repeat(3,1fr);flex-basis:100%;order:3}.ovwrap{height:260px}.pgrid{grid-template-columns:repeat(2,1fr)}.pbig{font-size:26px}.kpi b{font-size:13px}}
+@media(max-width:700px){main{padding:8px;gap:8px}header{position:static;padding:8px 10px;gap:8px}.kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));flex-basis:100%;order:3}.ovwrap{height:260px}.pgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.pbig{font-size:26px}.kpi b{font-size:13px}}
 footer{color:var(--mut);font-size:11px;padding:4px 16px 18px}
 </style>
 </head>
@@ -169,7 +178,7 @@ function charts(){
   if(typeof Chart==="undefined")return;
   const r=D.reasons||[];$("rejn").textContent=r.reduce((a,x)=>a+x[1],0)+" totali";
   const rl=r.map(x=>x[0]),rv=r.map(x=>x[1]);
-  if(!rjChart){rjChart=new Chart($("rjc"),{type:"bar",data:{labels:rl,datasets:[{data:rv,backgroundColor:"#ff5c6c99",borderColor:"#ff5c6c",borderWidth:1}]},options:{indexAxis:"y",animation:false,responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:"#141a24"}},y:{grid:{display:false}}}}})}
+  if(!rjChart){rjChart=new Chart($("rjc"),{type:"bar",data:{labels:rl,datasets:[{data:rv,backgroundColor:"#ff5c6c99",borderColor:"#ff5c6c",borderWidth:1}]},options:{indexAxis:"y",animation:false,responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:"#141a24"}},y:{grid:{display:false},ticks:{callback:function(v){const l=String(this.getLabelForValue(v)||"");const n=window.innerWidth<500?18:40;return l.length>n?l.slice(0,n-1)+"…":l}}}}}})}
   else{rjChart.data.labels=rl;rjChart.data.datasets[0].data=rv;rjChart.update("none")}
 }
 function posHTML(p){
@@ -216,9 +225,9 @@ function shadowPanel(){
   $("shinfo").innerHTML=`${O.length} aperti · ${S.closed_n||0} chiusi`+(S.closed_n?` · media <span class="${cls(S.avg)}">${pct(S.avg)}</span> · rug ${S.rugs}`:"");
   if(!O.length&&!C.length&&!F.length){$("shadow").innerHTML=`<div class="empty">Ancora nessun trade ombra${S.file?"":" (shadow_trades.csv non ancora creato)"}. Compariranno qui i token scartati di poco, con cosa sarebbe successo comprandoli.</div>`;return}
   let h="";
-  if(F.length)h+=`<div class="mut small">Statistiche per segnale (usate dal Learner)</div><div class="tscroll"><table><tr><th>Segnale</th><th>Esiti</th><th>Ombra/veri</th><th>Win</th><th>Media</th><th>Rug</th><th>Correzioni</th></tr>${F.map(f=>`<tr><td>${esc(f.flag)}</td><td>${f.n}</td><td class="mut">${f.n_shadow}/${f.n_real}</td><td>${Math.round(f.win*100)}%</td><td class="${cls(f.avg)}">${pct(f.avg)}</td><td class="${f.rug>0?"neg":"mut"}">${Math.round(f.rug*100)}%</td><td class="small">${f.adj?`${f.adj} · pen ${f.pen_d} · size ${f.size_d} · hard ${f.hard_d}`:"—"}</td></tr>`).join("")}</table></div>`;
-  h+=`<div class="mut small" style="margin-top:8px">Aperti</div>`+(O.length?`<div class="tscroll"><table><tr><th>Token</th><th>P&L</th><th>Picco</th><th>Tempo</th><th>Scartato per</th></tr>${O.map(o=>`<tr><td><b>${esc(o.sym)}</b>${chartLinks(o.mint)}</td><td class="${cls(o.pnl_pct)}"><b>${pct(o.pnl_pct)}</b></td><td>${pct(o.peak)}</td><td>${o.min} min</td><td class="small">${esc(o.reason)} <span class="mut">${esc((o.keys||[]).join(", "))}</span></td></tr>`).join("")}</table></div>`:`<div class="small mut">nessuno</div>`);
-  h+=`<div class="mut small" style="margin-top:8px">Chiusi</div>`+(C.length?`<div class="tscroll"><table><tr><th>Chiuso</th><th>Token</th><th>P&L</th><th>Picco</th><th>Durata</th><th>Scartato per</th><th>Uscita</th></tr>${C.map(o=>`<tr><td class="mut">${esc(o.t)}</td><td><b>${esc(o.sym)}</b>${chartLinks(o.mint)}</td><td class="${o.rug?"neg":cls(o.pnl_pct)}"><b>${o.rug?"RUG ":""}${pct(o.pnl_pct)}</b></td><td>${pct(o.peak)}</td><td>${o.min} min</td><td class="small">${esc(o.reason)} <span class="mut">${esc(o.keys)}</span></td><td class="small">${esc(o.exit)}</td></tr>`).join("")}</table></div>`:`<div class="small mut">nessuno ancora</div>`);
+  if(F.length)h+=`<div class="mut small">Statistiche per segnale (usate dal Learner)</div><div class="rows">${F.map(f=>`<div class="scard"><div class="r1"><b>${esc(f.flag)}</b><span>${f.n} esiti <span class="mut">(ombra ${f.n_shadow} / veri ${f.n_real})</span></span><span>win ${Math.round(f.win*100)}%</span><span>media <b class="${cls(f.avg)}">${pct(f.avg)}</b></span><span class="${f.rug>0?"neg":"mut"}">rug ${Math.round(f.rug*100)}%</span></div>${f.adj?`<div class="r2"><span class="lbl">Correzioni</span>${f.adj} · pen ${f.pen_d} · size ${f.size_d} · hard ${f.hard_d}</div>`:""}</div>`).join("")}</div>`;
+  h+=`<div class="mut small" style="margin-top:8px">Aperti</div>`+(O.length?`<div class="rows">${O.map(o=>`<div class="scard ${(+o.pnl_pct||0)>=0?"win":"loss"}"><div class="r1"><span class="mut">aperto</span><span><b>${esc(o.sym)}</b>${chartLinks(o.mint)}</span><b class="${cls(o.pnl_pct)}">${pct(o.pnl_pct)}</b><span>max ${pct(o.peak)}</span><span class="mut">${o.min} min</span></div><div class="r2"><span class="lbl">Scarto</span>${esc(o.reason)} <span class="mut">${esc((o.keys||[]).join(", "))}</span></div></div>`).join("")}</div>`:`<div class="small mut">nessuno</div>`);
+  h+=`<div class="mut small" style="margin-top:8px">Chiusi</div>`+(C.length?`<div class="rows">${C.map(o=>`<div class="scard ${o.rug?"rug":((+o.pnl_pct||0)>=0?"win":"loss")}"><div class="r1"><span class="mut">${esc(o.t)}</span><span><b>${esc(o.sym)}</b>${chartLinks(o.mint)}</span><b class="${o.rug?"neg":cls(o.pnl_pct)}">${o.rug?"RUG ":""}${pct(o.pnl_pct)}</b><span>max ${pct(o.peak)}</span><span class="mut">${o.min} min</span></div><div class="r2"><span class="lbl">Scarto</span>${esc(o.reason)} <span class="mut">${esc(o.keys)}</span></div><div class="r3"><span class="lbl">Uscita</span>${esc(o.exit)}</div></div>`).join("")}</div>`:`<div class="small mut">nessuno ancora</div>`);
   $("shadow").innerHTML=h;
 }
 function candidates(){
@@ -229,7 +238,7 @@ function candidates(){
     if(p.score!=null){const w=Math.max(0,Math.min(100,p.score*100)),t=(p.threshold||D.threshold)*100;
       sc=`<div style="display:flex;gap:8px;align-items:center;margin:3px 0"><div class="bar" style="flex:1;position:relative"><i style="width:${w}%;background:${p.score>=(p.threshold||D.threshold)?"#2fd67b":"#4ea1ff"}"></i><span style="position:absolute;left:${t}%;top:-2px;width:2px;height:10px;background:#f2c94c"></span></div><span>${(+p.score).toFixed(2)} / ${(+(p.threshold||D.threshold)).toFixed(2)}</span></div>`;}
     const chips=[p.narr!=null?`narrativa ${p.narr>0?"+":""}${(+p.narr).toFixed(3)}`:"",p.no_chart!=null?`grafico assente -${p.no_chart}`:"",p.bs5!=null?`acq/vend 5m ${p.bs5}`:"",p.vol5!=null?`vol 5m ${p.vol5}x`:"",p.rsi!=null?`RSI ${p.rsi}`:"",p.rt!=null?`costo a/r ${p.rt}%`:""].filter(Boolean).map(x=>`<span class="chip">${esc(x)}</span>`).join("");
-    return `<div style="padding:6px 0;border-bottom:1px solid #141a24"><div style="display:flex;justify-content:space-between;gap:8px"><span><b>${mintLink(c.mint,c.sym)}</b>${chartLinks(c.mint)}</span><span class="small"><span class="st-${esc(c.status)}">${esc(c.status)}</span> <span class="mut">· ${esc(c.stage)} · ${esc(c.t)}</span></span></div>${sc}${chips}${c.reason?`<div class="small neg">✕ ${esc(c.reason)}</div>`:""}<details><summary class="small">passaggi (${c.n})</summary>${c.steps.map(s=>`<div class="small"><span class="mut">${esc(s.t)}</span> <span class="A-${esc(s.a)}">${esc(s.a)}</span> ${esc(s.m)}</div>`).join("")}</details></div>`}).join("");
+    return `<div style="padding:6px 0;border-bottom:1px solid #141a24"><div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 8px;min-width:0;overflow-wrap:anywhere"><span><b>${mintLink(c.mint,c.sym)}</b>${chartLinks(c.mint)}</span><span class="small"><span class="st-${esc(c.status)}">${esc(c.status)}</span> <span class="mut">· ${esc(c.stage)} · ${esc(c.t)}</span></span></div>${sc}${chips}${c.reason?`<div class="small neg">✕ ${esc(c.reason)}</div>`:""}<details><summary class="small">passaggi (${c.n})</summary>${c.steps.map(s=>`<div class="small"><span class="mut">${esc(s.t)}</span> <span class="A-${esc(s.a)}">${esc(s.a)}</span> ${esc(s.m)}</div>`).join("")}</details></div>`}).join("");
 }
 function feed(){
   const F=D.feed||[];const ags=["Tutti",...[...new Set(F.map(e=>e.a))].sort()];
@@ -243,7 +252,7 @@ function narratives(){
   $("narrinfo").textContent=(D.narr_updated?"agg. "+new Date(D.narr_updated).toLocaleTimeString("it-IT",{timeZone:"Europe/Rome",hour:"2-digit",minute:"2-digit"}):"")+(D.narr_blocklist?` · blocklist ${D.narr_blocklist}`:"");
   if(!N.length){$("narr").innerHTML=`<div class="empty">Radar non ha ancora scritto narrative.</div>`;return}
   const tr=t=>t==="rising"?`<span class="pos">▲ in salita</span>`:t==="fading"?`<span class="neg">▼ in calo</span>`:`<span class="mut">${esc(t||"—")}</span>`;
-  $("narr").innerHTML=`<table><tr><th>Tema</th><th>Forza</th><th>Trend</th><th>Velocity</th><th>Ticker</th></tr>`+N.map(n=>`<tr><td>${esc(n.theme)}${n.note?`<details><summary class="small">nota</summary><div class="small mut">${esc(n.note)}</div></details>`:""}</td><td><div class="bar"><i style="width:${Math.min(100,n.strength*100)}%;background:${n.strength>=0.7?"#ff5c6c":"#b48cff"}"></i></div><span class="small">${(+n.strength).toFixed(2)}</span></td><td>${tr(n.trend)}</td><td class="${n.velocity==null?"mut":cls(n.velocity)}">${n.velocity==null?"—":(n.velocity>0?"+":"")+n.velocity}${n.trusted?`<div class="small y">fidati ${n.trusted}</div>`:""}</td><td class="small">${(n.tickers||[]).map(t=>`<span class="chip">${esc(t)}</span>`).join("")}${n.conf_max!=null?`<div class="mut">conf. mint ${(+n.conf_max).toFixed(2)}</div>`:""}</td></tr>`).join("")+"</table>";
+  $("narr").innerHTML=`<div class="rows">`+N.map(n=>`<div class="scard"><div class="r1"><b>${esc(n.theme)}</b><span style="display:inline-flex;align-items:center;gap:6px"><span class="bar" style="width:70px;display:inline-block"><i style="width:${Math.min(100,n.strength*100)}%;background:${n.strength>=0.7?"#ff5c6c":"#b48cff"}"></i></span><span class="small">forza ${(+n.strength).toFixed(2)}</span></span><span>${tr(n.trend)}</span><span class="${n.velocity==null?"mut":cls(n.velocity)}">velocity ${n.velocity==null?"—":(n.velocity>0?"+":"")+n.velocity}</span>${n.trusted?`<span class="small y">fidati ${n.trusted}</span>`:""}</div><div class="r2">${(n.tickers||[]).map(t=>`<span class="chip">${esc(t)}</span>`).join("")}${n.conf_max!=null?` <span class="mut">conf. mint ${(+n.conf_max).toFixed(2)}</span>`:""}</div>${n.note?`<details><summary class="small">nota</summary><div class="small mut">${esc(n.note)}</div></details>`:""}</div>`).join("")+"</div>";
 }
 function overrides(){
   const O=D.overrides;
@@ -259,7 +268,7 @@ function trades(){
   const T=D.trades||[];
   const wr=D.closed_n?Math.round(D.wins/Math.min(D.closed_n,T.length||1)*100):0;
   $("trinfo").innerHTML=D.closed_n?`${D.closed_n} chiusi · win ${wr}% · <span class="${cls(D.realized_total)}">${usd(D.realized_total)}</span>`:"";
-  $("trades").innerHTML=T.length?`<div class="tscroll"><table><tr><th>Chiuso</th><th>Token</th><th>Costo</th><th>P&L</th><th>Picco</th><th>Durata</th><th>TP</th><th>Motivo</th></tr>`+T.map(t=>`<tr><td class="mut">${esc(t.t)}</td><td>${mintLink(t.mint,t.sym)}${chartLinks(t.mint)}</td><td>${usd(t.cost)}</td><td class="${cls(t.pnl)}">${usd(t.pnl)} <span class="small">${pct(t.pct)}</span></td><td>${pct(t.peak)}</td><td>${t.min} min</td><td>${t.tp_stage}/2</td><td class="small">${esc(t.reason)}</td></tr>`).join("")+"</table></div>":`<div class="empty">Ancora nessun trade chiuso.</div>`;
+  $("trades").innerHTML=T.length?`<div class="rows">`+T.map(t=>`<div class="scard ${(+t.pnl||0)>=0?"win":"loss"}"><div class="r1"><span class="mut">${esc(t.t)}</span><span><b>${mintLink(t.mint,t.sym)}</b>${chartLinks(t.mint)}</span><b class="${cls(t.pnl)}">${pct(t.pct)}</b><span class="${cls(t.pnl)}">${usd(t.pnl)}</span><span>max ${pct(t.peak)}</span><span class="mut">${t.min} min</span></div><div class="r2"><span class="lbl">Costo</span>${usd(t.cost)} · TP ${t.tp_stage}/2</div><div class="r3"><span class="lbl">Motivo</span>${esc(t.reason)}</div></div>`).join("")+"</div>":`<div class="empty">Ancora nessun trade chiuso.</div>`;
 }
 function params(){
   const p=D.params||{};const row=(l,v)=>v==null?"":`<tr><td class="mut">${esc(l)}</td><td>${esc(v)}</td></tr>`;

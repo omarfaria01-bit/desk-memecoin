@@ -538,15 +538,19 @@ def build():
                         "keys": [clean_text(str(k)[:30]) for k in (sh.get("keys") or [])[:6]],
                         "score": round(fnum(sh.get("score")), 3), "tp_stage": int(fnum(sh.get("tp_stage")))})
     sh_open.sort(key=lambda x: -x["pnl_pct"])
-    sh_rows = cached(P("shadow_trades.csv"), parse_shadow_csv) or []
+    sh_all = cached(P("shadow_trades.csv"), parse_shadow_csv) or []
+    # v8.5: righe "DATI NON VALIDI" (valido=0: nessun prezzo, pausa dell'host) mostrate ma escluse dalle statistiche
+    sh_rows = [r for r in sh_all if str(r.get("valido", "1")).strip() != "0"]
+    sh_invalid = len(sh_all) - len(sh_rows)
     sh_closed = []
-    for r in reversed(sh_rows):
+    for r in reversed(sh_all):
         sym0 = r.get("symbol")
         sh_closed.append({"t": str(r.get("chiuso", ""))[5:16], "sym": clean_sym(sym0), "mint": str(r.get("mint", ""))[:60],
                           "reason": clean_text(str(r.get("motivo_scarto", ""))[:160], [sym0]),
                           "keys": clean_text(str(r.get("chiavi", ""))[:80]), "pnl_pct": round(fnum(r.get("pnl_pct")), 2),
                           "peak": round(fnum(r.get("peak_pct")), 2), "min": int(fnum(r.get("minuti"))),
-                          "exit": clean_text(str(r.get("uscita", ""))[:120], [sym0]), "rug": int(fnum(r.get("rug")))})
+                          "exit": clean_text(str(r.get("uscita", ""))[:120], [sym0]), "rug": int(fnum(r.get("rug"))),
+                          "valid": 0 if str(r.get("valido", "1")).strip() == "0" else 1})
     ls = st.get("learner_shadow") if isinstance(st.get("learner_shadow"), dict) else {}
     sh_flags = []
     for k, e in ls.items():
@@ -561,7 +565,7 @@ def build():
                          "hard_d": round(fnum(e.get("hard_d")), 4)})
     sh_flags.sort(key=lambda x: -x["n"])
     shadow = {"file": os.path.exists(P("shadow_trades.csv")), "open": sh_open[:40], "closed": sh_closed[:80],
-              "closed_n": len(sh_rows), "wins": sum(1 for r in sh_rows if fnum(r.get("pnl_pct")) > 0 and not int(fnum(r.get("rug")))),
+              "closed_n": len(sh_rows), "invalid_n": sh_invalid, "wins": sum(1 for r in sh_rows if fnum(r.get("pnl_pct")) > 0 and not int(fnum(r.get("rug")))),
               "rugs": sum(1 for r in sh_rows if int(fnum(r.get("rug")))),
               "avg": round(sum(-100.0 if int(fnum(r.get("rug"))) else fnum(r.get("pnl_pct")) for r in sh_rows) / len(sh_rows), 2) if sh_rows else None,
               "flags": sh_flags}

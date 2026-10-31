@@ -1615,6 +1615,139 @@ def stall_reset(st, name, objs, now=None):
     return gap
 
 
+# ----------------------------------------------------------------------- v8.5: pause dell'host (VM congelata)
+# 31/10: buchi di ~25 min nei prezzi ogni mezz'ora circa = la VM si congela ('virtual machine fork' in dmesg, ngrok
+# in heartbeat timeout). Alla ripresa: evento host_pause + Telegram (max 1 ogni 30 min, pause raggruppate), timer
+# 'nessun prezzo'/no_route azzerati, nuova quotazione prima di qualsiasi chiusura, buco gap_host nei price_paths,
+# chiusure shadow entro 5 min dalla ripresa = invalid_for_learning.
+CFG.setdefault("HOST_PAUSE_SEC", 120)
+CFG.setdefault("HOST_PAUSE_MONO_JUMP_SEC", 30)
+CFG.setdefault("HOST_PAUSE_ALERT_SEC", 1800)
+CFG.setdefault("HOST_PAUSE_INVALID_SEC", 300)
+HOST_PAUSE = {"last_resume": 0.0, "alert_t": 0.0, "pending": [], "n": 0, "hold": {}, "last_evt": 0.0}
+LOOP_MONO = {}
+
+
+def host_pause_alert(now=None):
+    now = now or time.time()
+    hp = HOST_PAUSE
+    if not hp["pending"] or now - hp["alert_t"] < CFG["HOST_PAUSE_ALERT_SEC"]:
+        return False
+    ps, hp["pending"], hp["alert_t"] = hp["pending"], [], now
+    tot = sum(b - a for a, b in ps) / 60
+    f = lambda t: datetime.fromtimestamp(t, TZ).strftime("%H:%M")
+    tg_send(f"Host in pausa (VM congelata): {len(ps)} paus{'a' if len(ps) == 1 else 'e'}, in tutto {tot:.0f} min "
+            f"(ultima {f(ps[-1][0])}-{f(ps[-1][1])} Roma). Timer 'nessun prezzo' azzerati, nuova quotazione prima "
+            "di chiudere, chiusure shadow entro 5 min = non valide per il Learner.")
+    return True
+
+
+def host_pause_check(st, name, now=None, mono=None):
+    """Da chiamare a OGNI giro del ciclo 'name'. Ritorna i secondi di pausa (0 = nessuna)."""
+    now, mono = now or time.time(), mono if mono is not None else time.monotonic()
+    last = LOOP_MONO.get(name)
+    LOOP_MONO[name] = (now, mono)
+    host_pause_alert(now)
+    if not last:
+        return 0.0
+    gw, gm = now - last[0], mono - last[1]
+    if gw <= CFG["HOST_PAUSE_SEC"] and abs(gw - gm) <= CFG["HOST_PAUSE_MONO_JUMP_SEC"]:
+        return 0.0
+    hp = HOST_PAUSE
+    hp["hold"] = {"risk": True, "shadow": True}   # primo giro di ogni ciclo dopo la ripresa: solo quotazioni
+    if now - hp["last_evt"] < 60:                  # gia registrata dall'altro ciclo
+        return gw
+    hp["last_evt"], hp["last_resume"], hp["n"] = now, now, hp["n"] + 1
+    hp["pending"].append((last[0], now))
+    objs = [("real", k, v) for k, v in st.positions.items()] + [("shadow", k, v) for k, v in st.shadow_trades.items()]
+    for kind, mint, o in objs:
+        o["last_ok"] = max(fnum(o.get("last_ok")), now)
+        for k in ("np_wait", "np_src", "qmark"):
+            o.pop(k, None)
+        for k in ("mark_noroute", "noroute_fails"):
+            if k in o:
+                o[k] = 0
+        path_write(mint, {"t": int(now), "k": "gap_host", "from": int(last[0]), "gap": int(gw), "kind": kind})
+    for o in LOOP_LAST:
+        LOOP_LAST[o] = now
+    write_event("Risk", "host_pause", f"host in pausa {gw / 60:.1f} min (ciclo {name}, monotonic {gm:.0f}s): "
+                f"timer azzerati per {len(objs)} tra posizioni e shadow", {"gap_s": round(gw), "mono_s": round(gm),
+                                                                          "loop": name, "from": int(last[0])})
+    log(st, "Risk", "warn", f"pausa dell'host di {gw / 60:.0f} min: timer 'nessun prezzo' azzerati, "
+                            "nuova quotazione prima di qualsiasi chiusura")
+    host_pause_alert(now)
+    return gw
+
+
+HOST_RETRO_PATH = os.path.join(DATA_DIR, "host_pause_retro.json")
+
+
+def apply_host_pause_retro(st):
+    """v8.5: una sola volta. host_pause_retro.json = {"closes": [[mint, ts_chiusura, pnl], ...]}: chiusure shadow
+    entro 5 min dalla ripresa dopo le pause di stanotte -> riga CSV valido=0 + invalid_for_learning, esiti tolti
+    dal Learner (learner_shadow e learner_bonus)."""
+    try:
+        d = json.load(open(HOST_RETRO_PATH))
+    except Exception:  # noqa: BLE001
+        return 0
+    if d.get("applied"):
+        return 0
+    closes = [(str(x[0]), int(x[1]), float(x[2])) for x in d.get("closes") or []]
+    why_of = {(str(x[0]), int(x[1])): (x[3] if len(x) > 3 else "host_pause_retro") for x in d.get("closes") or []}
+    def hit(pnl, ts):
+        return any(abs(ts - t) <= 5 and abs(pnl - p) <= 0.02 for _, t, p in closes)
+    n_l = 0
+    for key, e in st.learner_shadow.items():
+        h = e.get("hist") or []
+        keep = [x for x in h if not (len(x) >= 4 and x[2] == "shadow" and hit(float(x[0]), int(x[3])))]
+        n_l += len(h) - len(keep)
+        e["hist"] = keep
+    lb = st.learner_bonus.get("hist") or []
+    keep = [x for x in lb if not (len(x) >= 5 and x[4] and hit(float(x[0]), int(x[3])))]
+    n_b = len(lb) - len(keep)
+    if "hist" in st.learner_bonus:
+        st.learner_bonus["hist"] = keep
+    n_r = 0
+    if os.path.exists(SHADOW_CSV):
+        with open(SHADOW_CSV, newline="") as f:
+            rd = csv.DictReader(f)
+            fields, rows = list(rd.fieldnames or []), list(rd)
+        if "invalid_for_learning" not in fields:
+            fields.append("invalid_for_learning")
+        def row_why(r):   # stesso mint, stesso pnl, chiusura entro 30 min (la riga puo avere l'ora di prima della pausa)
+            try:
+                tr = datetime.strptime(r.get("chiuso", ""), "%Y-%m-%d %H:%M").replace(tzinfo=TZ).timestamp()
+            except ValueError:
+                return None
+            for m, t, p in closes:
+                if r.get("mint") == m and abs(fnum(r.get("pnl_pct")) - p) <= 0.02 and abs(tr - t) <= 1800:
+                    return why_of[(m, t)]
+            return None
+        for r in rows:
+            wr = row_why(r)
+            if wr:
+                n_r += 1
+                if r.get("valido") != "0":
+                    r["valido"], r["invalid_for_learning"] = "0", wr
+                    r["uscita"] = ("NON USATO DAL LEARNER (lezione negativa): " if wr == "lezione_negativa" else
+                                   "DATI NON VALIDI (ripresa dopo pausa dell'host, retroattivo): ") + r.get("uscita", "")
+                elif not r.get("invalid_for_learning"):
+                    r["invalid_for_learning"] = "no_price"
+        tmp = SHADOW_CSV + ".tmp"
+        with open(tmp, "w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=fields)
+            w.writeheader()
+            w.writerows(rows)
+        os.replace(tmp, SHADOW_CSV)
+    d.update(applied=True, applied_at=datetime.now(TZ).isoformat(timespec="seconds"),
+             removed_learner=n_l, removed_bonus=n_b, csv_rows=n_r)
+    with open(HOST_RETRO_PATH, "w") as f:
+        json.dump(d, f, indent=1)
+    write_event("Learner", "host_pause_retro", f"chiusure shadow a ridosso delle pause host: {n_r} righe non valide, "
+                f"{n_l} esiti tolti dal Learner, {n_b} dai bonus", {})
+    return n_r
+
+
 async def second_price(http, mints):
     """Seconda fonte prezzi (Jupiter price v3, gratis): {mint: prezzo $} oppure None se la fonte non risponde."""
     if http is None or not mints:
@@ -1938,6 +2071,104 @@ def case_watch_step(c, m, now):
         c["status"], c["end_t"], c["end_why"] = "chiuso_7g", now, f"7 giorni passati, prezzo {-dp:+.0f}% dal massimo"
     row["status"] = c["status"]
     return row
+
+
+# ----------------------------------------------------------------------- v8.5: token ancora sulla bonding curve
+# 31/10: 186 token scartati da mezzanotte per "liquidita $0" perche ancora sulla curva pump.fun (DexScreener da 0),
+# tra cui iCoin (poi x41). Ora: in watchlist, ricontrollo UNA volta sola dopo la migrazione (entro 6 ore), al massimo
+# CURVE_RECHECK_MAX_H all'ora. Alla ricontrollata il token rientra dall'inizio della pipeline: nessuna eccezione.
+CURVE_WATCH_PATH = os.path.join(DATA_DIR, "curve_watch.json")
+CFG.setdefault("CURVE_WATCH", True)
+CFG.setdefault("CURVE_WATCH_TTL_SEC", 6 * 3600)
+CFG.setdefault("CURVE_WATCH_CHECK_SEC", 300)
+CFG.setdefault("CURVE_RECHECK_MAX_H", 12)
+CFG.setdefault("CURVE_WATCH_MAX", 600)
+CURVE = {"d": None, "sent": []}
+
+
+def curve_load():
+    if CURVE["d"] is None:
+        try:
+            CURVE["d"] = json.load(open(CURVE_WATCH_PATH))
+        except Exception:  # noqa: BLE001
+            CURVE["d"] = {}
+        CURVE["d"].setdefault("watch", {}), CURVE["d"].setdefault("done", {})
+    return CURVE["d"]
+
+
+def curve_save():
+    try:
+        tmp = CURVE_WATCH_PATH + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(CURVE["d"], f)
+        os.replace(tmp, CURVE_WATCH_PATH)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def curve_watch_add(mint, m, now=None):
+    """Token scartato per liquidita 0 mentre e ancora sulla curva pump.fun -> watchlist (una sola volta)."""
+    if not CFG.get("CURVE_WATCH") or mint in CASE_MINTS or not str(mint).endswith("pump"):
+        return False
+    if m.get("dex") not in ("pumpfun", "") and fnum(m.get("liq")) > 0:
+        return False
+    d, now = curve_load(), now or time.time()
+    if mint in d["watch"] or mint in d["done"]:
+        return False
+    if len(d["watch"]) >= CFG["CURVE_WATCH_MAX"]:
+        d["watch"].pop(min(d["watch"], key=lambda k: d["watch"][k]["t"]))
+    d["watch"][mint] = {"t": now, "sym": str(m.get("symbol", ""))[:12]}
+    curve_save()
+    return True
+
+
+def curve_watch_step(st, market, now=None):
+    """market = {mint: pairs DexScreener}. Ritorna i mint rimessi in pipeline. Pura sul contenuto (test)."""
+    d, now = curve_load(), now or time.time()
+    CURVE["sent"] = [t for t in CURVE["sent"] if now - t < 3600]
+    out = []
+    for mint, w in list(d["watch"].items()):
+        if now - w["t"] > CFG["CURVE_WATCH_TTL_SEC"]:
+            d["watch"].pop(mint)
+            d["done"][mint] = {"t": now, "esito": "scaduto (6 h senza migrazione)"}
+            continue
+        pairs = market.get(mint)
+        if not pairs:
+            continue
+        m = summarize(pairs)
+        if m.get("dex") == "pumpfun" or m["liq"] <= 0:
+            continue   # ancora sulla curva
+        if len(CURVE["sent"]) >= int(CFG["CURVE_RECHECK_MAX_H"]):
+            break      # tetto orario: gli altri aspettano (entro le 6 ore)
+        d["watch"].pop(mint)
+        d["done"][mint] = {"t": now, "esito": f"migrato su {m.get('dex')}, liq ${m['liq']:,.0f}: ricontrollo"}
+        CURVE["sent"].append(now)
+        st.processed.pop(mint, None)
+        st.cooldown.pop(mint, None)
+        if mint not in st.watch and mint not in st.positions:
+            st.watch[mint] = {"seen": now, "sym": w["sym"], "src": "curve_recheck", "prio": False}
+            LAST_SRC[mint] = "curve_recheck"
+        st.stats["curve_recheck"] = st.stats.get("curve_recheck", 0) + 1
+        out.append(mint)
+    for k in [k for k, v in d["done"].items() if now - v["t"] > 86400]:
+        d["done"].pop(k)
+    curve_save()
+    return out
+
+
+async def curve_watch_agent(st, http):
+    while True:
+        await asyncio.sleep(CFG["CURVE_WATCH_CHECK_SEC"])
+        try:
+            d = curve_load()
+            if not d["watch"]:
+                continue
+            market = await dex_batch(http, list(d["watch"]))   # DexScreener, gratis
+            for mint in curve_watch_step(st, market):
+                log(st, "Scout", "info", f"{d['done'][mint]['esito']} ({mint[:6]}...): rientra dalla pipeline completa",
+                    mint=mint)
+        except Exception as e:  # noqa: BLE001
+            log(st, "Scout", "error", f"watchlist curva: errore ({type(e).__name__}), continuo")
 
 
 async def case_watch_agent(st, http):
@@ -2923,6 +3154,47 @@ def learn_bonus_step(st, now=None):
     return acts
 
 
+def narr_relax_match(st, mint, m):
+    """v8.5: narrativa di narratives.json (fresca) con fonte attendibile (trusted_mentions > 0) per questo token.
+    Ritorna (tema, tipo) o None. Copie del ticker con mint diverso e blocklist = None."""
+    try:
+        narrs = NARR.current(st)
+    except Exception:  # noqa: BLE001
+        return None
+    sym = str(m.get("symbol") or "").lstrip("$").upper().strip()
+    if not narrs or mint in NARR.blocklist or mint in SKIP_MINTS or sym in NARR_STABLE_TICKERS:
+        return None
+    lname = str(m.get("name") or "").lower()
+    for n in narrs:
+        if not fnum(n.get("trusted_mentions")) > 0 or n.get("trend") == "fading":
+            continue
+        conf = n.get("mint_conf", {})
+        if mint in n["mints"]:
+            return n["theme"], "mint"
+        if sym and sym in n["tickers"]:
+            if any(v >= NARR_COPYCAT_CONF for v in conf.values()) and mint not in conf:
+                continue   # copia del ticker
+            return n["theme"], "ticker"
+        if lname and any(k in lname for k in n["keywords"]):
+            return n["theme"], "parola"
+    return None
+
+
+def narr_relax_shadow(st, http, mint, m, c, why, score=0.0):
+    """v8.5 (solo misura): scartato SOLO per momentum/VWAP/punteggio ma legato a una narrativa attendibile ->
+    shadow con tag narrative_relax. Mai un acquisto vero. Ritorna True se lo shadow e stato chiesto."""
+    if not (CFG["SHADOW_TRADES"] and CFG.get("NARR_RELAX_SHADOW", True)):
+        return False
+    hit = narr_relax_match(st, mint, m)
+    if not hit:
+        return False
+    st.stats["narrative_relax"] = st.stats.get("narrative_relax", 0) + 1
+    spawn_shadow(st, http, mint, m, ["narrative_relax"], f"Analyst: {why} (narrativa '{hit[0]}', {hit[1]})", score,
+                 list((c.get("sec") or {}).get("soft") or []), tag="narrative_relax",
+                 signals=[f"src:{m.get('src') or '?'}", "reason:narrative_relax", f"narr:{str(hit[0])[:30]}"])
+    return True
+
+
 def analyst_shadow(st, http, mint, m, c, why):
     """v7: shadow sugli scarti soft dell'Analyst (dopo i controlli di sicurezza), tag analyst_momentum."""
     if not (CFG["SHADOW_TRADES"] and CFG["SHADOW_ANALYST_REJECTS"]):
@@ -2954,10 +3226,13 @@ def record_outcome(st, keys, pnl_pct, rug, src, now=None):
         learn_shadow_step(st, key, now)
 
 
+MEASURE_ONLY_KEYS = {"narrative_relax", "rugcheck_down", "bundle_established"}   # v8.5: solo misura, mai passi
+
+
 def learn_shadow_step(st, key, now=None):
     """Al massimo un passo all'ora per segnale, solo con >= LEARN_SHADOW_MIN_N esiti. Ritorna l'azione o None."""
     now = now or time.time()
-    if key in LP_GATE_KEYS or key in HP_SHADOW_KEYS:  # v8.4e (Kiwi): regola LP 0%/sconosciuta bloccata, il Learner la misura e basta
+    if key in LP_GATE_KEYS or key in HP_SHADOW_KEYS or key in MEASURE_ONLY_KEYS:  # v8.4e (Kiwi): regola LP 0%/sconosciuta bloccata, il Learner la misura e basta
         return None
     e = _ls(st, key)
     sts = shadow_stats(e["hist"])
@@ -3384,6 +3659,8 @@ async def filter_agent(st, http, q_out):
                     st.hot.append((now, word, mint))
                 if m["price"] <= 0 or m["liq"] <= 0 or m["liq"] < CFG["MIN_LIQUIDITY_USD"]:
                     reject(st, mint, m["symbol"], f"liquidita ${m['liq']:,.0f} troppo bassa", cat="liquidita bassa")
+                    if m["liq"] <= 0 and m.get("dex") == "pumpfun" and w.get("src") != "curve_recheck":
+                        curve_watch_add(mint, m, now)   # v8.5: ancora sulla curva -> ricontrollo dopo la migrazione
                     continue
                 imp = ticker_impostor(m["symbol"], mint, m.get("name")) \
                     if CFG.get("TICKER_IMPOSTOR_ACTION") == "block" else None
@@ -3623,7 +3900,7 @@ async def analyst_agent(st, http, q_in, q_out):
                 rej("momento sbagliato: " + "; ".join(why), agent="Analyst",
                        cat="momento sbagliato")
                 so or add_shadow(st, mint, m, "momento")
-                so or analyst_shadow(st, http, mint, m, c, "momento/momentum")
+                so or narr_relax_shadow(st, http, mint, m, c, "momento/momentum/VWAP") or analyst_shadow(st, http, mint, m, c, "momento/momentum")
                 continue
             # conferma del momentum all'ingresso (gate): pressione d'acquisto e volume che accelera
             bs5 = m["buys_m5"] / max(1, m["sells_m5"])
@@ -3631,7 +3908,7 @@ async def analyst_agent(st, http, q_in, q_out):
                 rej(f"momentum non confermato: acq/vend 5m {bs5:.2f}",
                        agent="Analyst", cat="momentum 5m debole")
                 so or add_shadow(st, mint, m, "momento")
-                so or analyst_shadow(st, http, mint, m, c, "momento/momentum")
+                so or narr_relax_shadow(st, http, mint, m, c, "momento/momentum/VWAP") or analyst_shadow(st, http, mint, m, c, "momento/momentum")
                 continue
             NARR.current(st)  # carica anche la blocklist (valida anche se le narrative sono vecchie)
             if mint in NARR.blocklist:
@@ -3643,7 +3920,7 @@ async def analyst_agent(st, http, q_in, q_out):
             if g5:
                 rej(f"momento sbagliato: {g5}", agent="Analyst", cat="momento sbagliato")
                 so or add_shadow(st, mint, m, "momento")
-                so or analyst_shadow(st, http, mint, m, c, "momento/momentum")
+                so or narr_relax_shadow(st, http, mint, m, c, "momento/momentum/VWAP") or analyst_shadow(st, http, mint, m, c, "momento/momentum")
                 continue
             # volume 5 min che accelera e prezzo sopra la VWAP dei 5 min (dalle candele, se ci sono)
             w5 = window5(candles) if candles else None
@@ -3661,13 +3938,13 @@ async def analyst_agent(st, http, q_in, q_out):
                 rej(f"momentum non confermato: volume 5m {accel:.2f}x {src}",
                        agent="Analyst", cat="momentum 5m debole")
                 so or add_shadow(st, mint, m, "momento")
-                so or analyst_shadow(st, http, mint, m, c, "momento/momentum")
+                so or narr_relax_shadow(st, http, mint, m, c, "momento/momentum/VWAP") or analyst_shadow(st, http, mint, m, c, "momento/momentum")
                 continue
             if CFG["REQUIRE_ABOVE_VWAP5"] and vwap_gap is not None and vwap_gap <= 0:
                 rej(f"prezzo sotto la VWAP 5 min ({vwap_gap:+.1f}%)",
                        agent="Analyst", cat="sotto VWAP 5m")
                 so or add_shadow(st, mint, m, "momento")
-                so or analyst_shadow(st, http, mint, m, c, "momento/momentum")
+                so or narr_relax_shadow(st, http, mint, m, c, "momento/momentum/VWAP") or analyst_shadow(st, http, mint, m, c, "momento/momentum")
                 continue
             if ch is None and CFG["REQUIRE_CHART"]:
                 rej("grafico non disponibile", agent="Analyst", cat="grafico assente")
@@ -3848,6 +4125,8 @@ async def analyst_agent(st, http, q_in, q_out):
             if score < st.threshold:
                 rej(detail, agent="Analyst", cat="punteggio basso")
                 add_shadow(st, mint, m, "punteggio", f)
+                if not flags and narr_relax_shadow(st, http, mint, m, c, "punteggio basso", score):
+                    continue   # v8.5: solo shadow narrative_relax (misura), nessun acquisto
                 if CFG["SHADOW_TRADES"] and score_raw >= st.threshold - near:
                     spawn_shadow(st, http, mint, m, flags or ["score"], detail, score, flags, signals=signals)
                 continue
@@ -5389,6 +5668,8 @@ async def risk_agent(st, http, broker):
     last_cash = 0.0
     while True:
         await asyncio.sleep(CFG["RISK_CHECK_SEC"])
+        host_pause_check(st, "risk")   # v8.5
+        _hold = HOST_PAUSE["hold"].pop("risk", False)
         try:
             stop_now = os.path.exists(STOP_PATH)
             try:
@@ -5466,6 +5747,8 @@ async def risk_agent(st, http, broker):
                         p["stop_hits"] = p["stop_hits"] + 1 if pnl <= stop_eff else 0
                         p["mark_net"], p["pnl_net"] = round(mark_value(p), 4), round(pnl, 3)  # per la dashboard
                         held = (time.time() - p["opened"]) / 60
+                        if _hold and not (stop_now or stop_active()):
+                            continue   # v8.5: ripresa dopo una pausa dell'host: prima si riquota, si decide al giro dopo
                         act = None if (stop_now or stop_active()) else OVR.pending_action(mint, p)
                         if stop_now or stop_active():
                             await sell_position(st, broker, mint, "arresto di emergenza")
@@ -5631,7 +5914,9 @@ SHADOW_FIELDS = ["aperto", "chiuso", "symbol", "mint", "motivo_scarto", "chiavi"
                  "atr_1m_10", "stop_applied", "dyn_stop_shadow", "size_mult",
                  "dyn_tp1", "dyn_trail_act", "dyn_trail_dist", "entry_features",
                  # v8.4d: 0 = dati non validi (es. nessun prezzo per un problema nostro), il Learner non li usa
-                 "valido"]
+                 "valido",
+                 # v8.5: perche non valido (no_price, host_pause, host_pause_retro)
+                 "invalid_for_learning"]
 
 
 def ensure_shadow_csv():
@@ -5673,8 +5958,22 @@ def spawn_shadow(st, http, mint, m, keys, reason, score, flags, tag=None, signal
     t.add_done_callback(SHADOW_TASKS.discard)
 
 
+POS_LABELS = {"buono_kiwi", "probabile_buono", "caso_stelle_aperto"}
+
+
+def neg_lesson_mints():
+    """v8.5: mint delle lezioni negative (GLITCH ecc.): un loro esito positivo non va MAI al Learner."""
+    return {str(x.get("mint")) for x in LABEL_SEEDS if x.get("label") not in POS_LABELS}
+
+
 def _close_shadow_row(st, mint, sh, pnl, rug, why, now=None):
     now = now or time.time()
+    if pnl > 0 and mint in neg_lesson_mints():
+        sh["np_invalid"], sh["inv_why"] = True, "lezione_negativa"
+        why = "NON USATO DAL LEARNER (lezione negativa, mai esempio positivo): " + why
+    if HOST_PAUSE["last_resume"] and 0 <= now - HOST_PAUSE["last_resume"] <= CFG["HOST_PAUSE_INVALID_SEC"]:
+        sh["np_invalid"], sh["inv_why"] = True, "host_pause"   # v8.5: chiusura a ridosso della ripresa
+        why = "DATI NON VALIDI (ripresa dopo pausa dell'host): " + why
     row = {"aperto": datetime.fromtimestamp(sh["t"], TZ).strftime("%Y-%m-%d %H:%M"),
            "chiuso": datetime.fromtimestamp(now, TZ).strftime("%Y-%m-%d %H:%M"), "symbol": sh["sym"], "mint": mint,
            "motivo_scarto": sh["reason"][:160], "chiavi": "|".join(sh["keys"]), "segnali_soft": "|".join(sh["flags"]),
@@ -5682,7 +5981,8 @@ def _close_shadow_row(st, mint, sh, pnl, rug, why, now=None):
            "rt_cost_pct": sh["rt"], "quote_src": sh.get("src", "formula"), "pnl_pct": round(pnl, 2),
            "peak_pct": round(sh.get("peak_pct", 0.0), 2), "minuti": int((now - sh["t"]) / 60), "uscita": why,
            "rug": int(bool(rug or pnl <= -50)) if not sh.get("np_invalid") else 0, "tag": sh.get("tag", ""),
-           "signals": "|".join(sh.get("signals") or []), "valido": 0 if sh.get("np_invalid") else 1}
+           "signals": "|".join(sh.get("signals") or []), "valido": 0 if sh.get("np_invalid") else 1,
+           "invalid_for_learning": (sh.get("inv_why") or "no_price") if sh.get("np_invalid") else ""}
     fe = dict(sh.get("fe") or {})  # v8.1
     if fe:
         fe.update({"trough_pct": round(fnum(sh.get("trough_pct")), 2), "dyn_stop_hit": sh.get("dyn_hit")})
@@ -5695,6 +5995,7 @@ def _close_shadow_row(st, mint, sh, pnl, rug, why, now=None):
     st.stats["shadow_closed"] += 1
     note_stock_outcome("shadow", sh["sym"], mint, pnl, why)   # v8.4d: azioni solo annotate
     if sh.get("np_invalid"):   # v8.4d: dati non validi: il Learner non li usa
+        st.stats["shadow_invalid"] = st.stats.get("shadow_invalid", 0) + 1
         write_event("Learner", "shadow_invalid", f"shadow {sh['sym']} chiuso come DATI NON VALIDI ({why})",
                     {"mint": mint, "keys": sh["keys"]})
         return
@@ -5837,9 +6138,12 @@ async def shadow_apply(st, http, mint, sh, dec, now=None):
 async def shadow_trade_agent(st, http):
     while True:
         await asyncio.sleep(CFG["SHADOW_CHECK_SEC"])
+        host_pause_check(st, "shadow")   # v8.5
         pe = [k for k, v in st.post_exit.items() if v.get("kind") == "shadow" and k not in st.shadow_trades]
         if not st.shadow_trades and not pe:
+            HOST_PAUSE["hold"].pop("shadow", None)
             continue
+        _hold = HOST_PAUSE["hold"].pop("shadow", False)
         try:
             # v8.1: gli shadow gia chiusi (seguiti 180 min) viaggiano nella stessa chiamata (30 token per chiamata)
             stall_reset(st, "shadow", st.shadow_trades.values())   # v8.4d
@@ -5860,6 +6164,8 @@ async def shadow_trade_agent(st, http):
                 if vd == "invalid":
                     st.shadow_trades[mint]["np_invalid"] = True
             for mint, sh in list(st.shadow_trades.items()):
+                if _hold:   # v8.5: dopo una pausa dell'host solo nuova quotazione, nessuna chiusura in questo giro
+                    break
                 dec = shadow_decide(sh, now)
                 deep_queue_peak(mint, sh["sym"], sh.get("peak_pct", 0.0), sh.get("links"), sh.get("url", ""), "shadow")
                 await shadow_apply(st, http, mint, sh, dec, now)
@@ -6205,7 +6511,11 @@ async def main():
     st = load_state()
     ST_REF[0] = st
     apply_label_seeds(st)   # v8.2
-    apply_case_watch(st)    # v8.5
+    apply_case_watch(st)
+    try:
+        apply_host_pause_retro(st)   # v8.5
+    except Exception as e:  # noqa: BLE001
+        print(f"retro host_pause non applicato: {type(e).__name__}")    # v8.5
     mode = CFG["MODE"]
     if mode not in ("paper", "dry", "live"):
         print(f"MODE '{mode}' non valido: usa paper, dry o live")
@@ -6256,6 +6566,7 @@ async def main():
             "Recap": lambda: recap_agent(st),
             "Helius": lambda: helius_agent(st),
             "Casi": lambda: case_watch_agent(st, http),
+            "Curva": lambda: curve_watch_agent(st, http),
             "Telegram": lambda: telegram_agent(st),
             "Dashboard": lambda: dashboard(st),
         }
