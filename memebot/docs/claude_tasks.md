@@ -92,6 +92,22 @@ Dati 31/10: watchlist delle fonti secondarie piena da ~12:30 (`WATCH_NEW_MAX` 12
 - Test: watchlist piena con mix morti/vivi → escono prima i morti; nessuna chiamata di rete in più; RAM stabile con 2000 token.
 - Nota: sfratti per tipo prima/dopo su un replay e quanti sfrattati `oldest` avrebbero fatto TP1.
 
+## 15) Più trade in paper entro mercoledì 4/11 — PRIORITÀ MASSIMA, FALLO PER PRIMO
+Il bot è fermo: ultimo trade paper chiuso il 31/10 alle 00:04. Obiettivo: qualche trade paper in più senza toccare la sicurezza.
+- Usa i dati shadow (branch `data-snapshot`) per capire **quali filtri non di sicurezza** scartano più token che poi sono andati bene (volume, liquidità, età minima, momentum, soglia del punteggio).
+- Proponi un allentamento piccolo e motivato, con numeri: quanti trade in più al giorno, e media e % di rug attese sugli shadow comparabili.
+- **Mai toccare:** mint e freeze, honeypot, insider, Token-2022 hook, dati mancanti, rug e blocklist, anti-dump 0-15 minuti dopo la migrazione.
+- Consegna: un branch `claude/more-trades` con le modifiche **come chiavi proposte** in un file `docs/proposed_overrides_15.json` (non toccare `overrides.json`) più un breve report. Lo controllo io prima di applicarlo.
+
+## 16) Filtri dinamici — piano approvato da Kiwi (dopo il 15, a compiti piccoli)
+La regola base: i controlli di sicurezza non diventano **mai** dinamici. Possono esserlo volume, liquidità, età minima, momentum, soglia del punteggio e size.
+- 16a: **Filtri per fase del token**: sulla curva, 0-15 minuti dopo la migrazione (niente acquisti o regole durissime), 15-60 minuti (solo se ha superato il primo crollo con la liquidità intatta), 1-24 ore, oltre 24 ore. Prima in shadow.
+- 16b: **Clima di mercato** ogni 15-30 minuti (rug rate delle migrazioni nelle ultime 2 ore, andamento medio dei lanci recenti, trend di SOL). Clima ostile = soglia più alta e size ridotta. Va registrato nei log, prima in shadow.
+- 16c: **Profili paralleli in shadow** (prudente, medio, aggressivo), ognuno con il suo PnL simulato. Un profilo passa al paper solo con 50-100 o più trade e media positiva dopo i costi. Al massimo un cambio all'ora, rollback automatico se il drawdown supera il limite, ogni cambio registrato con il motivo.
+- 16d: **Validazione fuori campione**: calibrare sulla prima metà di ottobre (le 790 migrazioni del backtest di Mark) e verificare sulla seconda metà.
+- Metrica: guadagno medio per trade dopo i costi, % di rug e drawdown massimo. Il win rate non conta.
+- Ogni pezzo in un branch `claude/dynamic-16x` separato; deploy solo dopo la mia review e il test in paper.
+
 ## Dati reali
 
 - Il branch `data-snapshot` (cartella `data/`) contiene una copia notturna dei dati paper reali del bot (trade ombra, trade, equity, eventi, state, price_paths, prior, smart wallets, creator_seed, call Discord etichettate). Niente chiavi.
