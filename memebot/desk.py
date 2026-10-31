@@ -485,7 +485,7 @@ try:
 except Exception as _e88:  # noqa: BLE001
     print(f"v8.7: model_prior non caricato ({type(_e88).__name__})")
 PRIOR_LAST = {}   # mint -> p_prior dell'ultima valutazione dell'Analyst
-STX_STATE = {"t": [], "busy": set()}
+STX_STATE = {"t": [], "busy": set(), "sem": None}
 
 
 def prior_prob(f):
@@ -3005,7 +3005,13 @@ async def stx_task(st, http, mint, m, fe, creator=None):
             mi = (SRC["crh"]._load()["mint"].get(mint) or {})
             created = mi.get("created") or None
             creator = creator or mi.get("creator")
-        r = await SRC["stx"].fetch(http.get, mint, creator, created, {"MAX_PAGES": int(CFG.get("STX_PAGES", 3))})
+        # review Claude (compito 7): una stx_task alla volta. Usa lo stesso host pump.fun (gap 5 s, coda unica in
+        # Http._wait) dello storico creatore, che l'Analyst ASPETTA prima di un acquisto: con piu stx in parallelo
+        # davanti all'Analyst finivano fino a 3 pagine x 5 s per token di sola misura.
+        if STX_STATE.get("sem") is None:
+            STX_STATE["sem"] = asyncio.Semaphore(1)
+        async with STX_STATE["sem"]:
+            r = await SRC["stx"].fetch(http.get, mint, creator, created, {"MAX_PAGES": int(CFG.get("STX_PAGES", 3))})
         fe["stx"] = r
         for k in ("sniper_pct", "first20_sold_pct", "dev_first_sell_dt", "creator_known"):
             fe[k] = r.get(k)
