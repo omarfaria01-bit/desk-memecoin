@@ -676,6 +676,7 @@ class State:
         self.outcomes = deque(maxlen=20)
         self.lessons = deque(maxlen=30)
         self.blacklist = set()
+        self.blacklist_info = {}   # review Claude (compito 13): creatore -> {why, mint, t, exp}
         self.equity_hist = deque(maxlen=3000)
         self.total_start = CFG["START_BALANCE"]   # v6: base del limite di perdita totale
         self.hard_tripped = False
@@ -707,7 +708,7 @@ class State:
             "model": self.model.to_json(), "threshold": self.threshold,
             "threshold_base": CFG["SCORE_THRESHOLD"],
             "outcomes": list(self.outcomes), "lessons": list(self.lessons),
-            "blacklist": sorted(self.blacklist), "equity_hist": list(self.equity_hist)[-1000:],
+            "blacklist": sorted(self.blacklist), "blacklist_info": self.blacklist_info, "equity_hist": list(self.equity_hist)[-1000:],
             "total_start": self.total_start, "hard_tripped": self.hard_tripped,
             "learner_shadow": self.learner_shadow, "shadow_trades": self.shadow_trades,
             "learner_bonus": self.learner_bonus, "labels": self.labels, "post_exit": self.post_exit,
@@ -738,6 +739,12 @@ def load_state():
     st.outcomes.extend(d.get("outcomes", []))
     st.lessons.extend(d.get("lessons", []))
     st.blacklist = set(d.get("blacklist", []))
+    bi = d.get("blacklist_info")
+    st.blacklist_info = bi if isinstance(bi, dict) else {}
+    _t = time.time()
+    for _cr in st.blacklist:   # voci di prima (anche da 'crollo'/'nuovo rischio'): motivo ignoto, scadenza da adesso
+        st.blacklist_info.setdefault(_cr, {"why": "precedente (motivo non registrato)", "mint": None, "t": _t,
+                                           "exp": _t + float(CFG.get("BLACKLIST_TTL_DAYS", 30)) * 86400})
     ls = d.get("learner_shadow")
     st.learner_shadow = ls if isinstance(ls, dict) else {}
     for old, new in (("lp", "lp_unlocked"), ("lp_grave", "lp_unlocked_grave")):  # v7: nome nuovo del segnale LP
@@ -3760,6 +3767,39 @@ def rc_health(ok, now=None):
     return h["down"]
 
 
+# review Claude (compito 13): lista nera dei creatori solo per un rug confermato (LP ritirata, token invendibile,
+# nessun prezzo confermato da due fonti), mai per un calo di prezzo ('crollo') o un nuovo rischio RugCheck (che puo
+# essere un dato passeggero). Ogni voce ha motivo, mint, data e scadenza BLACKLIST_TTL_DAYS.
+CFG.setdefault("BLACKLIST_TTL_DAYS", 30)
+BLACKLIST_RUG_REASONS = ("liquidita crollata", "invendibile", "rug", "confermato")
+
+
+def blacklist_creator(st, creator, reason, mint=None, now=None):
+    """Mette il creatore in lista nera SOLO se il motivo e un rug confermato. True se aggiunto/rinnovato."""
+    r = str(reason or "").lower()
+    if not creator or not any(k in r for k in BLACKLIST_RUG_REASONS) or r.startswith("crollo"):
+        return False
+    if "possibile rug" in r and "confermato" not in r:   # "nessun prezzo da 15 min" senza seconda fonte: non basta
+        return False
+    now = now or time.time()
+    st.blacklist.add(creator)
+    st.blacklist_info[creator] = {"why": str(reason)[:120], "mint": mint, "t": round(now),
+                                  "exp": round(now + float(CFG.get("BLACKLIST_TTL_DAYS", 30)) * 86400)}
+    return True
+
+
+def creator_blacklisted(st, creator, now=None):
+    """True se in lista nera e non scaduto; le voci scadute vengono tolte."""
+    if not creator or creator not in st.blacklist:
+        return False
+    info = st.blacklist_info.get(creator) or {}
+    if fnum(info.get("exp")) and fnum(info.get("exp")) < (now or time.time()):
+        st.blacklist.discard(creator)
+        st.blacklist_info.pop(creator, None)
+        return False
+    return True
+
+
 def rc_down_doubts(st, cl, crh=None):
     """Review Claude: dubbi del ripiego che si possono verificare solo nell'Analyst (cluster v2 gia fatto).
     Lista vuota = nessun dubbio. Ogni dato mancante e un dubbio, mai un 'ok'."""
@@ -3776,7 +3816,7 @@ def rc_down_doubts(st, cl, crh=None):
     cr = str((crh or {}).get("creator") or "")
     if not cr:
         d.append("creatore non verificabile (lista nera non controllata)")
-    elif cr in st.blacklist:
+    elif creator_blacklisted(st, cr):
         d.append("creatore in lista nera per un rug precedente")
     return d
 
@@ -4011,7 +4051,7 @@ async def security_check(st, http, mint, m, cache):
         elif bp >= CFG["BUNDLE_SOFT_PCT"]:
             soft.append(("bundle", f"reti collegate al {bp:.1f}%"))
     creator = str(r.get("creator") or "")
-    if creator and creator in st.blacklist:
+    if creator and creator_blacklisted(st, creator):
         return False, "creatore in lista nera per un rug precedente", "creatore in lista nera", None
     creator_pct = sum(p for h, p in zip(holders, pcts)
                       if creator and creator in (h.get("owner"), h.get("address")))
@@ -5952,6 +5992,9 @@ OVR_INT_KEYS |= {"BIRDEYE_MIN_HOLDERS", "BIRDEYE_TREND_SEC", "BIRDEYE_RESERVE_CU
 OVR_LIMITS.update({"MARK_NOROUTE_CONFIRM": (2.0, 6.0)})   # v8.5
 OVR_INT_KEYS |= {"MARK_NOROUTE_CONFIRM"}
 OVR_GLOBAL_MAP["MARK_NOROUTE_CONFIRM"] = "MARK_NOROUTE_CONFIRM"   # senza questa riga la chiave era ignorata
+OVR_LIMITS.update({"BLACKLIST_TTL_DAYS": (7.0, 180.0)})   # review Claude (compito 13)
+OVR_INT_KEYS |= {"BLACKLIST_TTL_DAYS"}
+OVR_GLOBAL_MAP["BLACKLIST_TTL_DAYS"] = "BLACKLIST_TTL_DAYS"
 OVR_LIMITS.update({"CLUSTER_FAM_HARD_N": (3.0, 5.0)})   # review Claude (compito 2)
 OVR_INT_KEYS |= {"CLUSTER_FAM_HARD_N"}
 OVR_STR_KEYS["CLUSTER_FAM_MODE"] = ("shadow", "on")
@@ -6190,8 +6233,7 @@ def learn_from_trade(st, p, pnl, reason):
         if abs(st.threshold - old) > 1e-9:
             lesson(st, f"win rate {wr * 100:.0f}% sugli ultimi {len(st.outcomes)}: soglia {old:.2f} -> "
                        f"{st.threshold:.2f}")
-    if p.get("creator") and any(k in reason for k in ("liquidita crollata", "crollo", "nuovo rischio")):
-        st.blacklist.add(p["creator"])
+    if p.get("creator") and blacklist_creator(st, p["creator"], reason, p.get("mint") or p.get("symbol")):
         lesson(st, f"creatore di {p['symbol']} in lista nera ({reason})")
     elif y == 0:
         weak = [k for k in FEATURES if (p.get("features") or {}).get(k, 0) < 0.5]
@@ -6289,8 +6331,8 @@ async def _sell_position(st, broker, mint, reason, fraction=1.0, zero=False, mar
             f"{t['minutes']} min\nMotivo: {reason}")
     rug = bool(zero or "rug" in reason or "invendibile" in reason or is_rug_event(reason, t["minutes"]))
     if _bad:   # v8.5h: solo la lista nera del creatore (pool svuotata = rug), nessun esempio per il Learner
-        if p.get("creator") and "liquidita crollata" in reason:
-            st.blacklist.add(p["creator"])
+        if p.get("creator"):
+            blacklist_creator(st, p["creator"], reason, mint)
         log(st, "Learner", "warn", f"{p['symbol']}: PnL {t['pnl_pct']:+.0f}% non credibile, escluso dal Learner",
             mint=mint)
         save_state(st, force=True)

@@ -90,3 +90,19 @@ for i in range(3):
     r = D.case_watch_step(case, None, 4000.0 + i)
 assert r["status"] == "rug" and "3 controlli" in case["end_why"], case
 print("test_bug_hunt_2 OK")
+
+# ---- lista nera del creatore: solo rug confermato, con motivo e scadenza
+st = D.State()
+assert not D.blacklist_creator(st, "C1", "crollo a -45.0%")
+assert not D.blacklist_creator(st, "C1", "nuovo rischio RugCheck: Mutable metadata")
+assert not D.blacklist_creator(st, "C1", "nessun prezzo da 15 min, possibile rug")          # senza conferma
+assert "C1" not in st.blacklist
+assert D.blacklist_creator(st, "C2", "liquidita crollata del 90%", "M2", now=1000.0)
+assert D.blacklist_creator(st, "C3", "nessun prezzo da 15 min, possibile rug (confermato da Jupiter)", now=1000.0)
+i2 = st.blacklist_info["C2"]
+assert i2["why"].startswith("liquidita") and i2["mint"] == "M2" and i2["exp"] == 1000 + D.CFG["BLACKLIST_TTL_DAYS"] * 86400
+assert D.creator_blacklisted(st, "C2", now=2000.0)
+assert not D.creator_blacklisted(st, "C2", now=i2["exp"] + 1) and "C2" not in st.blacklist   # scaduta: tolta
+st.blacklist.add("OLD")                                                                         # voce senza info
+assert D.creator_blacklisted(st, "OLD")
+print("lista nera OK")
