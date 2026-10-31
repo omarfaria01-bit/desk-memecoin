@@ -6159,6 +6159,7 @@ async def _sell_position(st, broker, mint, reason, fraction=1.0, zero=False, mar
     res = {"ok": True, "value": 0.0, "tokens": p["tokens"] * fraction} if zero else \
         await broker.sell(st, mint, p, fraction, urgent=urgent)
     if not res.get("ok"):
+        p.pop("_cpmm_cap", None)   # review Claude: il prezzo limite del gradino vale solo per QUESTA vendita (pnl_cpmm)
         p["sell_fails"] = p.get("sell_fails", 0) + 1
         p["fill_failed"] = p.get("fill_failed", 0) + res.get("fill_failed", 1)
         p["fee_failed_usd"] = p.get("fee_failed_usd", 0.0) + res.get("fee_failed_usd", 0.0)
