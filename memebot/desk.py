@@ -1282,10 +1282,15 @@ async def pf_learn(st, http, done):
     if pend:
         market = await dex_batch(http, list({r["mint"] for r in pend}))
         for r in pend:
-            done.add((r["mint"], r["t"]))
             pairs = market.get(r["mint"])
             px = summarize(pairs)["price"] if pairs else 0.0
-            ret = (px / r["m"]["price"] - 1) * 100 if px > 0 else -100.0
+            if px <= 0:
+                # review Claude (compito 4): prezzo assente (429, blocco DexScreener fallito, coppia non restituita)
+                # valeva -100% ed era chiuso per sempre: 30 esiti falsi per un solo errore. Ora si riprova al giro
+                # dopo, fino a max_age di load_pending (3 h); oltre, la valutazione esce senza esito.
+                continue
+            done.add((r["mint"], r["t"]))
+            ret = (px / r["m"]["price"] - 1) * 100
             hist.append([r["fails"], round(max(-100.0, min(ret, 1000.0)), 2), r["t"]])
         del hist[:-600]
     now = time.time()
@@ -2041,6 +2046,24 @@ async def second_price(http, mints):
     return out
 
 
+async def noprice_route_check(http, mint, o):
+    """Seconda conferma del 'nessun prezzo': preventivo di vendita Jupiter della quantita tenuta (solo lettura).
+    -> 'no_route' | 'route' (percorso c'e: token vivo) | 'unknown' (dati mancanti o errore di rete)."""
+    tok, dec = fnum(o.get("tokens")), o.get("dec")
+    if http is None or tok <= 0 or not hasattr(http, "s"):
+        return "unknown"
+    try:
+        if dec is None:   # shadow aperti con la formula: decimali dalla RPC (salvati per i giri successivi)
+            dec = await token_decimals(http, mint)
+            if dec is None:
+                return "unknown"
+            o["dec"] = dec
+        q, err = await jup_quote(http, mint, WSOL, int(tok * 10 ** int(dec)))
+    except Exception:  # noqa: BLE001
+        return "unknown"
+    return "no_route" if err == "no_route" else ("route" if q else "unknown")
+
+
 async def verify_no_price(st, http, items, now=None):
     """items {mint: shadow/posizione} senza prezzo da 15 min -> {mint: 'alive' | 'wait' | 'invalid' | 'dead'}.
     alive = prezzo dalla seconda fonte (aggiornato); dead = la seconda fonte risponde ma senza prezzo (rug possibile);
@@ -2056,8 +2079,21 @@ async def verify_no_price(st, http, items, now=None):
             o.pop("np_wait", None)
             out[mt] = "alive"
         elif px is not None:
-            o["np_src"] = "jupiter"
-            out[mt] = "dead"
+            # review Claude (compito 4): Jupiter price v3 omette di proposito token nuovi o con poca liquidita, quindi
+            # "assente dal prezzo" da solo non e un rug. 'dead' solo se anche il preventivo di vendita dice
+            # 'no_route'; preventivo valido o errore di rete = attesa (mai -100 su un dato mancante).
+            conf = await noprice_route_check(http, mt, o)
+            if conf == "no_route":
+                o["np_src"] = "jupiter"
+                out[mt] = "dead"
+            else:
+                o["np_wait"] = int(o.get("np_wait", 0)) + 1
+                o["np_route"] = conf
+                if o["np_wait"] >= int(CFG.get("NOPRICE_MAX_WAIT", 15)):
+                    out[mt] = "invalid"
+                else:
+                    o["last_ok"] = now - 900 + 120
+                    out[mt] = "wait"
         else:
             o["np_wait"] = int(o.get("np_wait", 0)) + 1
             if o["np_wait"] >= int(CFG.get("NOPRICE_MAX_WAIT", 15)):
@@ -3373,6 +3409,23 @@ def is_rug_event(reason, minutes):
 CFG.setdefault("LIQ_CRASH_ZERO", True)
 CFG.setdefault("PNL_IMPLAUSIBLE_PCT", 1000.0)
 CFG.setdefault("PRICE_SPIKE_MULT", 20.0)
+# review Claude (compito 4): "liquidita crollata" (che con LIQ_CRASH_ZERO azzera e segna rug) solo dopo
+# LIQ_CRASH_CONFIRM letture DISTINTE di fila sotto la soglia: una sola lettura (liquidita 0 passeggera, coppia
+# sbagliata al passaggio curva -> pool) dava -100/rug a un token vivo.
+CFG.setdefault("LIQ_CRASH_CONFIRM", 2)
+
+
+def liq_crash_confirmed(o):
+    """True se la liquidita e sotto LIQ_DROP_EXIT_PCT dall'ingresso in LIQ_CRASH_CONFIRM letture distinte di fila.
+    Conta una lettura per aggiornamento (liq_ts), mai due volte lo stesso dato vecchio."""
+    le = fnum(o.get("liq_entry"))
+    if le <= 0 or fnum(o.get("liq"), le) >= le * (1 - CFG["LIQ_DROP_EXIT_PCT"] / 100):
+        o.pop("liq_drop_n", None), o.pop("liq_drop_ts", None)
+        return False
+    ts = o.get("liq_ts")
+    if ts is None or ts != o.get("liq_drop_ts"):
+        o["liq_drop_n"], o["liq_drop_ts"] = int(o.get("liq_drop_n", 0)) + 1, ts
+    return o["liq_drop_n"] >= max(1, int(CFG.get("LIQ_CRASH_CONFIRM", 2)))
 
 
 def pnl_implausible(pnl_pct):
@@ -3395,11 +3448,11 @@ def apply_market_tick(o, m, now):
     if price_spike(o.get("last_price"), m["price"]):
         o["spike_n"] = int(o.get("spike_n", 0)) + 1
         if m.get("liq_known", True) and fnum(m.get("liq")) < fnum(o.get("liq"), 1.0):
-            o["liq"] = max(fnum(m.get("liq")), 1.0)
+            o["liq"], o["liq_ts"] = max(fnum(m.get("liq")), 1.0), now
         return False
     o["last_price"], o["last_ok"] = m["price"], now
     if m.get("liq_known", True):  # v8.5: liquidita assente = dato mancante, non rug
-        o["liq"] = max(m["liq"], 1.0)
+        o["liq"], o["liq_ts"] = max(m["liq"], 1.0), now
     return True
 
 
@@ -5914,6 +5967,9 @@ OVR_INT_KEYS |= {"BIRDEYE_MIN_HOLDERS", "BIRDEYE_TREND_SEC", "BIRDEYE_RESERVE_CU
 OVR_LIMITS.update({"MARK_NOROUTE_CONFIRM": (2.0, 6.0)})   # v8.5
 OVR_INT_KEYS |= {"MARK_NOROUTE_CONFIRM"}
 OVR_GLOBAL_MAP["MARK_NOROUTE_CONFIRM"] = "MARK_NOROUTE_CONFIRM"   # senza questa riga la chiave era ignorata
+OVR_LIMITS.update({"LIQ_CRASH_CONFIRM": (1.0, 4.0)})   # review Claude (compito 4)
+OVR_INT_KEYS |= {"LIQ_CRASH_CONFIRM"}
+OVR_GLOBAL_MAP["LIQ_CRASH_CONFIRM"] = "LIQ_CRASH_CONFIRM"
 OVR_LIMITS.update({"CLUSTER_FAM_HARD_N": (3.0, 5.0)})   # review Claude (compito 2)
 OVR_INT_KEYS |= {"CLUSTER_FAM_HARD_N"}
 OVR_STR_KEYS["CLUSTER_FAM_MODE"] = ("shadow", "on")
@@ -6406,7 +6462,7 @@ async def risk_agent(st, http, broker):
                         elif time.time() - p["last_ok"] > 900:
                             await sell_position(st, broker, mint, "nessun prezzo da 15 min, possibile rug",
                                                 zero=broker.mode == "paper")
-                        elif p["liq_entry"] > 0 and p["liq"] < p["liq_entry"] * (1 - CFG["LIQ_DROP_EXIT_PCT"] / 100):
+                        elif liq_crash_confirmed(p):
                             drop = (1 - p["liq"] / p["liq_entry"]) * 100
                             await sell_position(st, broker, mint, f"liquidita crollata del {drop:.0f}%",   # v8.5h
                                                 zero=broker.mode == "paper" and bool(CFG["LIQ_CRASH_ZERO"]))
@@ -6684,7 +6740,10 @@ async def open_shadow(st, http, mint, m, keys, reason, score, flags, now=None, t
     if CFG["SHADOW_ROUTE_CHECK"] and br is not None and getattr(br, "realistic", False):
         pre = await br.precheck(st, mint, m, size)  # solo preventivi, nessuna transazione
         if pre and not pre.get("ok", True):
-            if pre.get("cat") in ("non rivendibile", "nessun percorso Jupiter"):
+            # review Claude (compito 4): "nessun percorso d'ACQUISTO" non e un rug: il trade vero non sarebbe partito
+            # (come per la rivendita troppo cara), quindi niente shadow -100. Resta il caso "non rivendibile":
+            # acquisto possibile e vendita no nello stesso momento = segnale honeypot.
+            if pre.get("cat") == "non rivendibile":
                 sh = {"t": now, "sym": m["symbol"], "reason": reason, "keys": list(keys), "flags": list(flags),
                       "score": round(score, 4), "thr": round(st.threshold, 4), "price": m["price"],
                       "liq_entry": m["liq"], "rt": None, "src": "jupiter", "peak_pct": 0.0, "tag": tag,
@@ -6758,7 +6817,7 @@ def shadow_decide(sh, now=None):
             return "DATI NON VALIDI: nessun prezzo da nessuna fonte (non rug)", 1.0, False, False
         return ("nessun prezzo da 15 min, possibile rug" + (" (confermato da Jupiter)" if sh.get("np_src") else ""),
                 1.0, True, True)
-    if sh["liq_entry"] > 0 and sh["liq"] < sh["liq_entry"] * (1 - CFG["LIQ_DROP_EXIT_PCT"] / 100):
+    if liq_crash_confirmed(sh):
         drop = (1 - sh["liq"] / sh["liq_entry"]) * 100
         why = f"liquidita crollata del {drop:.0f}%"
         if CFG["LIQ_CRASH_ZERO"]:   # v8.5h: parte non venduta a 0, sempre rug
@@ -6791,7 +6850,14 @@ async def shadow_apply(st, http, mint, sh, dec, now=None):
         raw = int(sh["tokens"] * 10 ** int(sh["dec"]))
         _, err = await jup_quote(http, mint, WSOL, raw)  # solo preventivo: c'e ancora un percorso di vendita?
         if err == "no_route":
-            why, zero, rug = why + "; nessun percorso di vendita su Jupiter", True, True
+            # review Claude (compito 4): un solo 'no_route' (anche un 400 qualsiasi) chiudeva a -100% rug.
+            # Ora serve la conferma al giro successivo (MARK_NOROUTE_CONFIRM di fila, minimo 2); intanto resta aperto.
+            sh["close_noroute"] = int(sh.get("close_noroute", 0)) + 1
+            if sh["close_noroute"] < max(2, int(CFG.get("MARK_NOROUTE_CONFIRM", 3))):
+                return None
+            why, zero, rug = why + "; nessun percorso di vendita su Jupiter (confermato)", True, True
+        else:
+            sh.pop("close_noroute", None)
     sold = sh["tokens"] * frac
     _val = 0.0 if zero else exit_value(sold, sh["last_price"], sh["liq"])
     sh["realized"] += _val

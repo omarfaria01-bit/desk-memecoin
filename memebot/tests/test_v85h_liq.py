@@ -25,6 +25,7 @@ assert D.apply_market_tick(o, {"price": 1.2e-5, "liq": 300.0, "liq_known": True}
 assert o["last_price"] == 1.2e-5 and o["last_ok"] == 260.0
 
 # ---- 2. shadow: liquidita crollata -> azzera, rug, -100% (senza vendite precedenti)
+D.CFG["LIQ_CRASH_CONFIRM"] = 1   # qui si prova l'azzeramento; la conferma su 2 letture e in test_exit_price_robust.py
 st = D.State()
 def mk(sym, liq_now, realized=0.0, tokens=1000.0):
     now = time.time()

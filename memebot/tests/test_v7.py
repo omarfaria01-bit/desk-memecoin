@@ -81,6 +81,7 @@ assert len(D.base_flags(["lp_unlocked", "lp_unlocked_grave", "top10"])) == 2
 assert D.is_rug_event("liquidita crollata del 55%", 20) and not D.is_rug_event("liquidita crollata del 55%", 200)
 assert D.is_rug_event("liquidita crollata del 85%", 500) and not D.is_rug_event("stop loss a -10%", 5)
 assert D.pos_max_hold({"max_hold_min": 60}) == 60 and D.pos_max_hold({}) == D.CFG["MAX_HOLD_MIN"]
+D.CFG["LIQ_CRASH_CONFIRM"] = 1   # uscita su una lettura sola qui; la conferma su 2 letture e in test_exit_price_robust.py
 sh = {"t": time.time() - 61 * 60, "last_ok": time.time(), "liq": 1e5, "liq_entry": 1e5, "cost": 30, "tokens": 30,
       "tokens_entry": 30, "entry_mark": 1.0, "realized": 0.0, "tp_stage": 0, "peak_pct": 0.0, "stop_hits": 0,
       "last_price": 1.02, "max_hold": 60}
