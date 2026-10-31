@@ -2020,7 +2020,10 @@ def cluster2_brief(cl):
         return None
     keys = ("level", "why", "max_group_pct", "max_group_wallets", "linked_pct", "cluster_pct", "cluster_infra_pct",
             "infra_group_pct", "infra_group_fresh", "swarm_pct", "swarm_wallets", "fresh_share", "scanned",
-            "holders_total", "calls", "sec")
+            "holders_total", "calls", "sec",
+            # review Claude (compito 2): feature delle regole v8.4c/e, prima non registrate negli eventi: senza
+            # di loro una regola nuova non si puo calibrare sullo storico
+            "uniform", "single_funder", "stars", "cexf_pct", "cexf_best", "recv_pct", "multi_groups", "combo")
     return {k: cl.get(k) for k in keys if k in cl}
 
 
