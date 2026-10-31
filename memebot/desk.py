@@ -4820,6 +4820,18 @@ async def _execute_buy(st, broker, c, mint, m):
                                  signals=(c.get("signals") or "").split("|"))
                 return
             RC_HEALTH["fb_ok"] += 1
+    elif (c.get("sec") or {}).get("rc_down"):
+        # review Claude: con HONEYPOT_CHECK spento (config.json) o il modulo honeypot non caricato il blocco sopra
+        # non gira, e con lui il requisito "GoPlus ok + honeypot pulito" del ripiego: si comprava con i soli
+        # controlli on-chain. Ora niente acquisto, shadow rugcheck_down.
+        reason = "RugCheck giu: controllo honeypot/GoPlus non disponibile (HONEYPOT_CHECK spento o modulo assente)"
+        reject(st, mint, m["symbol"], reason, agent="Executor", cat="RugCheck giu (dubbio)")
+        RC_HEALTH["fb_skip"] += 1
+        if CFG["SHADOW_TRADES"]:
+            spawn_shadow(st, getattr(broker, "http", None), mint, m, ["rugcheck_down"], reason,
+                         fnum(c.get("score")), (c.get("soft") or []) + ["rugcheck_down"], tag="rugcheck_down",
+                         signals=(c.get("signals") or "").split("|"))
+        return
     # v8.4: controllo incrociato Birdeye (overview) per prefiltro e honeypot. MAI un filtro duro:
     # "shadow" = solo registrato, "soft" = size ridotta se Birdeye non conferma.
     if str(CFG.get("BIRDEYE_XCHECK_MODE", "shadow")) != "off":
