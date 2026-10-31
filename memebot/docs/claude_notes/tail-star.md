@@ -1,0 +1,7 @@
+# tail-star
+
+1. **Cosa:** in `cluster_v2.scan`, dopo l'analisi normale e se resta budget, un campione casuale (seed = mint) di `TAIL_SAMPLE` = 20 holder **fuori** dai top analizzati (quota ≥ 0,001%) e il finanziatore di ciascun wallet nuovo. `tail_star_verdict`: un solo finanziatore (exchange esclusi, hub inclusi) per ≥ 50% dei wallet nuovi letti e almeno 8 = stella nella coda. `TAIL_MODE` = `shadow` (default): solo registrato in `res['tail_star']` e negli eventi cluster2; `on` = HARD.
+2. **Perché:** il token c2fHcQ..pump è stato comprato il 31/10 con un bubblemap a stella: un wallet collegato a centinaia di wallet piccoli. Cluster v2 guarda i primi 150 holder e verifica il finanziatore solo dei primi 60: una stella di wallet piccoli non si vede. Non ho potuto verificare il caso: lo snapshot è delle 13:18 (prima dell'acquisto) e da qui le API pubbliche sono bloccate.
+3. **File:** `sources/cluster_v2.py` (`tail_star`, `tail_star_verdict`, CFG `TAIL_*`), `desk.py` (`tail_star` in `cluster2_brief`), `tests/test_tail_star.py`.
+4. **Prove:** test offline con RPC finta (stella di 300 wallet nella coda trovata con 20 letture; exchange esclusi; soglie). Passano anche test_v82, test_v84, test_v84e e test_cluster_rules.
+5. **Costo e rischi:** fino a circa 40 chiamate RPC in più per scansione (20 × 2), solo se il budget di tempo lo permette. In shadow non cambia nulla; da mettere `on` dopo qualche giorno di dati (`tail_star.hit` sui token poi andati in rug contro i vincenti).
