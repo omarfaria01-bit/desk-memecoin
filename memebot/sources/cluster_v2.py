@@ -109,6 +109,11 @@ CFG = {
     # (hub 9Ja2iw), HYPERCHAN 59/60 (BXTDKd) -> HARD; Bonnie max 1, DESSA 3 (KuCoin), CATE 5, GLITCH 7 (MEXC),
     # BEAST 5 -> nessun effetto.
     "SINGLE_FUNDER_SHARE": 0.5, "SINGLE_FUNDER_MIN": 10,
+    # review Claude (31/10, token c2fHcQ..pump comprato con bubblemap a stella): la stella di centinaia di wallet
+    # PICCOLI resta fuori dai top 150 analizzati. Campione casuale della 'coda': TAIL_SAMPLE holder oltre i top
+    # (quota >= TAIL_MIN_PCT), finanziatore di ciascuno. TAIL_MODE 'shadow' = solo registrato in res['tail_star'];
+    # 'on' = HARD se un solo finanziatore (non exchange) copre >= TAIL_HARD_SHARE dei wallet nuovi letti (>= TAIL_HARD_N).
+    "TAIL_MODE": "shadow", "TAIL_SAMPLE": 20, "TAIL_MIN_PCT": 0.001, "TAIL_HARD_SHARE": 0.5, "TAIL_HARD_N": 8,
     # review Claude (compito 2, BEAST/DESSA): famiglie di segnali soft indipendenti. Con FAM_HARD_N famiglie insieme
     # il token e HARD solo se FAM_MODE = 'on'; con 'shadow' (default) il risultato e solo registrato in 'combo'.
     "FAM_MODE": "shadow", "FAM_HARD_N": 3,
@@ -816,6 +821,43 @@ def _keys(msg):
     return [k["pubkey"] if isinstance(k, dict) else k for k in msg.get("accountKeys") or []]
 
 
+def tail_star_verdict(funders, infra=None, cfg=None):
+    """Funzione pura. funders = [finanziatore o None] dei wallet NUOVI del campione di coda (exchange noti esclusi).
+    -> {n, funder, share, hit, why}."""
+    c = dict(CFG)
+    c.update(cfg or {})
+    fs = [f for f in funders if f and not ((infra_label(f, infra) or "") and not str(infra_label(f, infra)).startswith("hub"))]
+    if not fs:
+        return {"n": 0, "hit": False}
+    f, n = Counter(fs).most_common(1)[0]
+    share = round(n / len(fs), 3)
+    hit = n >= c["TAIL_HARD_N"] and share >= c["TAIL_HARD_SHARE"]
+    return {"n": len(fs), "funder": str(f)[:6], "same": n, "share": share, "hit": hit,
+            "why": f"stella nella coda: {n} dei {len(fs)} holder piccoli campionati finanziati da {str(f)[:6]}" if hit else ""}
+
+
+async def tail_star(rpc, mint, rows, full, excl, infra, c):
+    """Campione casuale (seed = mint) di holder fuori dai top analizzati: finanziatore dei wallet nuovi."""
+    import random
+    tail = sorted(o for o, p in (full or {}).items() if o not in rows and o not in excl and p >= c["TAIL_MIN_PCT"])
+    if not tail:
+        return {"sampled": 0, "n": 0, "hit": False}
+    pick = random.Random(mint).sample(tail, min(int(c["TAIL_SAMPLE"]), len(tail)))
+    sem = asyncio.Semaphore(6)
+    funders = []
+
+    async def one(o):
+        async with sem:
+            sigs = await rpc("getSignaturesForAddress", [o, {"limit": int(c["FRESH_TX"])}])
+            if isinstance(sigs, list) and sigs and len(sigs) < c["FRESH_TX"]:
+                src, _, _ = await _funding(rpc, o, sigs[-1]["signature"])
+                funders.append(src)
+    await asyncio.gather(*(one(o) for o in pick))
+    out = tail_star_verdict(funders, infra, c)
+    out.update(sampled=len(pick), tail_size=len(tail))
+    return out
+
+
 async def _funding(rpc, owner, sig):
     """Prima transazione di un wallet: (finanziatore, blockTime, slot)."""
     tx = await rpc("getTransaction", [sig, {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0}])
@@ -1001,6 +1043,12 @@ async def scan(post, mint, rpc_urls=None, exclude=(), token_program=None, cfg=No
             res = analyze(list(rows.values()), found_infra, fof, c, swarm=swarm, distributors=distributors)
     res["expand"] = {k: v for k, v in exp.items() if k != "links"}
     res["smart"] = smart
+    if c.get("TAIL_MODE", "shadow") != "off" and time.time() - t0 < c["BUDGET_SEC"] + 40:
+        ts = await tail_star(rpc, mint, rows, full, excl, found_infra, c)
+        res["tail_star"] = ts
+        if c.get("TAIL_MODE") == "on" and ts.get("hit") and res.get("level") != "hard":
+            res["level"] = "hard"
+            res["why"] = "; ".join(x for x in (res.get("why"), ts["why"]) if x)
     res.update(calls=rpc.calls, sec=round(time.time() - t0, 1), holders_total=n_hold, acq_read=done,
                new_infra=sorted(found_infra), distributors=sorted(distributors),
                top_funders=[(s[:6] + ".." + s[-4:], n, infra_label(s, found_infra))
