@@ -1,0 +1,7 @@
+# age-recheck (compito 21)
+
+1. **Cosa:** se il prefiltro scarta un token **solo** per `PF_MIN_AGE_MIN`, il token torna in watchlist con priorità (`src=age_recheck`, `not_before` = età minima + 30 s, al massimo `AGE_RECHECK_MAX` = 2 volte) e viene rivalutato da capo: prefiltro, sicurezza, cluster v2, Analyst. Eventi `age_requeue` e `age_recheck`. Ogni scarto solo-età apre anche uno shadow `age_only` (in `MEASURE_ONLY_KEYS`) con le fasce di volume e momento nei segnali e il PnL a 5, 15 e 60 minuti (`ckpt_pnl` nell'entry_features), calcolato coi prezzi già letti.
+2. **Perché:** caso DOUGHBRIKS (31/10 17:30). Nei dati `data-snapshot` (circa 18 h) gli scarti solo per età sono 37 su 489 scarti del prefiltro (37 mint distinti): oggi non venivano mai rivisti.
+3. **File:** `desk.py` (`age_requeue`, `age_ckpt_tick`, attesa nel ciclo del Filter, chiusura shadow); test `tests/test_age_recheck.py`.
+4. **Prove:** test offline: rientro con priorità e attesa giusta, limite dei tentativi, shadow `age_only` con le fasce, PnL a 5/15/60 min, ciclo del Filter che aspetta e poi rivaluta passando dalla sicurezza.
+5. **Rischi:** circa 37 shadow e altrettanti ricontrolli in più al giorno (prezzi DexScreener già in batch). Il ricontrollo non salta nessun controllo, quindi un token come DOUGHBRIKS con un cluster cattivo resta scartato dal cluster v2. Per decidere su `PF_MIN_AGE_MIN` serviranno qualche giorno di righe `age_only`.
