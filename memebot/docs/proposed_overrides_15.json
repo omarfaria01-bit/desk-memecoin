@@ -1,0 +1,23 @@
+{
+  "_compito": 15,
+  "_non_attivo": "proposta da copiare a mano in overrides.json solo dopo la review di Kiwi; questo file non viene letto dal bot",
+  "_report": "docs/analysis/more_trades_report_15.md",
+  "_script": "docs/analysis/m5_momentum_report.py",
+  "_motivo": {
+    "MIN_CHANGE_M5_PCT": "0.0 -> -8.0: allenta solo il gate candele dell'Analyst (m5_gate) sul calo a 5 minuti, fino al limite di clamp gia esistente. Il taglio grezzo sul tick a -8% (riga 4491 di desk.py) resta invariato. Prova: 9 shadow comparabili validi nella fascia 0%/-8% liberata, pnl medio +17.5%, 0 rug, 44% con esito >= +30%; tutte le altre sotto-regole di momentum e la soglia del punteggio mostrano pnl medio negativo e non sono toccate. Nessuna delle 6 lezioni negative nel campione. Nessun controllo positivo (docs/kiwi_controls.md) nuovamente bloccato o sbloccato da questa soglia."
+  },
+  "_non_toccato": [
+    "MIN_BUYSELL_M5",
+    "MIN_CHANGE_H1_PCT",
+    "VOL_ACCEL_MIN",
+    "SCORE_THRESHOLD",
+    "MIN_VOLUME_H1",
+    "MIN_LIQUIDITY_USD",
+    "mint/freeze, honeypot, insider, Token-2022, dati mancanti, rug/blocklist, anti-dump 0-15 min (ENTRY_MIN_AGE_*)"
+  ],
+  "_stato_review_claude": "NON APPLICARE (review del 31/10): con MIN_CHANGE_M5_PCT = -8 la fascia liberata e solo [-8%, 0): 8 casi validi (non 9: 'offline' aveva -10,8% dalle candele e resterebbe scartato), tutti tra le 08:18 e le 11:20 del 31/10, media +15,8%, mediana +26,3%, 0 rug su 8 (limite superiore al 95% ~37%). La review del 30/10 sulla stessa fascia dava -14,1% su 9 (1 vincente): i due campioni si contraddicono. Riesaminare con >= 30 casi su >= 3 giorni (il campione degli scarti del compito 11 li accelera).",
+  "global_proposto_sospeso": {
+    "MIN_CHANGE_M5_PCT": -8.0
+  },
+  "global": {}
+}
