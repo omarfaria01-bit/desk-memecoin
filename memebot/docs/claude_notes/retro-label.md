@@ -1,0 +1,7 @@
+# retro-label (compito 12)
+
+1. **Cosa:** `tools/retro_label.py` etichetta ogni notte i mint visti tra 48 e 24 ore prima (eventi, shadow, trade) con le candele 1m di GeckoTerminal: win, rug, loss o unknown, con le convenzioni del bot. Scrive `data/retro_labels.jsonl` (idempotente) e `data/retro_labels_summary.json`. Nel bot ci sono il flag `RETRO_LABELS_IN_LEARNING` (spento) e `retro_labels_load()`, non collegati al Learner.
+2. **Perché:** più esempi etichettati senza aspettare gli shadow. "Positivo" vale solo per un win di un token non cattivo: rug, lezioni negative e scarti duri di sicurezza non sono mai positivi.
+3. **File:** `tools/retro_label.py`, `desk.py` (flag e lettore), `.gitignore` (cache e riepilogo), `tests/test_retro_label.py`. Cron: `CRON_TZ=Europe/Rome` / `0 4 * * * cd /opt/desk/memebot && nice -n 10 python3 tools/retro_label.py >> retro_label.log 2>&1`.
+4. **Stima:** per ogni mint servono una richiesta per la pool e 1-2 per le candele, a 3,2 s l'una: 600 mint (il massimo per esecuzione) fanno circa 1.800 richieste e circa 1,5-2 ore la prima volta. Dopo, la cache evita i doppioni. Quanti mint al giorno lo dirà `retro_labels_summary.json` sul server: da qui non ho i dati reali.
+5. **Prove e rischi:** test con GeckoTerminal finto (regole d'etichetta, TP1 poi rug = rug, scarto duro e lezione negativa mai positivi, seconda esecuzione senza chiamate, finestra rispettata). Suite come su `main`. GeckoTerminal è condiviso col bot: per questo gira alle 04:00 con `nice` e con un gap di 3,2 s.
